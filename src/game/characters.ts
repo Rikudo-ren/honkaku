@@ -1,6 +1,6 @@
 import type { CharDef, CharId, Difficulty, Look, StageDef } from './types';
 
-export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei'];
+export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei', 'sakura'];
 
 const JAB_BOX = { x: 5, y: -32, w: 14, h: 9 };
 const SWING_BOX = { x: 3, y: -38, w: 17, h: 18 };
@@ -538,6 +538,101 @@ export const CHARS: Record<CharId, CharDef> = {
     stats: { power: 4, speed: 4, honshitsu: 3, joushiki: 3 },
     desc: '偏差値八十五。理数科にいる理由は「家が近いから」。評価軸は「面白い」だけ。',
   },
+  sakura: {
+    id: 'sakura',
+    name: '櫻優',
+    kana: 'さくら・ゆう',
+    title: '恋愛学の研究者（n=1）',
+    affiliation: '内進コース',
+    tie: '紺',
+    tieColor: '#2f4f8f',
+    color: '#22d3ee',
+    light: '#cffafe',
+    hp: 98,
+    speed: 1.45,
+    jump: 6.15,
+    dmgMul: 1,
+    hidden: true,
+    look: {
+      hair: 'short',
+      hairColor: '#2b2b38',
+      hairDark: '#171722',
+      eyeColor: '#33445c',
+      glasses: true,
+      gender: 'm',
+      outfit: 'blazer',
+      accessory: 'notebook',
+      weapon: 'binder',
+      winPose: 'shy',
+    },
+    moves: {
+      light: {
+        key: 'light',
+        name: '観測',
+        desc: 'ノートの背で突く。観察してから書く。当たる前に書く。',
+        callout: ['記録します', '観測', 'n=1'],
+        startup: 5,
+        active: 4,
+        recovery: 8,
+        dmg: 5,
+        hitstun: 14,
+        kbx: 1.6,
+        kby: 0,
+        box: JAB_BOX,
+        kind: 'melee',
+        pose: 'jab',
+        sfx: 'hit',
+      },
+      heavy: {
+        key: 'heavy',
+        name: '恋愛発生の第十三法則',
+        desc: '理論崩壊した分厚いノートで殴る。最後のページに「助けて。」と書いてある。',
+        callout: ['第十三法則', '助けて。', '要検証'],
+        startup: 11,
+        active: 5,
+        recovery: 17,
+        dmg: 13,
+        hitstun: 25,
+        kbx: 3.4,
+        kby: 1.2,
+        box: SWING_BOX,
+        kind: 'melee',
+        pose: 'swing',
+        sfx: 'heavy',
+      },
+      special: {
+        key: 'special',
+        name: 'シュレディンガーの好意',
+        desc: '観測されていない箱を転がす。当たった瞬間に波動関数が崩壊し、相手の✝本質✝ゲージを削る。',
+        callout: ['観測するな', '未観測', 'n=1'],
+        startup: 11,
+        active: 1,
+        recovery: 15,
+        dmg: 8,
+        hitstun: 18,
+        kbx: 2.2,
+        kby: 2,
+        kind: 'projectile',
+        pose: 'throw',
+        sfx: 'special',
+        projectile: { kind: 'note', vx: 2.9, life: 170, ground: true, w: 9, h: 6 },
+      },
+    },
+    superName: '恋愛発生の第十五法則（暫定）',
+    superQuote: '〈面白い〉は理論を超える',
+    superDesc: '研究ノートの全ページが飛び出す。第一法則から第十五法則までが降りかかり、観測された理論は崩壊する。',
+    intro: '観察させてもらいます',
+    wins: [
+      '……記録しました。これも恋愛学のデータです',
+      '理論、崩壊しました。でも、勝ちました',
+      '第十六法則（暫定）：書かない方がいい日もある',
+      '〈面白い〉は理論を超える',
+    ],
+    blockText: '要検証',
+    koText: '分析不能',
+    stats: { power: 3, speed: 3, honshitsu: 4, joushiki: 2 },
+    desc: '内進コース二年。恋愛学を研究している。彼女はいない。いたこともない。理数科B組を「サンプルG-07」として二ヶ月観察した、紺のネクタイの侵入者。',
+  },
 };
 
 export const EXTRA_LOOKS: Record<'kuraishi' | 'heikatsu', Look> = {
@@ -591,8 +686,24 @@ export const DIFFICULTY_HINT: Record<Difficulty, string> = {
   extreme: '数理零カンスト相当・ほぼ完璧',
 };
 
+/**
+ * 特殊な試合前の掛け合い（idの辞書順ペア）。
+ * first が a を言い、相手が b を返す。c があれば first がもう一言続ける（原作の間合いを再現）。
+ * note は画面上部に小さく出るト書き。
+ */
+export interface IntroPair {
+  first: CharId;
+  a: string;
+  b: string;
+  /** 二往復目のセリフ（first が言う） */
+  c?: string;
+  note?: string;
+  /** 最終ラウンド（1勝1敗で迎えた3本目）専用の掛け合い。あれば a/b の代わりに使われる */
+  final?: { a: string; b: string; c?: string; note?: string };
+}
+
 // 特殊な試合前の掛け合い（idの辞書順ペア → [先に言う側のid, セリフ, 返す側のセリフ]）
-export const INTRO_PAIRS: Record<string, { first: CharId; a: string; b: string; note?: string }> = {
+export const INTRO_PAIRS: Record<string, IntroPair> = {
   'mie|mitsumine': { first: 'mie', a: 'は？', b: 'は？', note: '（ハモリ）' },
   'mie|ryoma': { first: 'ryoma', a: 'これまじ✝本質✝', b: 'は？' },
   'mie|terachi': { first: 'terachi', a: '三重について考えよ', b: '書くな！！' },
@@ -603,6 +714,172 @@ export const INTRO_PAIRS: Record<string, { first: CharId; a: string; b: string; 
   'mie|rei': { first: 'rei', a: 'セット✝', b: '零、✝つけるな' },
   'mitsumine|ryoma': { first: 'ryoma', a: 'もう巻き込まれてるよ', b: 'は？' },
   'naito|ryoma': { first: 'ryoma', a: '✝本質✝は恋愛に適用可能', b: '面白い考え方だね' },
+
+  // ── 櫻優：理数科B組を「サンプルG-07」として観察している内進生 ──
+  'mie|sakura': {
+    first: 'mie',
+    a: 'は？',
+    b: '観測データとして有用です',
+    c: 'それを法則にするなよ',
+    note: '（三重：法則にしないと処理できないんです）',
+    final: {
+      a: '四百二十二回目だぞ',
+      b: '……記録が、追いつきません',
+      c: '四百二十三回目',
+      note: '（サンプルG-07、観測限界を突破）',
+    },
+  },
+  'ryoma|sakura': {
+    first: 'sakura',
+    a: '✝本質✝が、私の理論を壊しに来たんですか',
+    b: '壊れたんじゃなくて、広がったんじゃない？',
+    c: '理論の枠が、広がった……',
+    note: '（三重：今のは十回に一回の方だった）',
+    final: {
+      a: '両馬先輩を、法則にしました',
+      b: 'お、ついに俺が法則になった',
+      c: '第七法則、改訂版。不理解の引力（両馬二郎）',
+      note: '（✝本質✝が理論に収められた、唯一の日）',
+    },
+  },
+  'naito|sakura': {
+    first: 'sakura',
+    a: '……消しゴム、落ちてます',
+    b: 'あ、ありがとう',
+    c: 'なんで二回お礼言うの？',
+    note: '（恋愛学に核爆弾が落ちた）',
+    final: {
+      a: '内藤さん。理論が崩壊しても、観測は続けます',
+      b: '分類しなくていいじゃん。そのまま言って',
+      c: '……そのまま、言います',
+      note: '（恋愛発生の第十五法則、実戦投入）',
+    },
+  },
+  'mitsumine|sakura': {
+    first: 'mitsumine',
+    a: '好きなら好きって言いなよ！',
+    b: 'それは波動関数の崩壊の——',
+    c: '波動関数の話もいい！',
+    note: '（作戦ノート、二ページ目）',
+    final: {
+      a: '櫻！ 作戦ノート、最終ページ！',
+      b: '最終ページに、何が書いて——',
+      c: '「好きなら好きって言いなよ」だよ',
+      note: '（A4ルーズリーフ、二十一ページ目）',
+    },
+  },
+  'sakura|terachi': {
+    first: 'sakura',
+    a: '内藤さん、本質配信を見てますよ',
+    b: '……え、マジ？',
+    c: '〈意味わかんないけど安心する〉と',
+    note: '（寺地：なんで嬉しいかわかんないけど、嬉しいな）',
+    final: {
+      a: '寺地先輩。登録者、千人いきましたね',
+      b: '……え、マジ？ 見ててくれたの？',
+      c: 'はい。ずっと観測してました',
+      note: '（本質配信 #7、再生数は関係ない）',
+    },
+  },
+  'rei|sakura': {
+    first: 'rei',
+    a: '理論で処理するの、やめたら？',
+    b: 'やめたら、何を頼りにすれば——',
+    c: '何も頼りにしない。それが面白いんじゃない？',
+    note: '（櫻：怖い。でも✝本質✝的にはこっちが正しい気がする）',
+    final: {
+      a: '枠の外に出る勇気、ある？',
+      b: '……あります。たぶん',
+      c: '外に出た理論は、消えないよ',
+      note: '（恋愛発生の第十六法則（暫定）：消えない）',
+    },
+  },
+};
+
+/**
+ * 試合後の掛け合い（1対1のみ・リザルト画面で表示）。
+ * lines は first → 相手 → first … の順に交互に発言する。
+ */
+export interface MatchupScript {
+  first: CharId;
+  lines: string[];
+  /** 最後に添えるト書き */
+  note?: string;
+}
+
+export const MATCHUP_SCRIPTS: Record<string, MatchupScript> = {
+  'mie|sakura': {
+    first: 'sakura',
+    lines: [
+      '三重先輩の「は？」を四百二十二回目まで記録しました',
+      '……やめろ',
+      'やめません。観測は継続します',
+      'は？（四百二十二回目）',
+    ],
+    note: 'サンプルG-07、観察継続中。',
+  },
+  'ryoma|sakura': {
+    first: 'sakura',
+    lines: [
+      '両馬先輩。第七法則に反例が出ました',
+      'へー、どこが？',
+      '理解不能度が最大なのに、恋愛対象として評価されていない',
+      'それは第七法則が間違ってるんじゃなくて、俺が早すぎただけだよ',
+      '……それ、法則にしていいですか',
+      'いいよ。✝つけて',
+    ],
+    note: '恋愛発生の第七法則、改訂。',
+  },
+  'naito|sakura': {
+    first: 'sakura',
+    lines: [
+      '内藤さん。今日の観測結果を——',
+      '面白い考え方だね',
+      '（……心拍数、上昇）',
+      'なんで黙っちゃうの？',
+      '分類が、できない',
+      '分類しなくていいじゃん。人がどんなこと考えてるか知るの、好きだから',
+      '……記録します。書ける枠が見つからないけど',
+    ],
+    note: '恋愛発生の第十五法則（暫定）：〈面白い〉は理論を超える。',
+  },
+  'mitsumine|sakura': {
+    first: 'mitsumine',
+    lines: [
+      '櫻、あんたまた理論の話してたでしょ',
+      '観測結果の報告です',
+      '報告じゃないでしょ。好きな人の話でしょ',
+      '……それは、恋愛学的には——',
+      'いいから誘いなよ。作戦はもう立ててあるから',
+      '作戦ノート、何ページまで進んでますか',
+      '二十ページ。あんたが動かないから全然進まない',
+    ],
+    note: 'A4ルーズリーフ「櫻×内藤 作戦ノート」、二十ページ目。',
+  },
+  'sakura|terachi': {
+    first: 'sakura',
+    lines: [
+      '寺地先輩。視聴率の話ですが',
+      'え、なにそれ、データあるの？',
+      '内進棟での認知度を十二人に聞きました。四人が知ってました',
+      '四人！　四人も！',
+      'そのうち一人が〈意味わかんないけど安心する〉と言ってました',
+      '……ちょっと紙に書くから待って',
+    ],
+    note: '寺地、ノートではなく紙に書いた。',
+  },
+  'rei|sakura': {
+    first: 'sakura',
+    lines: [
+      '零先輩。理論がない状態で恋をする、というのは——',
+      'わかんない。でも面白いんじゃない？',
+      '怖いです',
+      '枠の外に出るのと同じだよ。外に出たからって、消えるわけじゃない',
+      '……外に出た理論は、どこへ行くんですか',
+      'わかんない。だから面白い',
+    ],
+    note: '枠の外に出た理論は消えない。要検証。……✝本質✝に近い人種？',
+  },
 };
 
 export function pairKey(a: CharId, b: CharId): string {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LoadingScreen from '@/components/LoadingScreen';
 import TitleScreen from '@/components/TitleScreen';
 import CharacterSelect from '@/components/CharacterSelect';
@@ -12,30 +12,21 @@ import { STAGES } from '@/game/characters';
 import { audio } from '@/game/audio';
 import { net, type StartData } from '@/game/net';
 import { makeOnlineSetup } from '@/game/onlineSetup';
+import { EXTREME_KEY, SAKURA_KEY, isSakuraUnlockWin, readFlag, unlockedChars, writeFlag } from '@/game/unlocks';
 import type { CharId, Difficulty, FighterSetup, Mode, Setup, Side, StageId } from '@/game/types';
 
 type Screen = 'loading' | 'title' | 'select' | 'teamsetup' | 'online' | 'versus' | 'battle' | 'result';
 
 const randomStage = (): StageId => STAGES[Math.floor(Math.random() * STAGES.length)].id;
 
-const UNLOCK_KEY = 'honkaku_extreme_unlocked';
-
 const MIN_LOADING_MS = 500;
 
 function loadUnlocked(): boolean {
-  try {
-    return localStorage.getItem(UNLOCK_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return readFlag(EXTREME_KEY);
 }
 
 function saveUnlocked() {
-  try {
-    localStorage.setItem(UNLOCK_KEY, '1');
-  } catch {
-    /* ignore */
-  }
+  writeFlag(EXTREME_KEY);
 }
 
 export default function App() {
@@ -47,10 +38,17 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [extremeUnlocked, setExtremeUnlocked] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
+  // 隠しキャラ・櫻優（解放条件：1P対戦・偏差値100の内藤蘭に勝つ）
+  const [sakuraUnlocked, setSakuraUnlocked] = useState(false);
+  const [justUnlockedSakura, setJustUnlockedSakura] = useState(false);
   const bgmRef = useRef<'title' | 'battle'>('title');
+
+  // 解放済みキャラ（隠しキャラは条件を満たしたら並ぶ）
+  const unlocked = useMemo(() => unlockedChars(sakuraUnlocked), [sakuraUnlocked]);
 
   useEffect(() => {
     setExtremeUnlocked(loadUnlocked());
+    setSakuraUnlocked(readFlag(SAKURA_KEY));
   }, []);
 
   useEffect(() => {
@@ -175,14 +173,23 @@ export default function App() {
   }, [setup.mode]);
 
   const tryUnlock = useCallback(() => {
-    if (result && result.winner === 0 && setup.mode === '1p' && setup.difficulty === 'hard' && !extremeUnlocked) {
+    if (!result) return false;
+    // 偏差値100（extreme）解禁：1P対戦・偏差値85に勝つ
+    if (result.winner === 0 && setup.mode === '1p' && setup.difficulty === 'hard' && !extremeUnlocked) {
       saveUnlocked();
       setExtremeUnlocked(true);
       setJustUnlocked(true);
       return true;
     }
+    // 隠しキャラ・櫻優 解禁：1P対戦・偏差値100の内藤蘭に勝つ
+    if (isSakuraUnlockWin(setup, result.winner) && !sakuraUnlocked) {
+      writeFlag(SAKURA_KEY);
+      setSakuraUnlocked(true);
+      setJustUnlockedSakura(true);
+      return true;
+    }
     return false;
-  }, [result, setup, extremeUnlocked]);
+  }, [result, setup, extremeUnlocked, sakuraUnlocked]);
 
   const handleResultToTitle = useCallback(() => {
     tryUnlock();
@@ -215,13 +222,24 @@ export default function App() {
           extremeUnlocked={extremeUnlocked}
           justUnlocked={justUnlocked}
           onUnlockSeen={() => setJustUnlocked(false)}
+          sakuraUnlocked={sakuraUnlocked}
+          justUnlockedSakura={justUnlockedSakura}
+          onSakuraUnlockSeen={() => setJustUnlockedSakura(false)}
         />
       )}
       {screen === 'select' && (
-        <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} onDone={chosen} onBack={() => setScreen('title')} />
+        <CharacterSelect
+          mode={setup.mode}
+          difficulty={setup.difficulty}
+          unlocked={unlocked}
+          onDone={chosen}
+          onBack={() => setScreen('title')}
+        />
       )}
-      {screen === 'teamsetup' && <TeamSetup defaultDifficulty={setup.difficulty} onDone={teamChosen} onBack={() => setScreen('title')} />}
-      {screen === 'online' && <OnlineLobby onStart={onlineStart} onBack={() => setScreen('title')} />}
+      {screen === 'teamsetup' && (
+        <TeamSetup defaultDifficulty={setup.difficulty} unlocked={unlocked} onDone={teamChosen} onBack={() => setScreen('title')} />
+      )}
+      {screen === 'online' && <OnlineLobby unlocked={unlocked} onStart={onlineStart} onBack={() => setScreen('title')} />}
       {screen === 'versus' && <VersusScreen setup={setup} onDone={toBattle} />}
       {screen === 'battle' && (
         <BattleScreen
@@ -239,6 +257,7 @@ export default function App() {
           onSelect={handleResultToSelect}
           onTitle={handleResultToTitle}
           willUnlockExtreme={result.winner === 0 && setup.mode === '1p' && setup.difficulty === 'hard' && !extremeUnlocked}
+          willUnlockSakura={isSakuraUnlockWin(setup, result.winner) && !sakuraUnlocked}
         />
       )}
       {screen !== 'loading' && (

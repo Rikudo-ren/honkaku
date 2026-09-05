@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { CHAR_ORDER, DIFFICULTY_HINT, DIFFICULTY_LABELS } from '@/game/characters';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CHARS, CHAR_ORDER, DIFFICULTY_HINT, DIFFICULTY_LABELS } from '@/game/characters';
+import { Portrait } from '@/components/Portrait';
+import { SAKURA_UNLOCK_TEXT } from '@/game/unlocks';
 import { drawTitleScene } from '@/game/render';
 import { H, W } from '@/game/engine';
 import { HONSHITSU_QUOTES } from '@/game/quotes';
@@ -11,7 +13,14 @@ interface Props {
   extremeUnlocked: boolean;
   justUnlocked?: boolean;
   onUnlockSeen?: () => void;
+  /** 隠しキャラ・櫻優が解放済みか */
+  sakuraUnlocked?: boolean;
+  justUnlockedSakura?: boolean;
+  onSakuraUnlockSeen?: () => void;
 }
+
+/** 解禁演出の種類 */
+type UnlockKind = 'extreme' | 'sakura' | null;
 
 const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[] = [
   { id: '1p', label: '1P 対 CPU', sub: '理数科B組の日常に殴り込む' },
@@ -24,19 +33,38 @@ const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[
   { id: 'what', label: '✝本質✝とは', sub: '説明できたら✝本質✝じゃない' },
 ];
 
-export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, onUnlockSeen }: Props) {
+export default function TitleScreen({
+  onStart,
+  extremeUnlocked,
+  justUnlocked,
+  onUnlockSeen,
+  sakuraUnlocked = false,
+  justUnlockedSakura,
+  onSakuraUnlockSeen,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cursor, setCursor] = useState(0);
   const [diff, setDiff] = useState<Difficulty>('normal');
   const [modal, setModal] = useState<'help' | 'what' | null>(null);
   const [quoteIdx, setQuoteIdx] = useState(0);
-  const [showUnlock, setShowUnlock] = useState(!!justUnlocked);
+  const [unlockKind, setUnlockKind] = useState<UnlockKind>(justUnlocked ? 'extreme' : null);
+  const showUnlock = unlockKind !== null;
+  // タイトルの行進に出るのは解放済みキャラだけ（隠しキャラは解禁まで出さない）
+  const titleChars = useMemo(() => CHAR_ORDER.filter((id) => !CHARS[id].hidden || sakuraUnlocked), [sakuraUnlocked]);
   const stateRef = useRef({ cursor, diff, modal, extremeUnlocked });
   stateRef.current = { cursor, diff, modal, extremeUnlocked };
 
   useEffect(() => {
+    if (justUnlockedSakura) {
+      setUnlockKind('sakura');
+      audio.init();
+      audio.sfx('super');
+    }
+  }, [justUnlockedSakura]);
+
+  useEffect(() => {
     if (justUnlocked) {
-      setShowUnlock(true);
+      setUnlockKind('extreme');
       audio.init();
       audio.sfx('super');
     }
@@ -52,12 +80,12 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
     let t = 0;
     const loop = () => {
       t++;
-      drawTitleScene(g, t, CHAR_ORDER);
+      drawTitleScene(g, t, titleChars);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [titleChars]);
 
   useEffect(() => {
     const id = window.setInterval(() => setQuoteIdx((i) => (i + 1) % HONSHITSU_QUOTES.length), 4200);
@@ -86,8 +114,9 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
       if (showUnlock) {
         if (['Enter', 'Space', 'Escape', 'KeyF', 'KeyG'].includes(e.code)) {
           e.preventDefault();
-          setShowUnlock(false);
-          onUnlockSeen?.();
+          if (unlockKind === 'extreme') onUnlockSeen?.();
+          if (unlockKind === 'sakura') onSakuraUnlockSeen?.();
+          setUnlockKind(null);
           audio.sfx('confirm');
         }
         return;
@@ -124,7 +153,7 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showUnlock]);
+  }, [showUnlock, unlockKind]);
 
   return (
     <div className="relative flex h-full min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#07070f]">
@@ -157,6 +186,10 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
           <div className="pixel-text-shadow text-2xl font-bold md:text-3xl">{DIFFICULTY_LABELS[diff]}</div>
           <div className="mt-0.5 text-xs opacity-90">{DIFFICULTY_HINT[diff]}</div>
           {!extremeUnlocked && <div className="mt-1 text-[10px] text-slate-400">※偏差値85に勝つと偏差値100が解禁</div>}
+          {extremeUnlocked && !sakuraUnlocked && (
+            <div className="mt-1 text-[10px] text-cyan-300">※???: {SAKURA_UNLOCK_TEXT}</div>
+          )}
+          {sakuraUnlocked && <div className="mt-1 text-[10px] text-cyan-300">※隠しキャラ・櫻優 解禁済み ✝</div>}
         </div>
 
         <div className="mt-6 w-full max-w-md rounded border-4 border-slate-200/80 bg-slate-950/85 p-3 shadow-[6px_6px_0_#000] md:p-4">
@@ -211,23 +244,45 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
         </div>
       )}
 
-      {/* 偏差値100解禁演出 */}
+      {/* 解禁演出（偏差値100 ／ 隠しキャラ・櫻優） */}
       {showUnlock && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
           onClick={() => {
-            setShowUnlock(false);
-            onUnlockSeen?.();
+            if (unlockKind === 'extreme') onUnlockSeen?.();
+            if (unlockKind === 'sakura') onSakuraUnlockSeen?.();
+            setUnlockKind(null);
           }}
         >
-          <div className="animate-pop max-w-lg border-4 border-fuchsia-400 bg-gradient-to-b from-fuchsia-950 via-slate-950 to-black p-8 text-center shadow-[0_0_40px_#e879f9,12px_12px_0_#000]">
-            <div className="text-xs tracking-[0.5em] text-fuchsia-300">NEW DIFFICULTY UNLOCKED</div>
-            <div className="pixel-text-shadow mt-3 text-5xl text-fuchsia-200 md:text-6xl">偏差値100</div>
-            <div className="mt-2 text-lg text-amber-200">解禁 ✝</div>
-            <p className="mt-4 text-sm text-slate-200">偏差値85の壁を越えた者だけが辿り着く領域。</p>
-            <p className="mt-1 text-xs text-slate-400">ガード・反応・間合い管理がほぼ完璧。数理零カンスト相当。</p>
-            <div className="mt-6 animate-blink text-sm text-fuchsia-200">Enter / クリックで閉じる</div>
-          </div>
+          {unlockKind === 'sakura' ? (
+            <div className="animate-pop max-w-lg border-4 border-cyan-300 bg-gradient-to-b from-cyan-950 via-slate-950 to-black p-8 text-center shadow-[0_0_40px_#22d3ee,12px_12px_0_#000]">
+              <div className="text-xs tracking-[0.5em] text-cyan-300">NEW FIGHTER UNLOCKED</div>
+              <div className="pixel-text-shadow mt-3 text-5xl text-cyan-100 md:text-6xl">櫻優</div>
+              <div className="mt-1 text-sm text-cyan-300">さくら・ゆう ／ 内進コース（ネクタイ：紺）</div>
+              <div className="mt-2 text-lg text-amber-200">参戦 ✝</div>
+              <div className="mx-auto mt-4 h-40 w-28 overflow-hidden border-2 border-cyan-300 bg-white/95">
+                <Portrait id="sakura" alt="櫻優" className="h-full w-full object-contain object-bottom" />
+              </div>
+              <p className="mt-4 text-sm text-slate-200">偏差値100の内藤蘭を越えた者だけが出会う、紺のネクタイの観測者。</p>
+              <p className="mt-1 text-xs text-slate-400">
+                恋愛学の研究者。彼女はいない。いたこともない。理数科B組を「サンプルG-07」として観察している。
+              </p>
+              <div className="mt-4 border border-cyan-400/60 bg-slate-950/70 p-2 text-left text-[11px] text-slate-300">
+                <div className="text-cyan-300">超必殺：恋愛発生の第十五法則（暫定）</div>
+                <div>研究ノートの全ページが飛び出す。観測された理論は崩壊する。</div>
+              </div>
+              <div className="mt-6 animate-blink text-sm text-cyan-200">Enter / クリックで閉じる</div>
+            </div>
+          ) : (
+            <div className="animate-pop max-w-lg border-4 border-fuchsia-400 bg-gradient-to-b from-fuchsia-950 via-slate-950 to-black p-8 text-center shadow-[0_0_40px_#e879f9,12px_12px_0_#000]">
+              <div className="text-xs tracking-[0.5em] text-fuchsia-300">NEW DIFFICULTY UNLOCKED</div>
+              <div className="pixel-text-shadow mt-3 text-5xl text-fuchsia-200 md:text-6xl">偏差値100</div>
+              <div className="mt-2 text-lg text-amber-200">解禁 ✝</div>
+              <p className="mt-4 text-sm text-slate-200">偏差値85の壁を越えた者だけが辿り着く領域。</p>
+              <p className="mt-1 text-xs text-slate-400">ガード・反応・間合い管理がほぼ完璧。数理零カンスト相当。</p>
+              <div className="mt-6 animate-blink text-sm text-fuchsia-200">Enter / クリックで閉じる</div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -267,6 +322,7 @@ function HelpContent() {
         <li>空中でも弱・強攻撃が出せる。三重の「は？」は当身。飛び道具も跳ね返す。</li>
         <li>試合中はランダムで✝本質✝イベントが発生する。ヘイカツが窓の外を見たら全員止まる。</li>
         <li>CPU偏差値はタイトルで変更。偏差値85に勝つと偏差値100が解禁。</li>
+        <li>隠しキャラが一人いる。解放条件は「1P対戦・偏差値100（解禁）の内藤蘭に勝つ」。紺のネクタイに注意。</li>
         <li>Esc / P でポーズ。M でミュート。スマホはタッチボタン対応（1Pのみ）。</li>
       </ul>
     </div>
