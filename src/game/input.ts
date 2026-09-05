@@ -83,6 +83,18 @@ export class InputManager {
     }
   }
 
+  /** 方向キーの一括更新（スライド操作・仮想D-pad用） */
+  setDirections(side: Side, dirs: Partial<Record<'left' | 'right' | 'up' | 'down', boolean>>) {
+    const dirKeys: ('left' | 'right' | 'up' | 'down')[] = ['left', 'right', 'up', 'down'];
+    for (const k of dirKeys) {
+      if (dirs[k]) {
+        this.held[side].add(k);
+      } else {
+        this.held[side].delete(k);
+      }
+    }
+  }
+
   poll(side: Side): InputState {
     const s: InputState = { ...EMPTY_INPUT };
     for (const k of this.held[side]) if (!BUTTONS.includes(k)) s[k] = true;

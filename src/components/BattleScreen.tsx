@@ -8,13 +8,23 @@ import { CHARS, STAGES } from '@/game/characters';
 import { net, maskOf, unmask } from '@/game/net';
 import type { InputState, Setup, Side } from '@/game/types';
 
-/** オンライン時の入力遅延フレーム数（この分だけ先のフレームに自分の入力を予約する） */
-const NET_DELAY = 4;
+/** オンライン時の入力遅延フレーム数（この分だけ先のフレームに自分の入力を予約してジッターを吸収する） */
+const NET_DELAY = 5;
 
 interface Props {
   setup: Setup;
   onEnd: (winner: Side, wins: [number, number]) => void;
   onQuit: (to: 'select' | 'title') => void;
+}
+
+function checkTouchCapable(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia('(pointer: coarse)').matches ||
+    window.matchMedia('(any-pointer: coarse)').matches
+  );
 }
 
 export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
@@ -27,7 +37,39 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
   const [waiting, setWaiting] = useState(false);
   const [oppLeft, setOppLeft] = useState(false);
   const [desync, setDesync] = useState(false);
-  const [touch] = useState(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
+
+  // タッチ操作UI（タブレット・スマホ対応）
+  const [touchMode, setTouchMode] = useState<'auto' | 'on' | 'off'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('honkaku_touch_mode') as 'auto' | 'on' | 'off' | null;
+      if (saved === 'on' || saved === 'off' || saved === 'auto') return saved;
+    }
+    return 'auto';
+  });
+  const [detectedTouch, setDetectedTouch] = useState(checkTouchCapable);
+
+  useEffect(() => {
+    const onTouch = () => setDetectedTouch(true);
+    window.addEventListener('touchstart', onTouch, { passive: true });
+    window.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') setDetectedTouch(true);
+    });
+    return () => {
+      window.removeEventListener('touchstart', onTouch);
+    };
+  }, []);
+
+  const showTouchControls = touchMode === 'on' || (touchMode === 'auto' && detectedTouch);
+
+  const toggleTouchMode = () => {
+    setTouchMode((curr) => {
+      const next = curr === 'on' ? 'off' : curr === 'off' ? 'auto' : 'on';
+      localStorage.setItem('honkaku_touch_mode', next);
+      audio.sfx('move');
+      return next;
+    });
+  };
+
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
   const st = STAGES.find((s) => s.id === setup.stage) ?? STAGES[0];
@@ -66,7 +108,9 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     // ── オンライン（ロックステップ）用 ──
     let frame = 0; // 実行済みフレーム数
     const localBuf = new Map<number, number>(); // 自分の予約入力 frame → mask
-    let waitingNow = false;
+    let stallStartTime: number | null = null;
+    let isWaitingDisplayed = false;
+
     const offLeft = online
       ? net.on('opponent-left', () => {
           setOppLeft(true);
@@ -83,7 +127,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       // 自分の入力を NET_DELAY フレーム先に予約して送信
       const target = frame + NET_DELAY;
       if (!localBuf.has(target)) {
-        // オンラインではどちらのキー配置（WASD系・矢印系）でも操作できるようマージ
+        // オンラインではどちらのキー配置（WASD系・矢印系・タッチ）でも操作できるようマージ
         const mask = maskOf(im.poll(0)) | maskOf(im.poll(1));
         localBuf.set(target, mask);
         net.sendInput(target, mask);
@@ -92,15 +136,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       const mine = frame < NET_DELAY ? 0 : localBuf.get(frame);
       const theirs = frame < NET_DELAY ? 0 : net.remoteInput(frame);
       if (mine === undefined || theirs === undefined) {
-        if (!waitingNow) {
-          waitingNow = true;
-          setWaiting(true);
-        }
         return false; // 相手の入力待ち
-      }
-      if (waitingNow) {
-        waitingNow = false;
-        setWaiting(false);
       }
       const inputs: [InputState, InputState] = mySide === 0 ? [unmask(mine), unmask(theirs)] : [unmask(theirs), unmask(mine)];
       battle.step(inputs);
@@ -118,9 +154,11 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       if (!pausedRef.current) {
         acc += dt;
         let n = 0;
+        let stalled = false;
         while (acc >= STEP && n < 4) {
           if (online) {
             if (!stepOnline()) {
+              stalled = true;
               acc = 0;
               break;
             }
@@ -131,6 +169,23 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
           n++;
         }
         if (acc > STEP * 4) acc = 0;
+
+        // ── オンライン待機中インジケータ（短時間のジッターでは表示せず、350ms以上の実質的な停止時のみ表示） ──
+        if (online) {
+          if (stalled) {
+            if (stallStartTime === null) stallStartTime = now;
+            if (now - stallStartTime >= 350 && !isWaitingDisplayed) {
+              isWaitingDisplayed = true;
+              setWaiting(true);
+            }
+          } else {
+            stallStartTime = null;
+            if (isWaitingDisplayed) {
+              isWaitingDisplayed = false;
+              setWaiting(false);
+            }
+          }
+        }
       }
       renderer.draw(battle);
     };
@@ -164,7 +219,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       offLeft?.();
       offDesync?.();
     };
-  }, [setup]);
+  }, [setup, online, mySide]);
 
   const resume = () => {
     pausedRef.current = false;
@@ -182,19 +237,56 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         <canvas ref={fxRef} className="absolute inset-0 h-full w-full" />
         <div className="scanlines pointer-events-none absolute inset-0 opacity-60" />
         {cutin && <CutInOverlay key={cutin.key} c={cutin.c} />}
+
+        {/* 相手の回線待機中バナー（350ms以上の実質停止時のみ安定表示） */}
         {online && waiting && !oppLeft && (
-          <div className="absolute left-1/2 top-2 z-30 -translate-x-1/2 border-2 border-sky-400 bg-black/80 px-3 py-1 text-xs text-sky-200">
-            <span className="animate-blink">▶</span> 相手の入力を待機中…（回線状況）
+          <div className="pointer-events-none absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 border-2 border-sky-400/90 bg-slate-950/90 px-3.5 py-1 text-xs text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.4)] backdrop-blur-sm">
+            <span className="inline-block h-2 w-2 animate-ping rounded-full bg-sky-400" />
+            <span>相手の回線を待機中…</span>
           </div>
         )}
-        {online && net.latency >= 0 && (
-          <div className="absolute left-2 top-2 z-30 bg-black/60 px-2 py-0.5 text-[10px] text-slate-400">PING {net.latency}ms</div>
-        )}
+
+        {/* 上部ステータスバー・コントロール */}
+        <div className="absolute left-2 top-2 z-30 flex items-center gap-2">
+          {online && net.latency >= 0 && (
+            <div className="bg-black/60 px-2 py-0.5 text-[10px] text-slate-400 backdrop-blur-sm">PING {net.latency}ms</div>
+          )}
+        </div>
+
+        <div className="absolute right-2 top-2 z-30 flex items-center gap-1.5">
+          <button
+            onClick={toggleTouchMode}
+            className="rounded border border-slate-500/70 bg-black/60 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 active:bg-amber-300 active:text-slate-950"
+            title="タッチ操作UIの切り替え（ON / OFF / AUTO）"
+          >
+            📱 パッド: {touchMode === 'on' ? 'ON' : touchMode === 'off' ? 'OFF' : 'AUTO'}
+          </button>
+          <button
+            onClick={() => {
+              if (online) {
+                setPaused((p) => {
+                  audio.sfx(p ? 'confirm' : 'back');
+                  return !p;
+                });
+              } else {
+                pausedRef.current = !pausedRef.current;
+                setPaused(pausedRef.current);
+                input?.reset();
+                audio.sfx(pausedRef.current ? 'back' : 'confirm');
+              }
+            }}
+            className="rounded border border-slate-500/70 bg-black/60 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 active:bg-amber-300 active:text-slate-950"
+          >
+            ⏸ MENU
+          </button>
+        </div>
+
         {online && desync && (
           <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 border border-rose-400 bg-black/80 px-2 py-0.5 text-[10px] text-rose-300">
             ⚠ 同期ずれを検出しました（結果が食い違う可能性があります）
           </div>
         )}
+
         {oppLeft && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
             <div className="animate-pop w-80 border-4 border-rose-400 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
@@ -212,6 +304,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
             </div>
           </div>
         )}
+
         {paused && online && !oppLeft && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
             <div className="animate-pop w-72 border-4 border-slate-100 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
@@ -234,6 +327,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
             </div>
           </div>
         )}
+
         {paused && !online && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
             <div className="animate-pop w-72 border-4 border-slate-100 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
@@ -253,13 +347,16 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
             </div>
           </div>
         )}
-        {touch && input && !paused && <TouchControls input={input} />}
+
+        {/* タッチ操作UI（D-pad & アクションボタン） */}
+        {showTouchControls && input && !paused && <TouchControls input={input} side={mySide} />}
       </div>
+
       <div className="mt-2 hidden w-full max-w-5xl items-center justify-between px-3 text-[11px] text-slate-400 md:flex">
         {online ? (
           <>
             <span>
-              <span style={{ color: (mySide === 0 ? p1 : p2).color }}>{(mySide === 0 ? p1 : p2).name}</span>（あなた）：WASD/矢印 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
+              <span style={{ color: (mySide === 0 ? p1 : p2).color }}>{(mySide === 0 ? p1 : p2).name}</span>（あなた）：WASD/矢印/タッチ 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
             </span>
             <span className="text-slate-500">
               {st.name} ── {st.sub} ／ オンライン対戦 ／ M ミュート
@@ -271,7 +368,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         ) : (
           <>
             <span>
-              <span style={{ color: p1.color }}>{p1.name}</span>：WASD 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
+              <span style={{ color: p1.color }}>{p1.name}</span>：WASD/タッチ 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
             </span>
             <span className="text-slate-500">
               {st.name} ── {st.sub} ／ Esc ポーズ ／ M ミュート
@@ -320,50 +417,156 @@ function CutInOverlay({ c }: { c: CutIn }) {
   );
 }
 
-function TouchControls({ input }: { input: InputManager }) {
+/** タッチ・タブレット操作用コントローラー（D-pad ＋ アクションボタン） */
+function TouchControls({ input, side }: { input: InputManager; side: Side }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-1 z-20 flex items-end justify-between px-3 pb-1 touch-none">
+      <VirtualDPad input={input} side={side} />
+      <ActionButtons input={input} side={side} />
+    </div>
+  );
+}
+
+/** 仮想十字キー（タップ・スライド対応） */
+function VirtualDPad({ input, side }: { input: InputManager; side: Side }) {
+  const [activeDir, setActiveDir] = useState<{ up: boolean; down: boolean; left: boolean; right: boolean }>({
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pointerIdRef = useRef<number | null>(null);
+
+  const applyDir = (up: boolean, down: boolean, left: boolean, right: boolean) => {
+    setActiveDir({ up, down, left, right });
+    input.setDirections(side, { up, down, left, right });
+  };
+
+  const updateFromCoords = (clientX: number, clientY: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    const radius = rect.width / 2;
+
+    if (dist < radius * 0.15) {
+      applyDir(false, false, false, false);
+      return;
+    }
+
+    const angle = Math.atan2(dy, dx);
+    const isRight = Math.abs(dx) > radius * 0.2 && dx > 0 && Math.abs(angle) < (Math.PI * 3) / 8;
+    const isLeft = Math.abs(dx) > radius * 0.2 && dx < 0 && (angle > (Math.PI * 5) / 8 || angle < (-Math.PI * 5) / 8);
+    const isDown = Math.abs(dy) > radius * 0.2 && dy > 0 && angle > Math.PI / 8 && angle < (Math.PI * 7) / 8;
+    const isUp = Math.abs(dy) > radius * 0.2 && dy < 0 && angle < -Math.PI / 8 && angle > (-Math.PI * 7) / 8;
+
+    applyDir(isUp, isDown, isLeft, isRight);
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    pointerIdRef.current = e.pointerId;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    updateFromCoords(e.clientX, e.clientY);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (pointerIdRef.current === e.pointerId) {
+      e.preventDefault();
+      updateFromCoords(e.clientX, e.clientY);
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (pointerIdRef.current === e.pointerId) {
+      pointerIdRef.current = null;
+      applyDir(false, false, false, false);
+    }
+  };
+
+  const baseBtn = 'flex items-center justify-center rounded-lg text-sm font-bold transition-colors select-none md:text-lg';
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      className="pointer-events-auto relative grid h-32 w-32 grid-cols-3 grid-rows-3 gap-1 rounded-2xl border-2 border-white/40 bg-black/55 p-1.5 shadow-[4px_4px_0_#000] backdrop-blur-sm touch-none md:h-40 md:w-40"
+    >
+      <span />
+      <div className={`${baseBtn} ${activeDir.up ? 'bg-amber-300 text-slate-950 shadow-inner' : 'bg-slate-800/80 text-white'}`}>
+        ▲
+      </div>
+      <span />
+      <div className={`${baseBtn} ${activeDir.left ? 'bg-amber-300 text-slate-950 shadow-inner' : 'bg-slate-800/80 text-white'}`}>
+        ◀
+      </div>
+      <div className="flex items-center justify-center text-[10px] text-slate-400 font-bold">
+        ✝
+      </div>
+      <div className={`${baseBtn} ${activeDir.right ? 'bg-amber-300 text-slate-950 shadow-inner' : 'bg-slate-800/80 text-white'}`}>
+        ▶
+      </div>
+      <span />
+      <div className={`${baseBtn} ${activeDir.down ? 'bg-amber-300 text-slate-950 shadow-inner' : 'bg-slate-800/80 text-white'}`}>
+        ▼
+      </div>
+      <span />
+    </div>
+  );
+}
+
+/** 仮想アクションボタン（弱・強・必殺・超必殺） */
+function ActionButtons({ input, side }: { input: InputManager; side: Side }) {
   const bind = (key: keyof InputState) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
-      input.touch(0, key, true);
+      input.touch(side, key, true);
     },
-    onPointerUp: () => input.touch(0, key, false),
-    onPointerCancel: () => input.touch(0, key, false),
-    onPointerLeave: () => input.touch(0, key, false),
+    onPointerUp: () => input.touch(side, key, false),
+    onPointerCancel: () => input.touch(side, key, false),
   });
-  const cls = 'flex h-12 w-12 items-center justify-center rounded-full border-2 border-white/60 bg-black/40 text-lg text-white active:bg-amber-300 active:text-slate-950 md:h-14 md:w-14';
+
+  const btnBase =
+    'flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-bold select-none shadow-[2px_2px_0_#000] active:scale-95 touch-none md:h-16 md:w-16 md:text-lg';
+
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-2 touch-none">
-      <div className="pointer-events-auto grid grid-cols-3 gap-1">
-        <span />
-        <button className={cls} {...bind('up')}>
-          ▲
-        </button>
-        <span />
-        <button className={cls} {...bind('left')}>
-          ◀
-        </button>
-        <button className={cls} {...bind('down')}>
-          ▼
-        </button>
-        <button className={cls} {...bind('right')}>
-          ▶
-        </button>
-      </div>
-      <div className="pointer-events-auto grid grid-cols-2 gap-1.5">
-        <button className={cls} {...bind('light')}>
-          弱
-        </button>
-        <button className={cls} {...bind('heavy')}>
-          強
-        </button>
-        <button className={cls} {...bind('special')}>
-          必
-        </button>
-        <button className={`${cls} border-amber-300 text-amber-300`} {...bind('super')}>
-          ✝
-        </button>
-      </div>
+    <div className="pointer-events-auto grid grid-cols-2 gap-1.5 rounded-2xl border-2 border-white/40 bg-black/55 p-1.5 shadow-[4px_4px_0_#000] backdrop-blur-sm touch-none md:gap-2 md:p-2">
+      <button
+        {...bind('light')}
+        className={`${btnBase} border-sky-400/80 bg-sky-950/80 text-sky-200 active:bg-sky-400 active:text-slate-950`}
+        aria-label="弱攻撃"
+      >
+        弱
+      </button>
+      <button
+        {...bind('heavy')}
+        className={`${btnBase} border-rose-400/80 bg-rose-950/80 text-rose-200 active:bg-rose-400 active:text-slate-950`}
+        aria-label="強攻撃"
+      >
+        強
+      </button>
+      <button
+        {...bind('special')}
+        className={`${btnBase} border-emerald-400/80 bg-emerald-950/80 text-emerald-200 active:bg-emerald-400 active:text-slate-950`}
+        aria-label="必殺技"
+      >
+        必
+      </button>
+      <button
+        {...bind('super')}
+        className={`${btnBase} border-amber-300 bg-amber-950/80 text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.4)] active:bg-amber-300 active:text-slate-950`}
+        aria-label="超必殺技"
+      >
+        ✝
+      </button>
     </div>
   );
 }
