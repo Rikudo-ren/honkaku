@@ -201,8 +201,10 @@ export interface FighterSetup {
   aiDifficulty?: Difficulty;
   /** ローカルチーム戦で人間が操作するパッド（0=P1キー、1=P2キー）。AIのときは null */
   pad?: 0 | 1 | null;
-  /** 頭上に表示するタグ（'1P' / 'あなた' / 'CPU' など） */
+  /** 頭上に表示するタグ（'1P' / 'あなた' / 'CPU' / オンラインのプレイヤー名 など） */
   tag?: string;
+  /** 自分が操作するファイターか（表示色の切り替え用。オンライン対戦で使用） */
+  you?: boolean;
 }
 
 export interface Setup {
@@ -225,4 +227,6 @@ export interface Setup {
   fighters?: FighterSetup[];
   /** オンラインチーム戦：自分が操作するファイターのインデックス */
   mySlot?: number;
+  /** オンライン対戦：各スロットのプレイヤー名（AIスロットは null） */
+  onlineNames?: (string | null)[];
 }

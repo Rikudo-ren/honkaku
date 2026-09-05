@@ -160,6 +160,7 @@ function TeamResult({
 }) {
   const fighters = setup.fighters!;
   const w = result.winner;
+  const online = setup.mode === 'online';
   const winners = fighters.filter((f) => f.team === w);
   const losers = fighters.filter((f) => f.team !== w);
   const rep = CHARS[winners[0]?.char ?? 'mie'];
@@ -220,7 +221,7 @@ function TeamResult({
               <div className="text-sky-300">青チーム</div>
               {fighters.filter((f) => f.team === 0).map((f, i) => (
                 <div key={i} style={{ color: CHARS[f.char].color }}>
-                  {CHARS[f.char].name} {f.ai ? '(CPU)' : ''}
+                  {CHARS[f.char].name} {f.ai ? '(CPU)' : online ? `(${f.tag || 'NET'})` : ''}
                 </div>
               ))}
             </div>
@@ -228,7 +229,7 @@ function TeamResult({
               <div className="text-rose-300">赤チーム</div>
               {fighters.filter((f) => f.team === 1).map((f, i) => (
                 <div key={i} style={{ color: CHARS[f.char].color }}>
-                  {CHARS[f.char].name} {f.ai ? '(CPU)' : ''}
+                  {CHARS[f.char].name} {f.ai ? '(CPU)' : online ? `(${f.tag || 'NET'})` : ''}
                 </div>
               ))}
             </div>

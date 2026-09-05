@@ -19,6 +19,8 @@ export interface LobbyPlayer {
   char: CharId | null;
   ready: boolean;
   host: boolean;
+  /** プレイヤーが決めた表示名 */
+  name: string;
 }
 
 export interface LobbyAi {
@@ -44,6 +46,32 @@ export interface StartFighter {
   /** 人間が操作するスロットならそのセッションID、AIなら null */
   sessionId: string | null;
   aiDifficulty: Difficulty;
+  /** 人間のプレイヤー名（AIは null） */
+  name: string | null;
+}
+
+/** プレイヤー名の最大文字数（サーバー側 BattleRoom と同じ値） */
+export const MAX_NAME = 12;
+/** 名前を設定していない人の表示名 */
+export const DEFAULT_NAME = '名無しの本質';
+const NAME_KEY = 'honkaku_player_name';
+
+/** 表示に使えない制御文字を落とし、長さを制限する（サーバー側と同じ基準） */
+export function sanitizeName(raw: string): string {
+  return raw
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_NAME);
+}
+
+/** 保存済みのプレイヤー名を読み出す */
+function loadName(): string {
+  try {
+    return sanitizeName(localStorage.getItem(NAME_KEY) ?? '');
+  } catch {
+    return '';
+  }
 }
 
 export interface StartData {
@@ -98,6 +126,8 @@ class NetClient {
   startData: StartData | null = null;
   /** 直近の計測レイテンシ(ms) */
   latency = -1;
+  /** 自分のプレイヤー名（ロビー・対戦中の表示に使う。ブラウザに保存される） */
+  name = loadName();
 
   /** 他プレイヤーの入力バッファ frame → (slot → mask) */
   private remote = new Map<number, Map<number, number>>();
@@ -142,17 +172,35 @@ class NetClient {
 
   /** クイックマッチ（1対1。空いてる公開部屋に入る／なければ作る） */
   async quickMatch() {
-    await this.join((c) => c.joinOrCreate('battle', {}));
+    await this.join((c) => c.joinOrCreate('battle', { name: this.name }));
   }
 
   /** 合言葉付きプライベート部屋を作る（チーム戦対応・最大8人） */
   async createPrivate() {
-    await this.join((c) => c.create('battle', { private: true }));
+    await this.join((c) => c.create('battle', { private: true, name: this.name }));
   }
 
   /** 合言葉で部屋に入る */
   async joinByCode(code: string) {
-    await this.join((c) => c.joinById(code.trim().toUpperCase(), {}));
+    await this.join((c) => c.joinById(code.trim().toUpperCase(), { name: this.name }));
+  }
+
+  /**
+   * 自分のプレイヤー名を変更する。
+   * ブラウザに保存されるので次回以降も自動で使われる。
+   * 入室中ならサーバーにも通知してロビー表示を更新する（試合中はサーバー側で無視される）。
+   * @returns 整形後の名前
+   */
+  setName(raw: string): string {
+    const next = sanitizeName(raw);
+    this.name = next;
+    try {
+      localStorage.setItem(NAME_KEY, next);
+    } catch {
+      /* localStorage が使えない環境では保存しない */
+    }
+    this.room?.send('name', next);
+    return next;
   }
 
   private async join(fn: (c: Client) => Promise<Room>) {

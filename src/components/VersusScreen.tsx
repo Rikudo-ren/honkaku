@@ -22,8 +22,15 @@ export function DuelVersus({ setup, onDone }: Props) {
   const [tip] = useState(() => LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]);
   const pair = INTRO_PAIRS[pairKey(a.id, b.id)];
   const online = setup.mode === 'online';
-  const p2Label = online ? (setup.onlineSide === 1 ? 'あなた' : '相手') : setup.mode === '2p' ? '2P' : 'CPU';
-  const p1Label = online ? (setup.onlineSide === 0 ? 'あなた' : '相手') : setup.mode === 'cpu' ? 'CPU' : '1P';
+  // オンライン対戦ではプレイヤー名を表示（自分には「あなた」を添える）
+  const onlineLabel = (side: 0 | 1) => {
+    const name = setup.onlineNames?.[side] ?? null;
+    const mine = setup.onlineSide === side;
+    if (!name) return mine ? 'あなた' : '相手';
+    return mine ? `${name}（あなた）` : name;
+  };
+  const p2Label = online ? onlineLabel(1) : setup.mode === '2p' ? '2P' : 'CPU';
+  const p1Label = online ? onlineLabel(0) : setup.mode === 'cpu' ? 'CPU' : '1P';
   const showDiff = setup.mode === '1p' || setup.mode === 'cpu';
   const diffColor =
     setup.difficulty === 'extreme' ? 'text-fuchsia-300 border-fuchsia-400' : setup.difficulty === 'hard' ? 'text-rose-300 border-rose-400' : 'text-amber-200 border-amber-400';
@@ -119,7 +126,8 @@ function TeamVersus({ setup, onDone }: Props) {
   const labelOf = (slot: number, ai: boolean) => {
     if (setup.mode === 'online') {
       if (ai) return 'CPU';
-      return slot === setup.mySlot ? 'あなた' : 'NET';
+      const name = setup.onlineNames?.[slot] ?? fighters[slot].tag ?? null;
+      return slot === setup.mySlot ? `${name || 'あなた'}★` : name || 'NET';
     }
     const f = fighters[slot];
     if (f.pad === 0) return '1P';

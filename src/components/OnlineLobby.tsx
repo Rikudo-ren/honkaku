@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CHARS, CHAR_ORDER, DIFFICULTY_SHORT } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
-import { net, type LobbyAi, type LobbyInfo, type StartData } from '@/game/net';
+import { DEFAULT_NAME, MAX_NAME, net, sanitizeName, type LobbyAi, type LobbyInfo, type StartData } from '@/game/net';
 import type { CharId, Difficulty, Team } from '@/game/types';
 import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
@@ -22,6 +22,7 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
   const [code, setCode] = useState('');
   const [lobby, setLobby] = useState<LobbyInfo | null>(net.lobby);
   const [sel, setSel] = useState<CharId>('mie');
+  const [name, setName] = useState(net.name);
   const [ready, setReady] = useState(false);
   const [ping, setPing] = useState(net.latency);
   const startedRef = useRef(false);
@@ -93,6 +94,11 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
     audio.sfx(next ? 'confirm' : 'back');
   };
 
+  /** 名前を保存（ブラウザに記憶＋入室中ならサーバーにも通知） */
+  const changeName = (raw: string) => {
+    setName(net.setName(raw));
+  };
+
   const leave = () => {
     net.leave();
     setLobby(null);
@@ -125,32 +131,55 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
         </header>
 
         {stage === 'menu' && (
-          <div className="mx-auto mt-8 flex w-full max-w-md flex-col gap-3">
-            <button
-              className="border-4 border-amber-300 bg-slate-950/90 p-4 text-left shadow-[6px_6px_0_#000] hover:bg-slate-900"
-              onClick={() => connect(() => net.quickMatch())}
-            >
-              <div className="text-xl text-amber-200">クイックマッチ（1対1）</div>
-              <div className="mt-1 text-xs text-slate-400">世界のどこかの✝本質✝と自動マッチング</div>
-            </button>
-            <button
-              className="border-4 border-sky-400 bg-slate-950/90 p-4 text-left shadow-[6px_6px_0_#000] hover:bg-slate-900"
-              onClick={() => connect(() => net.createPrivate())}
-            >
-              <div className="text-xl text-sky-200">部屋を作る（チーム戦OK）</div>
-              <div className="mt-1 text-xs text-slate-400">最大{MAX_FIGHTERS}人まで入室可・2対2も3対1も自由・AI追加可・合言葉発行</div>
-            </button>
-            <button
-              className="border-4 border-emerald-400 bg-slate-950/90 p-4 text-left shadow-[6px_6px_0_#000] hover:bg-slate-900"
-              onClick={() => {
-                setStage('code-input');
-                audio.sfx('confirm');
-              }}
-            >
-              <div className="text-xl text-emerald-200">合言葉で入る</div>
-              <div className="mt-1 text-xs text-slate-400">友達に教えてもらった合言葉を入力</div>
-            </button>
-          </div>
+          <>
+            <div className="mx-auto mt-6 w-full max-w-md border-2 border-slate-600 bg-slate-950/90 p-3">
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="player-name" className="text-xs text-slate-300">
+                  あなたの名前（相手の画面にも表示されます）
+                </label>
+                <span className="text-[10px] text-slate-500">
+                  {name.length}/{MAX_NAME}
+                </span>
+              </div>
+              <input
+                id="player-name"
+                value={name}
+                onChange={(e) => changeName(e.target.value)}
+                onBlur={(e) => changeName(sanitizeName(e.target.value))}
+                maxLength={MAX_NAME}
+                placeholder={DEFAULT_NAME}
+                className="mt-1 w-full border-2 border-slate-500 bg-black px-3 py-1.5 text-center text-lg tracking-wide text-amber-200 outline-none focus:border-amber-300"
+              />
+              <div className="mt-1 text-[10px] text-slate-500">ブラウザに保存されるので、次回からは自動で入ります</div>
+            </div>
+
+            <div className="mx-auto mt-4 flex w-full max-w-md flex-col gap-3">
+              <button
+                className="border-4 border-amber-300 bg-slate-950/90 p-4 text-left shadow-[6px_6px_0_#000] hover:bg-slate-900"
+                onClick={() => connect(() => net.quickMatch())}
+              >
+                <div className="text-xl text-amber-200">クイックマッチ（1対1）</div>
+                <div className="mt-1 text-xs text-slate-400">世界のどこかの✝本質✝と自動マッチング</div>
+              </button>
+              <button
+                className="border-4 border-sky-400 bg-slate-950/90 p-4 text-left shadow-[6px_6px_0_#000] hover:bg-slate-900"
+                onClick={() => connect(() => net.createPrivate())}
+              >
+                <div className="text-xl text-sky-200">部屋を作る（チーム戦OK）</div>
+                <div className="mt-1 text-xs text-slate-400">最大{MAX_FIGHTERS}人まで入室可・2対2も3対1も自由・AI追加可・合言葉発行</div>
+              </button>
+              <button
+                className="border-4 border-emerald-400 bg-slate-950/90 p-4 text-left shadow-[6px_6px_0_#000] hover:bg-slate-900"
+                onClick={() => {
+                  setStage('code-input');
+                  audio.sfx('confirm');
+                }}
+              >
+                <div className="text-xl text-emerald-200">合言葉で入る</div>
+                <div className="mt-1 text-xs text-slate-400">友達に教えてもらった合言葉を入力</div>
+              </button>
+            </div>
+          </>
         )}
 
         {stage === 'code-input' && (
@@ -237,6 +266,7 @@ function QuickLobbyView({
       <div className="grid grid-cols-2 gap-4">
         {/* 自分 */}
         <div className={`border-4 p-3 ${ready ? 'border-amber-300 bg-amber-950/30' : 'border-sky-400 bg-slate-950/80'}`}>
+          <div className="truncate text-sm text-amber-100">{me?.name || net.name || DEFAULT_NAME}</div>
           <div className="text-xs text-sky-300">あなた（{me?.team === 1 ? '2P側' : '1P側'}）</div>
           <div className="mt-1 text-lg" style={{ color: CHARS[sel].color }}>
             {CHARS[sel].name}
@@ -265,6 +295,7 @@ function QuickLobbyView({
 
         {/* 相手 */}
         <div className="border-4 border-rose-400/70 bg-slate-950/80 p-3">
+          <div className="truncate text-sm text-amber-100">{opp?.name || '──'}</div>
           <div className="text-xs text-rose-300">相手</div>
           {opp ? (
             <>
@@ -445,12 +476,14 @@ function TeamLobbyView({
                         {p.char && <Portrait id={p.char} alt="" className="h-full w-full object-contain object-bottom" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs" style={{ color: p.char ? CHARS[p.char].color : '#64748b' }}>
-                          {p.char ? CHARS[p.char].name : '選択中…'}
-                          {isMe && <span className="ml-1 text-sky-300">（あなた）</span>}
+                        <div className="truncate text-xs text-amber-100">
+                          {p.name || DEFAULT_NAME}
                           {p.host && <span className="ml-1 text-amber-300">👑</span>}
+                          {isMe && <span className="ml-1 text-sky-300">（あなた）</span>}
                         </div>
-                        <div className="text-[10px] text-slate-500">{p.ready || p.host ? (p.host ? 'ホスト' : '準備OK ✝') : '準備中…'}</div>
+                        <div className="truncate text-[10px]" style={{ color: p.char ? CHARS[p.char].color : '#64748b' }}>
+                          {p.char ? CHARS[p.char].name : '選択中…'} ／ {p.ready || p.host ? (p.host ? 'ホスト' : '準備OK ✝') : '準備中…'}
+                        </div>
                       </div>
                       {isHost && (
                         <button
