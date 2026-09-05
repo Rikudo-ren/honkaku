@@ -47,6 +47,8 @@ export interface StartFighter {
 }
 
 export interface StartData {
+  matchId: number;
+  inputDelay: number;
   seed: number;
   stage: StageId;
   fighters: StartFighter[];
@@ -56,6 +58,7 @@ type NetEvent = 'lobby' | 'start' | 'opponent-left' | 'error' | 'ping' | 'desync
 
 /** InputState → 8bit マスク */
 const KEYS: (keyof InputState)[] = ['left', 'right', 'up', 'down', 'light', 'heavy', 'special', 'super'];
+const HASH_WINDOW = 120;
 
 export function maskOf(s: InputState): number {
   let m = 0;
@@ -96,8 +99,8 @@ class NetClient {
   /** 直近の計測レイテンシ(ms) */
   latency = -1;
 
-  /** 他プレイヤーの入力バッファ `${frame}:${slot}` → mask */
-  private remote = new Map<string, number>();
+  /** 他プレイヤーの入力バッファ frame → (slot → mask) */
+  private remote = new Map<number, Map<number, number>>();
   /** 相手から届いた同期ハッシュ frame → hash */
   private remoteHash = new Map<number, number>();
   /** 自分が計算した同期ハッシュ frame → hash */
@@ -172,14 +175,28 @@ class NetClient {
       this.localHash.clear();
       this.emit('start', d);
     });
-    room.onMessage('i', (d: [number, number, number]) => {
-      // [frame, slot, mask]
-      this.remote.set(`${d[0]}:${d[1]}`, d[2]);
+    room.onMessage('i', (d: [number, number, number, number]) => {
+      // [matchId, frame, slot, mask]
+      if (!this.startData || d[0] !== this.startData.matchId) return;
+      const frame = d[1];
+      const slot = d[2];
+      const mask = d[3];
+      let row = this.remote.get(frame);
+      if (!row) {
+        row = new Map<number, number>();
+        this.remote.set(frame, row);
+      }
+      row.set(slot, mask);
     });
-    room.onMessage('h', (d: [number, number]) => {
-      this.remoteHash.set(d[0], d[1]);
-      const mine = this.localHash.get(d[0]);
-      if (mine !== undefined && mine !== d[1]) this.emit('desync');
+    room.onMessage('h', (d: [number, number, number]) => {
+      // [matchId, frame, hash]
+      if (!this.startData || d[0] !== this.startData.matchId) return;
+      const frame = d[1];
+      const hash = d[2];
+      this.remoteHash.set(frame, hash);
+      this.trimHashMap(this.remoteHash, frame - HASH_WINDOW);
+      const mine = this.localHash.get(frame);
+      if (mine !== undefined && mine !== hash) this.emit('desync');
     });
     room.onMessage('pong', (t: number) => {
       this.latency = Math.round(performance.now() - t);
@@ -191,6 +208,7 @@ class NetClient {
     room.onError((_code, message) => this.emit('error', message ?? '通信エラー'));
     room.onLeave(() => {
       this.room = null;
+      this.client = null;
       this.stopPing();
     });
 
@@ -211,6 +229,12 @@ class NetClient {
     if (this.pingTimer !== null) {
       window.clearInterval(this.pingTimer);
       this.pingTimer = null;
+    }
+  }
+
+  private trimHashMap(map: Map<number, number>, minFrame: number) {
+    for (const frame of map.keys()) {
+      if (frame < minFrame) map.delete(frame);
     }
   }
 
@@ -256,22 +280,34 @@ class NetClient {
 
   /** フレーム入力を送信（slot=自分のファイター番号） */
   sendInput(frame: number, slot: number, mask: number) {
-    this.room?.send('i', [frame, slot, mask]);
+    const matchId = this.startData?.matchId;
+    if (matchId === undefined) return;
+    this.room?.send('i', [matchId, frame, slot, mask]);
   }
 
   /** 他プレイヤーのフレーム入力を取得（未着なら undefined） */
   remoteInput(frame: number, slot: number): number | undefined {
-    return this.remote.get(`${frame}:${slot}`);
+    return this.remote.get(frame)?.get(slot);
+  }
+
+  /** 実行済みフレームの受信バッファを掃除 */
+  discardConsumedFrame(frame: number) {
+    this.remote.delete(frame);
+    const minFrame = frame - HASH_WINDOW;
+    this.trimHashMap(this.remoteHash, minFrame);
+    this.trimHashMap(this.localHash, minFrame);
+    for (const key of this.remote.keys()) {
+      if (key < minFrame) this.remote.delete(key);
+    }
   }
 
   /** 同期チェック：ハッシュ送信と比較 */
   sendHash(frame: number, hash: number) {
+    const matchId = this.startData?.matchId;
+    if (matchId === undefined) return;
     this.localHash.set(frame, hash);
-    if (this.localHash.size > 30) {
-      const first = this.localHash.keys().next().value;
-      if (first !== undefined) this.localHash.delete(first);
-    }
-    this.room?.send('h', [frame, hash]);
+    this.trimHashMap(this.localHash, frame - HASH_WINDOW);
+    this.room?.send('h', [matchId, frame, hash]);
     // 過去に受け取った相手ハッシュと比較
     const other = this.remoteHash.get(frame);
     if (other !== undefined && other !== hash) this.emit('desync');
@@ -279,7 +315,9 @@ class NetClient {
 
   /** 試合終了をサーバーに通知（再戦を可能にする） */
   sendEnd() {
-    this.room?.send('end');
+    const matchId = this.startData?.matchId;
+    if (matchId === undefined) return;
+    this.room?.send('end', matchId);
   }
 
   /** 退室 */
@@ -290,6 +328,7 @@ class NetClient {
     } catch {
       /* ignore */
     }
+    this.client = null;
     this.room = null;
     this.lobby = null;
     this.startData = null;

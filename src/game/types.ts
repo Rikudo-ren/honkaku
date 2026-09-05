@@ -213,6 +213,10 @@ export interface Setup {
   stage: StageId;
   /** オンライン対戦：試合の決定論シード */
   seed?: number;
+  /** オンライン対戦：試合ID（旧試合の遅延メッセージ混入防止に使う） */
+  onlineMatchId?: number;
+  /** オンライン対戦：ロックステップの固定入力遅延フレーム数 */
+  netInputDelay?: number;
   /** オンライン対戦：自分がどちら側か（1対1用） */
   onlineSide?: Side;
   /** チーム戦（同時乱戦）かどうか */

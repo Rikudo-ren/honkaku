@@ -9,8 +9,8 @@ import { net, maskOf, unmask } from '@/game/net';
 import type { FighterSetup, InputState, Setup, Side } from '@/game/types';
 import { EMPTY_INPUT, TEAM_NAMES } from '@/game/types';
 
-/** オンライン時の入力遅延フレーム数（この分だけ先のフレームに自分の入力を予約してジッターを吸収する） */
-const NET_DELAY = 5;
+/** オンライン時のデフォルト入力遅延フレーム数（サーバー指定がない場合のフォールバック） */
+const DEFAULT_NET_DELAY = 5;
 
 interface Props {
   setup: Setup;
@@ -51,12 +51,14 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
 
   useEffect(() => {
     const onTouch = () => setDetectedTouch(true);
-    window.addEventListener('touchstart', onTouch, { passive: true });
-    window.addEventListener('pointerdown', (e) => {
+    const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === 'touch') setDetectedTouch(true);
-    });
+    };
+    window.addEventListener('touchstart', onTouch, { passive: true });
+    window.addEventListener('pointerdown', onPointerDown);
     return () => {
       window.removeEventListener('touchstart', onTouch);
+      window.removeEventListener('pointerdown', onPointerDown);
     };
   }, []);
 
@@ -77,6 +79,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
   const online = setup.mode === 'online';
   const mySide: Side = online ? (setup.onlineSide ?? 0) : 0;
   const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
+  const netDelay = online ? Math.max(0, setup.netInputDelay ?? DEFAULT_NET_DELAY) : 0;
 
   useEffect(() => {
     const game = gameRef.current;
@@ -137,8 +140,8 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     const mySlot = teamMode ? (setup.mySlot ?? 0) : mySide;
 
     const stepOnline = (): boolean => {
-      // 自分の入力を NET_DELAY フレーム先に予約して送信
-      const target = frame + NET_DELAY;
+      // 自分の入力を netDelay フレーム先に予約して送信
+      const target = frame + netDelay;
       if (!localBuf.has(target)) {
         // オンラインではどちらのキー配置（WASD系・矢印系・タッチ）でも操作できるようマージ
         const mask = maskOf(im.poll(0)) | maskOf(im.poll(1));
@@ -152,7 +155,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
           inputs.push(EMPTY_INPUT);
           continue;
         }
-        if (frame < NET_DELAY) {
+        if (frame < netDelay) {
           inputs.push(EMPTY_INPUT);
           continue;
         }
@@ -160,8 +163,10 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         if (m === undefined) return false; // 誰かの入力待ち
         inputs.push(unmask(m));
       }
+      const currentFrame = frame;
       battle.step(inputs);
-      localBuf.delete(frame - 60);
+      localBuf.delete(currentFrame);
+      net.discardConsumedFrame(currentFrame);
       frame++;
       // 定期的に同期チェック
       if (frame % 60 === 0) net.sendHash(frame, battle.stateHash());
@@ -250,7 +255,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       offLeft?.();
       offDesync?.();
     };
-  }, [setup, online, mySide, teamMode]);
+  }, [setup, online, mySide, teamMode, netDelay]);
 
   const resume = () => {
     pausedRef.current = false;
