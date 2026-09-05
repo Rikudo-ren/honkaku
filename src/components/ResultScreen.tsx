@@ -25,7 +25,18 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
   const [quote] = useState(() => pick(wd.wins));
   const [hq] = useState(() => pick(HONSHITSU_QUOTES));
   const [postNo] = useState(() => 200 + Math.floor(Math.random() * 700));
-  const winnerLabel = w === 0 ? (setup.mode === 'cpu' ? 'CPU' : '1P') : setup.mode === '2p' ? '2P' : 'CPU';
+  const winnerLabel =
+    setup.mode === 'online'
+      ? w === setup.onlineSide
+        ? 'あなた'
+        : '相手'
+      : w === 0
+        ? setup.mode === 'cpu'
+          ? 'CPU'
+          : '1P'
+        : setup.mode === '2p'
+          ? '2P'
+          : 'CPU';
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {

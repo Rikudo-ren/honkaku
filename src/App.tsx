@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import LoadingScreen from '@/components/LoadingScreen';
 import TitleScreen from '@/components/TitleScreen';
 import CharacterSelect from '@/components/CharacterSelect';
+import OnlineLobby from '@/components/OnlineLobby';
 import VersusScreen from '@/components/VersusScreen';
 import BattleScreen from '@/components/BattleScreen';
 import ResultScreen from '@/components/ResultScreen';
 import { preloadPortraits } from '@/components/Portrait';
 import { STAGES } from '@/game/characters';
 import { audio } from '@/game/audio';
+import { net, type StartData } from '@/game/net';
 import type { CharId, Difficulty, Mode, Setup, Side, StageId } from '@/game/types';
 
-type Screen = 'loading' | 'title' | 'select' | 'versus' | 'battle' | 'result';
+type Screen = 'loading' | 'title' | 'select' | 'online' | 'versus' | 'battle' | 'result';
 
 const randomStage = (): StageId => STAGES[Math.floor(Math.random() * STAGES.length)].id;
 
@@ -99,7 +101,12 @@ export default function App() {
 
   const start = useCallback((mode: Mode, difficulty: Difficulty) => {
     setSetup((s) => ({ ...s, mode, difficulty }));
-    setScreen('select');
+    setScreen(mode === 'online' ? 'online' : 'select');
+  }, []);
+
+  const onlineStart = useCallback((data: StartData, mySide: Side) => {
+    setSetup((s) => ({ ...s, mode: 'online', p1: data.chars[0], p2: data.chars[1], stage: data.stage, seed: data.seed, onlineSide: mySide }));
+    setScreen('versus');
   }, []);
 
   const chosen = useCallback((p1: CharId, p2: CharId) => {
@@ -118,10 +125,15 @@ export default function App() {
   }, []);
 
   const rematch = useCallback(() => {
+    if (setup.mode === 'online') {
+      // オンラインは同じ部屋のロビーに戻って再戦（シードはサーバーが再発行）
+      setScreen(net.connected ? 'online' : 'title');
+      return;
+    }
     setSetup((s) => ({ ...s, stage: randomStage() }));
     setBattleKey((k) => k + 1);
     setScreen('versus');
-  }, []);
+  }, [setup.mode]);
 
   const tryUnlock = useCallback(() => {
     if (result && result.winner === 0 && setup.mode === '1p' && setup.difficulty === 'hard' && !extremeUnlocked) {
@@ -135,16 +147,21 @@ export default function App() {
 
   const handleResultToTitle = useCallback(() => {
     tryUnlock();
+    if (setup.mode === 'online') net.leave();
     setScreen('title');
-  }, [tryUnlock]);
+  }, [tryUnlock, setup.mode]);
 
   const handleResultToSelect = useCallback(() => {
+    if (setup.mode === 'online') {
+      setScreen(net.connected ? 'online' : 'title');
+      return;
+    }
     if (tryUnlock()) {
       setScreen('title');
       return;
     }
     setScreen('select');
-  }, [tryUnlock]);
+  }, [tryUnlock, setup.mode]);
 
   return (
     <div className="min-h-screen w-full bg-[#05050c] text-slate-100">
@@ -160,6 +177,7 @@ export default function App() {
       {screen === 'select' && (
         <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} onDone={chosen} onBack={() => setScreen('title')} />
       )}
+      {screen === 'online' && <OnlineLobby onStart={onlineStart} onBack={() => setScreen('title')} />}
       {screen === 'versus' && <VersusScreen setup={setup} onDone={toBattle} />}
       {screen === 'battle' && <BattleScreen key={battleKey} setup={setup} onEnd={onEnd} onQuit={(to) => setScreen(to)} />}
       {screen === 'result' && result && (
