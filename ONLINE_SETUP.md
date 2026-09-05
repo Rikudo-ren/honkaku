@@ -7,9 +7,10 @@
 
 ## 仕組み（概要）
 
-- 方式は「ディレイ方式ロックステップ」。サーバーは**マッチメイキング＋入力のリレーだけ**を行い、ゲームロジックは両プレイヤーのブラウザが**同じシードで決定論的に**実行します。
+- 方式は「ディレイ方式ロックステップ」。サーバーは**マッチメイキング＋入力のリレーだけ**を行い、ゲームロジックは全プレイヤーのブラウザが**同じシードで決定論的に**実行します。
 - そのため通信量は毎フレーム数バイトで、サーバーは激安インスタンスで十分です。
-- モードは「クイックマッチ」「部屋を作る（合言葉発行）」「合言葉で入る」の3つ。
+- モードは「クイックマッチ（1対1）」「部屋を作る（合言葉発行・チーム戦OK）」「合言葉で入る」の3つ。
+- チーム戦は**同時乱戦**（全員が同じ画面で戦う、最大8人）。部屋主（ホスト）がチーム分け・AI追加（キャラと強さ指定可）・試合開始を操作します。2対2はもちろん、3対1や5人以上も自由に編成できます。
 
 ---
 
@@ -102,8 +103,9 @@ npx @colyseus/cloud deploy
 
 ## 技術メモ（コードを触る人向け）
 
-- `server/src/rooms/BattleRoom.ts` … 対戦ルーム（マッチング・入力リレー・シード発行）
-- `src/game/net.ts` … クライアントのネットワーク層（colyseus.js）
-- `src/components/OnlineLobby.tsx` … オンラインロビーUI
-- `src/components/BattleScreen.tsx` … `mode === 'online'` のときロックステップ実行
-- `src/game/engine.ts` … `Math.random` を全廃してシード付き乱数（mulberry32）化。`stateHash()` で同期検証
+- `server/src/rooms/BattleRoom.ts` … 対戦ルーム（マッチング・入力リレー・シード発行）。公開部屋=1対1クイック、私室=チーム戦（ホスト制・AI枠あり）
+- `src/game/net.ts` … クライアントのネットワーク層（colyseus.js）。入力は `[frame, slot, mask]` で全員へリレー
+- `src/components/OnlineLobby.tsx` … オンラインロビーUI（クイック用＋チーム戦用）
+- `src/components/TeamSetup.tsx` … オフライン・チーム戦の編成画面
+- `src/components/BattleScreen.tsx` … `mode === 'online'` のときロックステップ実行（人間スロット全員分の入力を収集）
+- `src/game/engine.ts` … `Math.random` を全廃してシード付き乱数（mulberry32）化。`stateHash()` で同期検証。N人同時乱戦対応（敵=別チーム、味方への攻撃は無効、AIは最寄りの敵を狙う）

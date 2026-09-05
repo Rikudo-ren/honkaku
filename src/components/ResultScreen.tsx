@@ -17,6 +17,8 @@ interface Props {
 const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
 export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme }: Props) {
+  const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
+  if (teamMode) return <TeamResult setup={setup} result={result} onRematch={onRematch} onSelect={onSelect} onTitle={onTitle} />;
   const w = result.winner;
   const wId = w === 0 ? setup.p1 : setup.p2;
   const lId = w === 0 ? setup.p2 : setup.p1;
@@ -137,6 +139,124 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
             </button>
           </div>
           <div className="mt-3 text-xs text-slate-500">何も変わらない。何も解決しない。✝本質✝が何かは最後までわからない。でも、来年もある。</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamResult({
+  setup,
+  result,
+  onRematch,
+  onSelect,
+  onTitle,
+}: {
+  setup: Setup;
+  result: { winner: Side; wins: [number, number] };
+  onRematch: () => void;
+  onSelect: () => void;
+  onTitle: () => void;
+}) {
+  const fighters = setup.fighters!;
+  const w = result.winner;
+  const winners = fighters.filter((f) => f.team === w);
+  const losers = fighters.filter((f) => f.team !== w);
+  const rep = CHARS[winners[0]?.char ?? 'mie'];
+  const [quote] = useState(() => pick(rep.wins));
+  const [hq] = useState(() => pick(HONSHITSU_QUOTES));
+  const [postNo] = useState(() => 200 + Math.floor(Math.random() * 700));
+  const teamColor = w === 0 ? '#38bdf8' : '#fb7185';
+  const teamName = w === 0 ? '青チーム' : '赤チーム';
+  const youWon =
+    setup.mode === 'online'
+      ? (fighters[setup.mySlot ?? 0]?.team ?? 0) === w
+      : fighters.some((f, i) => f.team === w && !f.ai && (setup.mode === 'team' ? f.pad != null : i === 0));
+
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (['Enter', 'Space', 'KeyF', 'KeyK'].includes(e.code)) {
+        e.preventDefault();
+        audio.sfx('confirm');
+        onRematch();
+      } else if (['Escape', 'KeyG', 'KeyL'].includes(e.code)) {
+        audio.sfx('back');
+        onSelect();
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onRematch, onSelect]);
+
+  return (
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#0b0b18] px-4 py-8 text-slate-100">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'radial-gradient(#fde68a 1px, transparent 1px)', backgroundSize: '18px 18px' }} />
+      <div className="scanlines pointer-events-none absolute inset-0" />
+      <div className="relative z-10 grid w-full max-w-5xl gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div className="relative mx-auto aspect-[3/4] w-full max-w-sm overflow-hidden border-4 shadow-[8px_8px_0_#000] animate-pop" style={{ borderColor: teamColor, background: `linear-gradient(160deg, #ffffff, ${rep.light})` }}>
+          <Portrait id={rep.id} alt={rep.name} className="h-full w-full object-contain object-bottom p-2" />
+          <div className="absolute left-2 top-2 px-2 py-0.5 text-sm text-slate-950" style={{ background: teamColor }}>
+            WINNER ✝ {teamName}
+          </div>
+          <div className="absolute bottom-3 left-3 right-3 border-2 border-slate-800 bg-white/95 p-2 text-slate-900">
+            <div className="text-[10px] text-slate-500">代表コメント（{rep.name}）</div>
+            <div className="text-lg leading-snug md:text-xl">「{quote}」</div>
+          </div>
+        </div>
+        <div className="flex flex-col justify-center">
+          <div className="pixel-text-shadow text-5xl leading-none md:text-6xl" style={{ color: teamColor }}>
+            {teamName}
+          </div>
+          <div className="mt-1 text-amber-200">{youWon ? '勝利 ── ✝本質✝はお前たちのものだ' : '敗北 ── まあ（四百二十一回目）'}</div>
+          <div className="mt-4 flex items-center gap-3 text-xl">
+            <span style={{ color: '#38bdf8' }}>青{fighters.filter((f) => f.team === 0).length}人</span>
+            <span className="border-2 border-slate-600 bg-slate-950 px-3 py-1 text-3xl">
+              {result.wins[0]} - {result.wins[1]}
+            </span>
+            <span style={{ color: '#fb7185' }}>赤{fighters.filter((f) => f.team === 1).length}人</span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="border border-sky-400/60 bg-slate-950/60 p-2">
+              <div className="text-sky-300">青チーム</div>
+              {fighters.filter((f) => f.team === 0).map((f, i) => (
+                <div key={i} style={{ color: CHARS[f.char].color }}>
+                  {CHARS[f.char].name} {f.ai ? '(CPU)' : ''}
+                </div>
+              ))}
+            </div>
+            <div className="border border-rose-400/60 bg-slate-950/60 p-2">
+              <div className="text-rose-300">赤チーム</div>
+              {fighters.filter((f) => f.team === 1).map((f, i) => (
+                <div key={i} style={{ color: CHARS[f.char].color }}>
+                  {CHARS[f.char].name} {f.ai ? '(CPU)' : ''}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-slate-500">
+            勝利：{winners.map((f) => CHARS[f.char].name).join('・')} ／ 敗北：{losers.map((f) => CHARS[f.char].name).join('・')}
+          </div>
+          <div className="mt-4 border-2 border-slate-700 bg-slate-950/80 p-3 text-sm">
+            <div className="text-xs text-emerald-300">匿名掲示板「ヘイカツ雑談スレ」に新着</div>
+            <div className="mt-1 text-slate-200">
+              <span className="text-slate-500">{postNo} 名無しの地形図好き：</span>
+              {fighters.length}人乱戦、{teamName}が勝った。これまじ✝本質✝。✝
+            </div>
+            <div className="mt-2 text-xs text-slate-500">
+              {postNo + 1} 名無しの地形図好き：&gt;&gt;{postNo} {hq}
+            </div>
+          </div>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <button className="flex-1 border-2 border-amber-300 bg-amber-300 py-2 text-slate-950 hover:bg-amber-200" onClick={onRematch}>
+              もう一回（Enter）
+            </button>
+            <button className="flex-1 border-2 border-slate-400 py-2 hover:bg-slate-800" onClick={onSelect}>
+              {setup.mode === 'team' ? '編成へ（Esc）' : 'キャラ選択（Esc）'}
+            </button>
+            <button className="flex-1 border-2 border-slate-600 py-2 text-slate-300 hover:bg-slate-800" onClick={onTitle}>
+              タイトル
+            </button>
+          </div>
         </div>
       </div>
     </div>

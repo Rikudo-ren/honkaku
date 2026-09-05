@@ -1,7 +1,7 @@
 import { CHARS, INTRO_PAIRS, pairKey } from './characters';
 import { COMBO_COMMENTS, HIT_TEXTS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
 import { EMPTY_INPUT } from './types';
-import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId } from './types';
+import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId, Team } from './types';
 
 export const W = 384;
 export const H = 216;
@@ -39,10 +39,18 @@ interface AiState {
 }
 
 export interface Fighter {
+  /** Battle.f 内のインデックス（0起点） */
+  idx: number;
+  /** 所属チーム（0=青、1=赤）。旧 side と同義。 */
   side: Side;
+  team: Team;
   id: CharId;
   def: CharDef;
   look: Look;
+  /** 頭上タグ（'1P' / 'あなた' / 'CPU' など。未指定なら自動） */
+  tag?: string;
+  /** このファイター専用のAI強度（未指定なら BattleOptions.difficulty） */
+  aiDifficulty?: Difficulty;
   x: number;
   y: number;
   vx: number;
@@ -71,14 +79,16 @@ export interface Fighter {
   ai: AiState | null;
   input: InputState;
   flash: number;
-  grabbedBy: Side | -1;
+  /** 掴んでいるファイターの idx（-1=掴まれていない） */
+  grabbedBy: number;
   superT: number;
   superData: Record<string, unknown> | TerachiOutcome | null;
 }
 
 export interface Projectile {
   kind: ProjKind;
-  owner: Side | -1;
+  /** 発射したファイターの idx（-1=中立イベント由来） */
+  owner: number;
   x: number;
   y: number;
   vx: number;
@@ -96,8 +106,10 @@ export interface Projectile {
   pierce?: boolean;
   item?: 'heal';
   heal?: number;
-  homing?: Side;
+  /** 追尾対象ファイターの idx */
+  homing?: number;
   text?: string;
+  /** ヒット済みファイターのビットマスク（1 << idx） */
   hitMask: number;
   t: number;
   seed: number;
@@ -133,7 +145,8 @@ export interface TextFx {
 }
 
 export interface Bubble {
-  side: Side;
+  /** セリフ主のファイター idx */
+  idx: number;
   text: string;
   t: number;
   life: number;
@@ -156,6 +169,14 @@ export interface CutIn {
   paper?: string;
 }
 
+export interface BattleFighterSetup {
+  char: CharId;
+  team: Team;
+  ai: boolean;
+  aiDifficulty?: Difficulty;
+  tag?: string;
+}
+
 export interface BattleOptions {
   p1: CharId;
   p2: CharId;
@@ -164,8 +185,14 @@ export interface BattleOptions {
   stage: StageId;
   /** 決定論的な再現のためのシード（オンライン対戦で使用）。未指定ならランダム。 */
   seed?: number;
+  /**
+   * チーム戦（同時乱戦）用ファイター一覧。指定された場合は p1/p2/ai の代わりに
+   * こちらを使う（2人以上の任意人数・任意チーム分け）。
+   */
+  fighters?: BattleFighterSetup[];
   onCutin?: (c: CutIn) => void;
   onSfx?: (s: SfxName) => void;
+  /** winner は勝利チーム（0=青、1=赤） */
   onMatchEnd?: (winner: Side, wins: [number, number]) => void;
 }
 
@@ -213,18 +240,22 @@ const EVENT_NAMES = ['window', 'feikatsu', 'soupBack', 'soupGone', 'matome', 'ku
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const overlap = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-function makeFighter(side: Side, id: CharId, ai: boolean): Fighter {
+function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficulty?: Difficulty, tag?: string): Fighter {
   const def = CHARS[id];
   return {
-    side,
+    idx,
+    side: team,
+    team,
     id,
     def,
     look: def.look,
-    x: side === 0 ? 110 : 274,
+    tag,
+    aiDifficulty,
+    x: team === 0 ? 110 : 274,
     y: GROUND,
     vx: 0,
     vy: 0,
-    facing: side === 0 ? 1 : -1,
+    facing: team === 0 ? 1 : -1,
     hp: def.hp,
     ghostHp: def.hp,
     meter: 0,
@@ -255,7 +286,8 @@ function makeFighter(side: Side, id: CharId, ai: boolean): Fighter {
 }
 
 export class Battle {
-  f: [Fighter, Fighter];
+  /** 全ファイター（1対1なら2人、チーム戦なら2〜8人） */
+  f: Fighter[];
   projectiles: Projectile[] = [];
   fx: PixelFx[] = [];
   texts: TextFx[] = [];
@@ -288,8 +320,58 @@ export class Battle {
     this.opts = opts;
     this.stage = opts.stage;
     this.rngState = (opts.seed ?? (Math.random() * 0xffffffff)) >>> 0;
-    this.f = [makeFighter(0, opts.p1, opts.ai[0]), makeFighter(1, opts.p2, opts.ai[1])];
+    if (opts.fighters && opts.fighters.length >= 2) {
+      this.f = opts.fighters.map((s, i) => makeFighter(i, s.team, s.char, s.ai, s.aiDifficulty, s.tag));
+    } else {
+      this.f = [makeFighter(0, 0, opts.p1, opts.ai[0]), makeFighter(1, 1, opts.p2, opts.ai[1])];
+    }
     this.startRound();
+  }
+
+  /** クラシックな1対1かどうか（HUD表示の切り替えなどに使う） */
+  get isDuel(): boolean {
+    return this.f.length === 2 && this.f[0].team !== this.f[1].team;
+  }
+
+  /** 生存している敵（別チームかつHP>0）の一覧 */
+  private aliveEnemies(f: Fighter): Fighter[] {
+    return this.f.filter((e) => e.team !== f.team && e.hp > 0);
+  }
+
+  /** 最も近い生存敵。いなければ null（ラウンド終了時など） */
+  private nearestEnemy(f: Fighter): Fighter | null {
+    let best: Fighter | null = null;
+    let bestD = Infinity;
+    for (const e of this.aliveEnemies(f)) {
+      const d = Math.abs(e.x - f.x) + Math.abs(e.y - f.y) * 0.5;
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /** ランダムな生存敵（決定論rng使用）。いなければ null */
+  private randomEnemy(f: Fighter): Fighter | null {
+    const list = this.aliveEnemies(f);
+    if (!list.length) return null;
+    return list[Math.floor(this.rng() * list.length)];
+  }
+
+  /** チームの生存者がいるか */
+  private teamAlive(team: Team): boolean {
+    return this.f.some((e) => e.team === team && e.hp > 0);
+  }
+
+  /** チームのHP合計（タイムアップ判定用） */
+  private teamHp(team: Team): number {
+    return this.f.filter((e) => e.team === team).reduce((s, e) => s + Math.max(0, e.hp), 0);
+  }
+
+  /** チームの代表ファイター（生存者優先。バナー・掛け合い用） */
+  private teamRep(team: Team): Fighter {
+    return this.f.find((e) => e.team === team && e.hp > 0) ?? this.f.find((e) => e.team === team) ?? this.f[0];
   }
 
   /** 決定論的な乱数（mulberry32）。同じシード＋同じ入力列なら全クライアントで同じ試合になる。 */
@@ -353,9 +435,9 @@ export class Battle {
     this.texts.push({ text, x, y, vx: o.vx ?? 0, vy: o.vy ?? -0.4, t: 0, life: o.life ?? 40, size: o.size ?? 8, color: o.color ?? '#ffffff', shake: o.shake, box: o.box });
   }
 
-  private bubble(side: Side, text: string, life = 70) {
-    this.bubbles = this.bubbles.filter((b) => b.side !== side);
-    this.bubbles.push({ side, text, t: 0, life });
+  private bubble(idx: number, text: string, life = 70) {
+    this.bubbles = this.bubbles.filter((b) => b.idx !== idx);
+    this.bubbles.push({ idx, text, t: 0, life });
   }
 
   private spark(x: number, y: number, color = '#fff6a0', n = 8, size = 2) {
@@ -479,12 +561,17 @@ export class Battle {
 
   // ───────────────────────── round flow ─────────────────────────
   private startRound() {
+    // チームごとに左右へ分散配置（青=左、赤=右）
+    const perTeam = [0, 0];
     for (const f of this.f) {
-      f.x = f.side === 0 ? 110 : 274;
+      const k = perTeam[f.team]++;
+      const spread = (k - (this.f.filter((e) => e.team === f.team).length - 1) / 2) * 34;
+      f.x = f.team === 0 ? 108 + spread : W - 108 + spread;
+      f.x = clamp(f.x, 24, W - 24);
       f.y = GROUND;
       f.vx = 0;
       f.vy = 0;
-      f.facing = f.side === 0 ? 1 : -1;
+      f.facing = f.team === 0 ? 1 : -1;
       f.hp = f.def.hp;
       f.ghostHp = f.def.hp;
       this.setState(f, 'idle');
@@ -514,34 +601,37 @@ export class Battle {
   }
 
   private updateIntro() {
-    const [a, b] = this.f;
+    // 各チームの代表同士で掛け合い（チーム戦でも代表2人がしゃべる）
+    const a = this.teamRep(0);
+    const b = this.teamRep(1);
     if (this.phaseT === 1) {
       const final = this.wins[0] === 1 && this.wins[1] === 1;
-      this.setBanner(final ? 'FINAL ROUND' : `ROUND ${this.round}`, this.round === 1 ? undefined : undefined, '#fde68a', 70);
+      const sub = this.isDuel ? undefined : `${this.f.length}人乱戦`;
+      this.setBanner(final ? 'FINAL ROUND' : `ROUND ${this.round}`, sub, '#fde68a', 70);
       this.sfx('round');
     }
     if (this.phaseT === 6) {
       const key = pairKey(a.id, b.id);
       const pair = INTRO_PAIRS[key];
-      if (a.id === b.id) {
-        this.bubble(0, a.def.intro);
-        this.queue.push({ at: this.t + 30, fn: () => this.bubble(1, '自演じゃなくて自己対話だよ') });
+      if (a.id === b.id && this.isDuel) {
+        this.bubble(a.idx, a.def.intro);
+        this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, '自演じゃなくて自己対話だよ') });
       } else if (pair) {
-        const firstSide: Side = a.id === pair.first ? 0 : 1;
-        const other: Side = firstSide === 0 ? 1 : 0;
-        this.bubble(firstSide, pair.a);
-        this.queue.push({ at: this.t + 30, fn: () => this.bubble(other, pair.b) });
+        const first = a.id === pair.first ? a : b;
+        const other = first === a ? b : a;
+        this.bubble(first.idx, pair.a);
+        this.queue.push({ at: this.t + 30, fn: () => this.bubble(other.idx, pair.b) });
         if (pair.note) this.queue.push({ at: this.t + 34, fn: () => this.text(pair.note!, W / 2, 70, { size: 9, color: '#fca5a5', life: 50, vy: -0.2 }) });
       } else {
-        this.bubble(0, a.def.intro);
-        this.queue.push({ at: this.t + 30, fn: () => this.bubble(1, b.def.intro) });
+        this.bubble(a.idx, a.def.intro);
+        this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, b.def.intro) });
       }
     }
     if (this.phaseT === 76) {
-      this.setBanner('FIGHT！✝', undefined, '#f87171', 40, true);
+      this.setBanner(this.isDuel ? 'FIGHT！✝' : '乱戦開始！✝', undefined, '#f87171', 40, true);
       this.sfx('confirm');
     }
-    for (const s of [0, 1] as Side[]) this.updateFighter(s, EMPTY_INPUT);
+    for (let s = 0; s < this.f.length; s++) this.updateFighter(s, EMPTY_INPUT);
     this.processQueue();
     if (this.phaseT >= 100) {
       this.phase = 'fight';
@@ -572,7 +662,7 @@ export class Battle {
     }
     if (winner === -1) this.setBanner('DOUBLE K.O.', '自演？', '#fca5a5', 130, true);
     else {
-      const w = this.f[winner];
+      const w = this.teamRep(winner);
       this.setBanner(w.def.koText, w.id === 'mie' ? '四百二十一回目' : w.id === 'rei' ? '面白かった' : undefined, w.def.color, 130, true);
     }
     this.sfx('ko');
@@ -580,8 +670,9 @@ export class Battle {
 
   private timeUp() {
     if (this.phase !== 'fight') return;
-    const [a, b] = this.f;
-    const winner: Side | -1 = a.hp > b.hp ? 0 : b.hp > a.hp ? 1 : -1;
+    const ha = this.teamHp(0);
+    const hb = this.teamHp(1);
+    const winner: Side | -1 = ha > hb ? 0 : hb > ha ? 1 : -1;
     this.phase = 'ko';
     this.phaseT = 0;
     this.koWinner = winner;
@@ -593,7 +684,7 @@ export class Battle {
   }
 
   private updateKO() {
-    for (const s of [0, 1] as Side[]) this.updateFighter(s, EMPTY_INPUT);
+    for (let s = 0; s < this.f.length; s++) this.updateFighter(s, EMPTY_INPUT);
     this.updateProjectiles();
     if (this.phaseT >= 100) {
       this.slow = 0;
@@ -602,12 +693,18 @@ export class Battle {
       const kw = this.koWinner;
       if (kw !== -1) {
         this.wins[kw]++;
-        const w = this.f[kw];
-        const l = this.f[kw === 0 ? 1 : 0];
-        this.setState(w, 'win');
-        w.invuln = 9999;
-        if (l.state !== 'down' && l.state !== 'launch') this.setState(l, 'lose');
-        this.bubble(kw, this.pick(w.def.wins), 150);
+        const w = this.teamRep(kw);
+        for (const f of this.f) {
+          if (f.team === kw) {
+            if (f.hp > 0) {
+              this.setState(f, 'win');
+              f.invuln = 9999;
+            }
+          } else if (f.state !== 'down' && f.state !== 'launch') {
+            this.setState(f, 'lose');
+          }
+        }
+        this.bubble(w.idx, this.pick(w.def.wins), 150);
         this.sparkles(w.x, w.y - 30, w.def.color);
       } else {
         for (const f of this.f) if (f.state !== 'down' && f.state !== 'launch') this.setState(f, 'lose');
@@ -617,7 +714,7 @@ export class Battle {
   }
 
   private updateRoundEnd() {
-    for (const s of [0, 1] as Side[]) this.updateFighter(s, EMPTY_INPUT);
+    for (let s = 0; s < this.f.length; s++) this.updateFighter(s, EMPTY_INPUT);
     if (this.phaseT >= 165) {
       const kw = this.koWinner;
       if (kw !== -1 && this.wins[kw] >= 2) {
@@ -636,7 +733,7 @@ export class Battle {
   }
 
   // ───────────────────────── main step ─────────────────────────
-  step(inputs: [InputState, InputState]) {
+  step(inputs: InputState[]) {
     this.t++;
     if (this.freeze > 0) {
       this.freeze--;
@@ -670,17 +767,17 @@ export class Battle {
         this.updateRoundEnd();
         break;
       case 'matchEnd':
-        for (const s of [0, 1] as Side[]) this.updateFighter(s, EMPTY_INPUT);
+        for (let s = 0; s < this.f.length; s++) this.updateFighter(s, EMPTY_INPUT);
         break;
     }
     this.updateFx();
   }
 
-  private updateFight(inputs: [InputState, InputState]) {
+  private updateFight(inputs: InputState[]) {
     this.timer--;
-    for (const s of [0, 1] as Side[]) {
+    for (let s = 0; s < this.f.length; s++) {
       const f = this.f[s];
-      const inp = f.ai ? this.aiInput(s) : inputs[s];
+      const inp = f.ai ? this.aiInput(s) : (inputs[s] ?? EMPTY_INPUT);
       this.updateFighter(s, inp);
     }
     this.resolvePush();
@@ -689,8 +786,10 @@ export class Battle {
     this.updateEvents();
     this.processQueue();
 
-    const dead: [boolean, boolean] = [this.f[0].hp <= 0, this.f[1].hp <= 0];
-    if (dead[0] || dead[1]) {
+    // チーム殲滅でラウンド決着（どちらかのチームが全滅したらKO）
+    const alive0 = this.teamAlive(0);
+    const alive1 = this.teamAlive(1);
+    if (!alive0 || !alive1) {
       for (const f of this.f) {
         if (f.hp > 0) continue;
         if (f.state === 'grabbed') f.grabbedBy = -1;
@@ -701,7 +800,7 @@ export class Battle {
           f.y -= 1;
         }
       }
-      this.ko(dead[0] && dead[1] ? -1 : dead[0] ? 1 : 0);
+      this.ko(!alive0 && !alive1 ? -1 : !alive0 ? 1 : 0);
     } else if (this.timer <= 0) this.timeUp();
   }
 
@@ -745,9 +844,10 @@ export class Battle {
   }
 
   // ───────────────────────── fighter update ─────────────────────────
-  private updateFighter(s: Side, inp: InputState) {
+  private updateFighter(s: number, inp: InputState) {
     const f = this.f[s];
-    const o = this.f[s === 0 ? 1 : 0];
+    // 常に「最も近い生存敵」を相手扱いする（チーム戦対応）
+    const o = this.nearestEnemy(f) ?? f;
     f.input = inp;
     if (f.flash > 0) f.flash--;
     if (f.invuln > 0) f.invuln--;
@@ -893,7 +993,7 @@ export class Battle {
 
   private canSpecial(f: Fighter) {
     const m = f.def.moves.special;
-    if (m.kind === 'projectile') return this.projectiles.filter((p) => p.owner === f.side && p.kind === m.projectile!.kind).length < 2;
+    if (m.kind === 'projectile') return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind).length < 2;
     return true;
   }
 
@@ -946,13 +1046,13 @@ export class Battle {
     const w = spec.w ?? 8;
     const h = spec.h ?? 8;
     if (spec.fromTop) {
-      this.spawnProj({ kind: spec.kind, owner: f.side, x: o.x + o.vx * 6, y: -10, vx: 0, vy: spec.vy ?? 3, w, h, dmg: m.dmg * f.def.dmgMul, hitstun: m.hitstun, kbx: m.kbx, kby: m.kby, knockdown: m.knockdown, life: spec.life });
+      this.spawnProj({ kind: spec.kind, owner: f.idx, x: o.x + o.vx * 6, y: -10, vx: 0, vy: spec.vy ?? 3, w, h, dmg: m.dmg * f.def.dmgMul, hitstun: m.hitstun, kbx: m.kbx, kby: m.kby, knockdown: m.knockdown, life: spec.life });
       this.text('★', o.x, 12, { size: 8, color: '#fde68a', life: 20, vy: 0 });
     } else {
       const ground = !!spec.ground;
       this.spawnProj({
         kind: spec.kind,
-        owner: f.side,
+        owner: f.idx,
         x: f.x + f.facing * 14,
         y: ground ? GROUND - h / 2 : f.y - 30,
         vx: f.facing * (spec.vx ?? 3),
@@ -974,18 +1074,24 @@ export class Battle {
 
   // ───────────────────────── hits ─────────────────────────
   private resolvePush() {
-    const [a, b] = this.f;
-    if (a.state === 'grabbed' || b.state === 'grabbed') return;
-    if (a.state === 'down' || b.state === 'down') return;
-    if (Math.abs(a.y - b.y) > 34) return;
-    const dx = b.x - a.x;
-    const ov = 14 - Math.abs(dx);
-    if (ov > 0) {
-      const dir = dx === 0 ? a.facing : dx > 0 ? 1 : -1;
-      a.x -= (ov / 2) * dir;
-      b.x += (ov / 2) * dir;
-      a.x = clamp(a.x, 10, W - 10);
-      b.x = clamp(b.x, 10, W - 10);
+    // 全ペアで押し合い（チーム戦対応）
+    for (let i = 0; i < this.f.length; i++) {
+      for (let j = i + 1; j < this.f.length; j++) {
+        const a = this.f[i];
+        const b = this.f[j];
+        if (a.state === 'grabbed' || b.state === 'grabbed') continue;
+        if (a.state === 'down' || b.state === 'down') continue;
+        if (Math.abs(a.y - b.y) > 34) continue;
+        const dx = b.x - a.x;
+        const ov = 14 - Math.abs(dx);
+        if (ov > 0) {
+          const dir = dx === 0 ? a.facing : dx > 0 ? 1 : -1;
+          a.x -= (ov / 2) * dir;
+          b.x += (ov / 2) * dir;
+          a.x = clamp(a.x, 10, W - 10);
+          b.x = clamp(b.x, 10, W - 10);
+        }
+      }
     }
   }
 
@@ -997,23 +1103,27 @@ export class Battle {
 
   private resolveHits() {
     if (this.phase !== 'fight') return;
-    for (const s of [0, 1] as Side[]) {
-      const f = this.f[s];
-      const o = this.f[s === 0 ? 1 : 0];
+    for (const f of this.f) {
       if (f.state !== 'attack' || !f.move || !f.move.box) continue;
       if (f.movePhase !== 1 || f.moveHit || f.hitstop > 0) continue;
       const m = f.move;
       const box = m.box;
       if (!box) continue;
-      if (!overlap(this.worldBox(f, box), this.hurtbox(o))) continue;
-      if (!this.hittable(o)) continue;
-      f.moveHit = true;
-      if (o.countering) {
-        this.triggerCounter(o, f);
-        continue;
+      const atk = this.worldBox(f, box);
+      // 攻撃判定に触れた敵全員にヒット（味方には当たらない）
+      for (const o of this.f) {
+        if (o.idx === f.idx || o.team === f.team) continue;
+        if (!overlap(atk, this.hurtbox(o))) continue;
+        if (!this.hittable(o)) continue;
+        f.moveHit = true;
+        if (o.countering) {
+          this.triggerCounter(o, f);
+          break;
+        }
+        if (this.isBlocking(o)) this.applyBlock(f, o, m.dmg, m.hitstun);
+        else this.applyHit(f, o, m.dmg * f.def.dmgMul, m, f.facing, m.sfx);
+        break; // 1振り1ヒット（多人数でも1人だけ）
       }
-      if (this.isBlocking(o)) this.applyBlock(f, o, m.dmg, m.hitstun);
-      else this.applyHit(f, o, m.dmg * f.def.dmgMul, m, f.facing, m.sfx);
     }
   }
 
@@ -1031,7 +1141,7 @@ export class Battle {
   }
 
   applyHit(att: Fighter | null, vic: Fighter, dmg: number, m: HitSpec, dir: Facing, sfx: SfxName = 'hit') {
-    if (vic.state === 'grabbed' && (!att || att.side !== vic.grabbedBy)) return;
+    if (vic.state === 'grabbed' && (!att || att.idx !== vic.grabbedBy)) return;
     const wasCombo = vic.state === 'hurt' || vic.state === 'launch' || vic.state === 'stun' || vic.state === 'grabbed';
     vic.hp = Math.max(0, vic.hp - dmg);
     vic.flash = 3;
@@ -1130,10 +1240,12 @@ export class Battle {
       }
       let dead = p.life <= 0 || p.x < -40 || p.x > W + 40 || p.y > H + 40 || (p.y < -60 && p.vy < 0);
       if (!dead && this.phase === 'fight') {
-        for (const s of [0, 1] as Side[]) {
-          if (p.owner === s) continue;
-          if (p.hitMask & (1 << s)) continue;
-          const f = this.f[s];
+        const ownerTeam = p.owner >= 0 ? this.f[p.owner]?.team : null;
+        for (const f of this.f) {
+          if (p.owner === f.idx) continue;
+          // 味方の飛び道具は当たらない（中立イベント由来は全員に当たる）
+          if (!p.item && ownerTeam !== null && f.team === ownerTeam) continue;
+          if (p.hitMask & (1 << f.idx)) continue;
           if (!overlap(this.projBox(p), this.hurtbox(f))) continue;
           if (p.item) {
             if (f.state === 'down') continue;
@@ -1147,7 +1259,7 @@ export class Battle {
           }
           if (!this.hittable(f)) continue;
           if (f.countering) {
-            p.owner = s;
+            p.owner = f.idx;
             p.vx = -p.vx * 1.25;
             p.vy = p.kind === 'star' || p.kind === 'cross' ? -Math.abs(p.vy) * 0.6 : p.vy;
             if (p.kind === 'star') {
@@ -1162,7 +1274,7 @@ export class Battle {
             this.ring(p.x, p.y, '#7dd3fc', 16);
             f.meter = Math.min(100, f.meter + 10);
             this.sfx('ha');
-            p.hitMask |= 1 << s;
+            p.hitMask |= 1 << f.idx;
             continue;
           }
           const owner = p.owner;
@@ -1177,7 +1289,7 @@ export class Battle {
             if (p.kind === 'basketball') this.text('用は済んだ', p.x, p.y - 14, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
             if (p.kind === 'kusa') this.text('草', f.x + (this.rng() - 0.5) * 20, f.y - 40 - this.rng() * 20, { size: 8, color: '#4ade80', life: 30, vy: -0.8 });
           }
-          p.hitMask |= 1 << s;
+          p.hitMask |= 1 << f.idx;
           if (!p.pierce) dead = true;
           break;
         }
@@ -1232,10 +1344,13 @@ export class Battle {
         }
         if (T === 12) {
           this.ring(f.x, f.y - 25, '#7dd3fc', 60);
-          if (this.hittable(o)) {
-            this.applyHit(f, o, 30, { hitstun: 30, kbx: 4.5, kby: 5, knockdown: true }, f.facing, 'ha');
-            o.meter = Math.max(0, o.meter - 30);
-            this.text('否定', o.x, o.y - 60, { size: 16, color: '#7dd3fc', life: 50, vy: -0.3 });
+          // 画面中の✝本質✝を全否定：敵全員にヒット（チーム戦対応）
+          for (const e of this.aliveEnemies(f)) {
+            if (!this.hittable(e)) continue;
+            const dir: Facing = e.x >= f.x ? 1 : -1;
+            this.applyHit(f, e, 30, { hitstun: 30, kbx: 4.5, kby: 5, knockdown: true }, dir, 'ha');
+            e.meter = Math.max(0, e.meter - 30);
+            this.text('否定', e.x, e.y - 60, { size: 16, color: '#7dd3fc', life: 50, vy: -0.3 });
           }
         }
         if (T === 24 || T === 36) this.sfx('ha');
@@ -1246,7 +1361,8 @@ export class Battle {
         if (T === 1) this.setBanner('フェイカツ降臨', '受験生よ、来い。✝', c, 110);
         if (T <= 66 && T % 3 === 0) {
           const near = this.rng() < 0.6;
-          this.spawnProj({ kind: 'cross', owner: f.side, x: clamp(near ? o.x + (this.rng() - 0.5) * 90 : this.rng() * W, 8, W - 8), y: -12 - this.rng() * 20, vx: (this.rng() - 0.5) * 0.6, vy: 2.6 + this.rng() * 1.2, w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 220 });
+          const tgt = this.randomEnemy(f) ?? o;
+          this.spawnProj({ kind: 'cross', owner: f.idx, x: clamp(near ? tgt.x + (this.rng() - 0.5) * 90 : this.rng() * W, 8, W - 8), y: -12 - this.rng() * 20, vx: (this.rng() - 0.5) * 0.6, vy: 2.6 + this.rng() * 1.2, w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 220 });
           if (T % 9 === 0) this.sfx('cross');
         }
         if (T === 30) this.text('✝本質✝は止まらない', f.x, f.y - 60, { size: 9, color: '#fde68a', life: 50, vy: -0.3 });
@@ -1275,19 +1391,31 @@ export class Battle {
         break;
       }
       case 'mitsumine': {
-        const d = f.superData as { grabbed?: boolean; gt?: number };
+        const d = f.superData as { grabbed?: boolean; gt?: number; victim?: number };
         if (T === 1) this.setBanner('理論はいい！！', '突進', c, 60);
         if (!d.grabbed) {
           if (T <= 34) {
             f.x = clamp(f.x + f.facing * 7, 10, W - 10);
             if (T % 3 === 0) this.afterimage(f);
-            if (Math.abs(o.x - f.x) < 30 && o.y > GROUND - 26 && this.hittable(o)) {
+            // 突進中に触れた敵のうち最も近い1人を掴む
+            let victim: Fighter | null = null;
+            let bestD = Infinity;
+            for (const e of this.aliveEnemies(f)) {
+              const dd = Math.abs(e.x - f.x);
+              if (dd < 30 && e.y > GROUND - 26 && this.hittable(e) && dd < bestD) {
+                bestD = dd;
+                victim = e;
+              }
+            }
+            if (victim) {
+              const v = victim;
               d.grabbed = true;
               d.gt = 0;
-              this.setState(o, 'grabbed', 99999);
-              o.grabbedBy = f.side;
-              o.vx = 0;
-              o.vy = 0;
+              d.victim = v.idx;
+              this.setState(v, 'grabbed', 99999);
+              v.grabbedBy = f.idx;
+              v.vx = 0;
+              v.vy = 0;
               this.projectiles = this.projectiles.filter((p) => p.item);
               this.setBanner('好きなら好きって言いなよ！', '波動関数、崩壊', c, 110);
               this.sfx('heavy');
@@ -1299,10 +1427,16 @@ export class Battle {
             f.cooldown = 20;
           }
         } else {
+          const v = d.victim !== undefined ? this.f[d.victim] : null;
+          if (!v || v.grabbedBy !== f.idx) {
+            // 掴み対象が消えた（KOなど）場合は中断
+            this.setState(f, 'idle');
+            break;
+          }
           d.gt = (d.gt ?? 0) + 1;
-          o.x = clamp(f.x + f.facing * 13, 10, W - 10);
-          o.y = GROUND - 4;
-          o.facing = f.facing === 1 ? -1 : 1;
+          v.x = clamp(f.x + f.facing * 13, 10, W - 10);
+          v.y = GROUND - 4;
+          v.facing = f.facing === 1 ? -1 : 1;
           const hits: [number, string, number][] = [
             [12, '好きなら', 9],
             [28, '好きって', 9],
@@ -1310,22 +1444,22 @@ export class Battle {
           ];
           for (const [at, txt, dmg] of hits) {
             if (d.gt === at) {
-              o.hp = Math.max(0, o.hp - dmg * f.def.dmgMul);
-              o.flash = 3;
+              v.hp = Math.max(0, v.hp - dmg * f.def.dmgMul);
+              v.flash = 3;
               this.shake = 6;
-              this.spark(o.x, o.y - 28, '#f9a8d4', 10, 2);
-              this.text(txt, o.x, o.y - 60, { size: dmg > 10 ? 14 : 11, color: '#fbcfe8', life: 45, vy: -0.4, shake: dmg > 10 });
+              this.spark(v.x, v.y - 28, '#f9a8d4', 10, 2);
+              this.text(txt, v.x, v.y - 60, { size: dmg > 10 ? 14 : 11, color: '#fbcfe8', life: 45, vy: -0.4, shake: dmg > 10 });
               this.sfx(dmg > 10 ? 'heavy' : 'hit');
               f.combo = hits.findIndex((h) => h[0] === at) + 1;
               f.comboTimer = 40;
             }
           }
           if (d.gt === 58) {
-            o.grabbedBy = -1;
-            this.setState(o, 'launch');
-            o.vx = f.facing * 5;
-            o.vy = -5.5;
-            o.y -= 2;
+            v.grabbedBy = -1;
+            this.setState(v, 'launch');
+            v.vx = f.facing * 5;
+            v.vy = -5.5;
+            v.y -= 2;
             this.setState(f, 'idle');
           }
         }
@@ -1344,11 +1478,11 @@ export class Battle {
       case 'rei': {
         if (T === 1) this.setBanner('面白いデータが出たので見てください', '全科目学年首席', c, 110);
         if (T <= 36 && T % 3 === 0) {
-          this.spawnProj({ kind: 'formula', owner: f.side, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * (1.5 + this.rng() * 2), vy: -3 + this.rng() * 6, w: 8, h: 8, dmg: 3, hitstun: 12, kbx: 0.8, kby: 0, life: 160, homing: o.side, text: this.pick(FORMULAS) });
+          this.spawnProj({ kind: 'formula', owner: f.idx, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * (1.5 + this.rng() * 2), vy: -3 + this.rng() * 6, w: 8, h: 8, dmg: 3, hitstun: 12, kbx: 0.8, kby: 0, life: 160, homing: o.idx, text: this.pick(FORMULAS) });
           if (T % 9 === 0) this.sfx('special');
         }
         if (T === 50) {
-          this.spawnProj({ kind: 'qed', owner: f.side, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * 3, vy: 0, w: 22, h: 10, dmg: 12, hitstun: 30, kbx: 4, kby: 4.5, knockdown: true, life: 160, homing: o.side, text: 'Q.E.D.' });
+          this.spawnProj({ kind: 'qed', owner: f.idx, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * 3, vy: 0, w: 22, h: 10, dmg: 12, hitstun: 30, kbx: 4, kby: 4.5, knockdown: true, life: 160, homing: o.idx, text: 'Q.E.D.' });
           this.sfx('cross');
         }
         if (T >= 64) this.setState(f, 'idle');
@@ -1369,7 +1503,10 @@ export class Battle {
         for (let i = 0; i < 30; i++) {
           this.queue.push({
             at: this.t + i * 2,
-            fn: () => this.spawnProj({ kind: 'kusa', owner: f.side, x: clamp(o.x + (this.rng() - 0.5) * 70, 8, W - 8), y: -10, vx: 0, vy: 3 + this.rng() * 2, w: 8, h: 8, dmg: 1.2, hitstun: 8, kbx: 0.4, kby: 0, life: 120 }),
+            fn: () => {
+              const tgt = this.randomEnemy(f) ?? o;
+              this.spawnProj({ kind: 'kusa', owner: f.idx, x: clamp(tgt.x + (this.rng() - 0.5) * 70, 8, W - 8), y: -10, vx: 0, vy: 3 + this.rng() * 2, w: 8, h: 8, dmg: 1.2, hitstun: 8, kbx: 0.4, kby: 0, life: 120 });
+            },
           });
         }
         break;
@@ -1418,7 +1555,8 @@ export class Battle {
     if (name === this.lastEvent) name = EVENT_NAMES[(EVENT_NAMES.indexOf(name) + 1) % EVENT_NAMES.length];
     this.lastEvent = name;
     this.sfx('event');
-    const [a, b] = this.f;
+    const alive = this.f.filter((e) => e.hp > 0);
+    const pickAlive = () => alive[Math.floor(this.rng() * alive.length)];
     switch (name) {
       case 'window':
         this.setBanner('ヘイカツが窓の外を見た', '……（5秒）', '#cbd5e1');
@@ -1439,7 +1577,7 @@ export class Battle {
         this.spawnProj({ kind: 'soup', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 1.5, w: 8, h: 12, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 18 });
         break;
       case 'soupGone': {
-        const tgt = this.rng() < 0.5 ? a : b;
+        const tgt = pickAlive() ?? this.f[0];
         this.setBanner('コーンスープの不在', '業者が忘れている（自販機が降ってくる）', '#94a3b8');
         this.text('！', tgt.x, 30, { size: 14, color: '#fca5a5', life: 60, vy: 0 });
         this.spawnProj({ kind: 'vending', owner: -1, x: clamp(tgt.x + (this.rng() - 0.5) * 24, 20, W - 20), y: -40, vx: 0, vy: 0, grav: 0.22, w: 16, h: 26, dmg: 16, hitstun: 30, kbx: 2, kby: 4, knockdown: true, life: 420, ground: true, pierce: true });
@@ -1482,14 +1620,21 @@ export class Battle {
       case 'observe': {
         this.setBanner('櫻：好意の観測', '波動関数が崩壊した（位置が入れ替わる）', '#c4b5fd');
         this.flash = 8;
-        if (a.state !== 'grabbed' && b.state !== 'grabbed') {
-          this.afterimage(a);
-          this.afterimage(b);
-          const ax = a.x;
-          a.x = b.x;
-          b.x = ax;
-          this.sparkles(a.x, a.y - 24, '#c4b5fd');
-          this.sparkles(b.x, b.y - 24, '#c4b5fd');
+        // 生存者から2人を選んで位置を入れ替える
+        const cand = alive.filter((e) => e.state !== 'grabbed');
+        if (cand.length >= 2) {
+          const i = Math.floor(this.rng() * cand.length);
+          let j = Math.floor(this.rng() * cand.length);
+          if (j === i) j = (j + 1) % cand.length;
+          const pa = cand[i];
+          const pb = cand[j];
+          this.afterimage(pa);
+          this.afterimage(pb);
+          const ax = pa.x;
+          pa.x = pb.x;
+          pb.x = ax;
+          this.sparkles(pa.x, pa.y - 24, '#c4b5fd');
+          this.sparkles(pb.x, pb.y - 24, '#c4b5fd');
         }
         this.sfx('special');
         break;
@@ -1518,14 +1663,18 @@ export class Battle {
     return base + (m.moveX ?? 0) * 2.5;
   }
 
-  private aiInput(s: Side): InputState {
+  /** ファイターのAI強度（個別設定がなければ全体設定） */
+  private aiDifficultyOf(f: Fighter): Difficulty {
+    return f.aiDifficulty ?? this.opts.difficulty;
+  }
+
+  private aiInput(s: number): InputState {
     const f = this.f[s];
-    const o = this.f[s === 0 ? 1 : 0];
     const ai = f.ai!;
+    const d = this.aiDifficultyOf(f);
     // 数理零は常にエリート脳
     if (f.id === 'rei') {
-      const react =
-        this.opts.difficulty === 'extreme' ? 1 : this.opts.difficulty === 'hard' ? 1 : this.opts.difficulty === 'normal' ? 2 : 3;
+      const react = d === 'extreme' ? 1 : d === 'hard' ? 1 : d === 'normal' ? 2 : 3;
       if (ai.held && (this.t + s) % react !== 0) return ai.held;
       const inp = this.reiBrain(s);
       ai.held = inp;
@@ -1541,11 +1690,12 @@ export class Battle {
    * - 攻撃はリーチ内にいるときだけ撃つ（空振りスパム禁止）
    * - 相手の硬直・起き上がりをちゃんと罰する
    */
-  private generalBrain(s: Side): InputState {
+  private generalBrain(s: number): InputState {
     const inp: InputState = { ...EMPTY_INPUT };
     const f = this.f[s];
-    const o = this.f[s === 0 ? 1 : 0];
-    if (this.phase !== 'fight') return inp;
+    // 最も近い敵をターゲットにする
+    const o = this.nearestEnemy(f);
+    if (this.phase !== 'fight' || !o) return inp;
 
     const busy =
       f.state === 'attack' ||
@@ -1565,7 +1715,7 @@ export class Battle {
     const dist = Math.abs(o.x - f.x);
     const fwd: 'left' | 'right' = o.x > f.x ? 'right' : 'left';
     const back: 'left' | 'right' = fwd === 'right' ? 'left' : 'right';
-    const d = this.opts.difficulty;
+    const d = this.aiDifficultyOf(f);
 
     // 難易度パラメータ
     const blockP =
@@ -1599,9 +1749,11 @@ export class Battle {
 
     // ── 2. 飛び道具回避（毎フレーム）──
     const proj = this.projectiles.find((p) => {
-      if (p.owner === s || p.item) return false;
+      if (p.item) return false;
+      if (p.owner === f.idx) return false;
+      if (p.owner >= 0 && this.f[p.owner]?.team === f.team) return false;
       const dx = f.x - p.x;
-      const closing = p.homing === s || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
+      const closing = p.homing === f.idx || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
       return closing && Math.abs(dx) < 110 && Math.abs(p.y - (f.y - 22)) < 50;
     });
     if (proj && grounded && this.rng() < projP) {
@@ -1772,11 +1924,11 @@ export class Battle {
    * 数理零 専用エリートAI（プレイスキルカンスト）。
    * 差し返し・対空・置き身逃げ・起こし攻め・コンボルートをフレーム単位で判断する。
    */
-  private reiBrain(s: Side): InputState {
+  private reiBrain(s: number): InputState {
     const inp: InputState = { ...EMPTY_INPUT };
     const f = this.f[s];
-    const o = this.f[s === 0 ? 1 : 0];
-    if (this.phase !== 'fight') return inp;
+    const o = this.nearestEnemy(f);
+    if (this.phase !== 'fight' || !o) return inp;
     const busy =
       f.state === 'attack' ||
       f.state === 'hurt' ||
@@ -1794,7 +1946,7 @@ export class Battle {
     const dist = Math.abs(o.x - f.x);
     const fwd: 'left' | 'right' = o.x > f.x ? 'right' : 'left';
     const back: 'left' | 'right' = fwd === 'right' ? 'left' : 'right';
-    const d = this.opts.difficulty;
+    const d = this.aiDifficultyOf(f);
     const blockP = d === 'extreme' ? 0.995 : d === 'hard' ? 0.985 : d === 'normal' ? 0.92 : 0.8;
     const teleP = d === 'extreme' ? 0.38 : d === 'hard' ? 0.3 : 0.22;
     const pokeHeavy = d === 'extreme' || d === 'hard' ? 0.72 : 0.55;
@@ -1821,9 +1973,11 @@ export class Battle {
     }
     // 飛び道具対処
     const proj = this.projectiles.find((p) => {
-      if (p.owner === s || p.item) return false;
+      if (p.item) return false;
+      if (p.owner === f.idx) return false;
+      if (p.owner >= 0 && this.f[p.owner]?.team === f.team) return false;
       const dx = f.x - p.x;
-      const closing = p.homing === s || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
+      const closing = p.homing === f.idx || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
       return closing && Math.abs(dx) < 120 && Math.abs(p.y - (f.y - 22)) < 55;
     });
     if (proj && grounded) {

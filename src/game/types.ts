@@ -1,9 +1,19 @@
 export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei';
 export type Side = 0 | 1;
+/** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
+export type Team = 0 | 1;
 export type Facing = 1 | -1;
 export type StageId = 'classroom' | 'lake' | 'sakura' | 'hawaii';
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'extreme';
-export type Mode = '1p' | '2p' | 'cpu' | 'online';
+export type Mode = '1p' | '2p' | 'cpu' | 'online' | 'team';
+
+/** 同時乱戦チームバトルに参加できる最大ファイター数（人間＋AIの合計） */
+export const MAX_FIGHTERS = 8;
+/** 1部屋に入れる最大人数（人間プレイヤー） */
+export const MAX_HUMANS = 8;
+
+export const TEAM_NAMES: Record<Team, string> = { 0: '青チーム', 1: '赤チーム' };
+export const TEAM_COLORS: Record<Team, string> = { 0: '#38bdf8', 1: '#fb7185' };
 
 export interface InputState {
   left: boolean;
@@ -181,6 +191,20 @@ export interface StageDef {
   sub: string;
 }
 
+/** チーム戦（同時乱戦）1人分の設定 */
+export interface FighterSetup {
+  char: CharId;
+  team: Team;
+  /** true=CPU操作、false=人間操作 */
+  ai: boolean;
+  /** AIの強さ（ai=true のとき使用。未指定なら Setup.difficulty） */
+  aiDifficulty?: Difficulty;
+  /** ローカルチーム戦で人間が操作するパッド（0=P1キー、1=P2キー）。AIのときは null */
+  pad?: 0 | 1 | null;
+  /** 頭上に表示するタグ（'1P' / 'あなた' / 'CPU' など） */
+  tag?: string;
+}
+
 export interface Setup {
   mode: Mode;
   difficulty: Difficulty;
@@ -189,6 +213,12 @@ export interface Setup {
   stage: StageId;
   /** オンライン対戦：試合の決定論シード */
   seed?: number;
-  /** オンライン対戦：自分がどちら側か */
+  /** オンライン対戦：自分がどちら側か（1対1用） */
   onlineSide?: Side;
+  /** チーム戦（同時乱戦）かどうか */
+  teamMode?: boolean;
+  /** チーム戦の全ファイター設定（teamMode のとき必須） */
+  fighters?: FighterSetup[];
+  /** オンラインチーム戦：自分が操作するファイターのインデックス */
+  mySlot?: number;
 }

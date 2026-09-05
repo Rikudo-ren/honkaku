@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import LoadingScreen from '@/components/LoadingScreen';
 import TitleScreen from '@/components/TitleScreen';
 import CharacterSelect from '@/components/CharacterSelect';
+import TeamSetup from '@/components/TeamSetup';
 import OnlineLobby from '@/components/OnlineLobby';
 import VersusScreen from '@/components/VersusScreen';
 import BattleScreen from '@/components/BattleScreen';
@@ -10,9 +11,9 @@ import { preloadPortraits } from '@/components/Portrait';
 import { STAGES } from '@/game/characters';
 import { audio } from '@/game/audio';
 import { net, type StartData } from '@/game/net';
-import type { CharId, Difficulty, Mode, Setup, Side, StageId } from '@/game/types';
+import type { CharId, Difficulty, FighterSetup, Mode, Setup, Side, StageId } from '@/game/types';
 
-type Screen = 'loading' | 'title' | 'select' | 'online' | 'versus' | 'battle' | 'result';
+type Screen = 'loading' | 'title' | 'select' | 'teamsetup' | 'online' | 'versus' | 'battle' | 'result';
 
 const randomStage = (): StageId => STAGES[Math.floor(Math.random() * STAGES.length)].id;
 
@@ -100,17 +101,43 @@ export default function App() {
   }, [screen]);
 
   const start = useCallback((mode: Mode, difficulty: Difficulty) => {
-    setSetup((s) => ({ ...s, mode, difficulty }));
-    setScreen(mode === 'online' ? 'online' : 'select');
+    setSetup((s) => ({ ...s, mode, difficulty, teamMode: false, fighters: undefined, mySlot: undefined }));
+    setScreen(mode === 'online' ? 'online' : mode === 'team' ? 'teamsetup' : 'select');
   }, []);
 
-  const onlineStart = useCallback((data: StartData, mySide: Side) => {
-    setSetup((s) => ({ ...s, mode: 'online', p1: data.chars[0], p2: data.chars[1], stage: data.stage, seed: data.seed, onlineSide: mySide }));
+  const onlineStart = useCallback((data: StartData) => {
+    const myId = net.sessionId;
+    let mySlot = data.fighters.findIndex((f) => f.sessionId !== null && f.sessionId === myId);
+    if (mySlot < 0) mySlot = 0;
+    if (data.fighters.length === 2) {
+      // 1対1クイック：従来通りのセットアップ
+      const mySide = (mySlot === 1 ? 1 : 0) as Side;
+      setSetup((s) => ({ ...s, mode: 'online', teamMode: false, fighters: undefined, mySlot: undefined, p1: data.fighters[0].char, p2: data.fighters[1].char, stage: data.stage, seed: data.seed, onlineSide: mySide }));
+    } else {
+      // チーム戦：全ファイター設定＋自分のスロット
+      const fighters: FighterSetup[] = data.fighters.map((f, i) => ({
+        char: f.char,
+        team: f.team,
+        ai: f.sessionId === null,
+        aiDifficulty: f.aiDifficulty,
+        tag: f.sessionId === null ? 'CPU' : i === mySlot ? 'あなた' : 'NET',
+      }));
+      const rep0 = fighters.find((f) => f.team === 0)?.char ?? 'mie';
+      const rep1 = fighters.find((f) => f.team === 1)?.char ?? 'ryoma';
+      setSetup((s) => ({ ...s, mode: 'online', teamMode: true, fighters, mySlot, p1: rep0, p2: rep1, stage: data.stage, seed: data.seed, onlineSide: (fighters[mySlot]?.team ?? 0) as Side }));
+    }
     setScreen('versus');
   }, []);
 
   const chosen = useCallback((p1: CharId, p2: CharId) => {
-    setSetup((s) => ({ ...s, p1, p2, stage: randomStage() }));
+    setSetup((s) => ({ ...s, p1, p2, stage: randomStage(), teamMode: false, fighters: undefined, mySlot: undefined }));
+    setScreen('versus');
+  }, []);
+
+  const teamChosen = useCallback((fighters: FighterSetup[]) => {
+    const rep0 = fighters.find((f) => f.team === 0)?.char ?? 'mie';
+    const rep1 = fighters.find((f) => f.team === 1)?.char ?? 'ryoma';
+    setSetup((s) => ({ ...s, mode: 'team', teamMode: true, fighters, mySlot: undefined, p1: rep0, p2: rep1, stage: randomStage() }));
     setScreen('versus');
   }, []);
 
@@ -156,6 +183,10 @@ export default function App() {
       setScreen(net.connected ? 'online' : 'title');
       return;
     }
+    if (setup.mode === 'team') {
+      setScreen('teamsetup');
+      return;
+    }
     if (tryUnlock()) {
       setScreen('title');
       return;
@@ -177,9 +208,17 @@ export default function App() {
       {screen === 'select' && (
         <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} onDone={chosen} onBack={() => setScreen('title')} />
       )}
+      {screen === 'teamsetup' && <TeamSetup defaultDifficulty={setup.difficulty} onDone={teamChosen} onBack={() => setScreen('title')} />}
       {screen === 'online' && <OnlineLobby onStart={onlineStart} onBack={() => setScreen('title')} />}
       {screen === 'versus' && <VersusScreen setup={setup} onDone={toBattle} />}
-      {screen === 'battle' && <BattleScreen key={battleKey} setup={setup} onEnd={onEnd} onQuit={(to) => setScreen(to)} />}
+      {screen === 'battle' && (
+        <BattleScreen
+          key={battleKey}
+          setup={setup}
+          onEnd={onEnd}
+          onQuit={(to) => setScreen(to === 'select' && setup.mode === 'team' ? 'teamsetup' : to)}
+        />
+      )}
       {screen === 'result' && result && (
         <ResultScreen
           setup={setup}
