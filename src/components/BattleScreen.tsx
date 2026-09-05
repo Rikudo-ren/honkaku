@@ -6,6 +6,7 @@ import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import { CHARS, STAGES } from '@/game/characters';
 import { net, maskOf, unmask } from '@/game/net';
+import { FRAME_MS, OnlineClock } from '@/game/lockstep';
 import type { FighterSetup, InputState, Setup, Side } from '@/game/types';
 import { EMPTY_INPUT, TEAM_NAMES } from '@/game/types';
 
@@ -35,10 +36,10 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
   const [paused, setPaused] = useState(false);
   const [cutin, setCutin] = useState<{ c: CutIn; key: number } | null>(null);
   const [input, setInput] = useState<InputManager | null>(null);
-  const [waiting, setWaiting] = useState(false);
-  const [waitingName, setWaitingName] = useState<string | null>(null);
+  const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
   const [lagNames, setLagNames] = useState<string[]>([]);
-  const [oppLeft, setOppLeft] = useState(false);
+  const [oppLeft, setOppLeft] = useState(setup.mode === 'online' && net.opponentLeft);
+  const [connectionError, setConnectionError] = useState<string | null>(setup.mode === 'online' ? net.disconnectReason : null);
   const [desync, setDesync] = useState(false);
 
   // タッチ操作UI（タブレット・スマホ対応）
@@ -93,6 +94,9 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     const renderer = new Renderer(game, fx);
     let cutinTimer = 0;
     let endTimer = 0;
+    let matchEnded = false;
+    let sessionStopped = online && (!net.connected || net.opponentLeft);
+    if (sessionStopped) im.enabled = false;
     // チーム戦／1対1 のファイター構成を決める
     // オンライン対戦ではプレイヤー名を頭上タグに使う（未設定なら従来表示）
     const tagOf = (side: Side) => {
@@ -122,6 +126,8 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       },
       onSfx: (s) => audio.sfx(s),
       onMatchEnd: (winner, wins) => {
+        matchEnded = true;
+        setWaitingMessage(null);
         if (online) net.sendEnd();
         endTimer = window.setTimeout(() => onEndRef.current(winner, wins), 1600);
       },
@@ -129,22 +135,33 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
 
     // ── オンライン（ロックステップ）用 ──
     let frame = 0; // 実行済みフレーム数
-    const localBuf = new Map<number, number>(); // 自分の予約入力 frame → mask
-    let stallStartTime: number | null = null;
-    let isWaitingDisplayed = false;
+    const localBuf = new Set<number>(); // 送信済みの予約入力フレーム
+    const onlineClock = new OnlineClock(netDelay);
+    let lastProgressTime = performance.now();
+    let displayedWaitingMessage: string | null = null;
     let lastLagSig = '';
 
     const offLeft = online
       ? net.on('opponent-left', () => {
+          sessionStopped = true;
+          im.enabled = false;
+          im.reset();
           setOppLeft(true);
         })
       : null;
     const offDesync = online ? net.on('desync', () => setDesync(true)) : null;
+    const offDisconnect = online ? net.on('disconnected', (reason) => {
+      sessionStopped = true;
+      im.enabled = false;
+      im.reset();
+      setWaitingMessage(null);
+      setConnectionError(String(reason));
+    }) : null;
 
     let raf = 0;
     let last = performance.now();
     let acc = 0;
-    const STEP = 1000 / 60;
+    const STEP = FRAME_MS;
 
     // オンラインで自分が操作するスロット（1対1では side と一致）
     const mySlot = teamMode ? (setup.mySlot ?? 0) : mySide;
@@ -161,18 +178,20 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     let missingSlot = -1;
 
     const stepOnline = (): boolean => {
+      if (matchEnded || sessionStopped) return false;
       // 自分の入力を netDelay フレーム先に予約して送信
       const target = frame + netDelay;
-      if (!localBuf.has(target)) {
+      // 追いつき中の補完済みフレームに操作を捨てない。未確定の予約先まで押下を保持する。
+      if (!localBuf.has(target) && net.remoteInput(target, mySlot) === undefined) {
         // オンラインではどちらのキー配置（WASD系・矢印系・タッチ）でも操作できるようマージ
         const mask = maskOf(im.poll(0)) | maskOf(im.poll(1));
-        localBuf.set(target, mask);
+        localBuf.add(target);
         net.sendInput(target, mySlot, mask);
       }
       // このフレームに必要な入力が揃っているか（人間スロット全員分）
       // 全スロット（自スロット含む）でサーバーが配信した正規入力を使う。
-      // 誰かが遅れても、猶予時間を過ぎればサーバーがニュートラル(0)を補完して配るので、
-      // 永遠に止まることはなく、全員が同一の入力で決定論的に進む。
+      // 全員の開始を待ち、その後の欠けた入力はサーバーだけが補完する。
+      // クライアントが勝手にフレームを飛ばしたり入力を推測したりしない。
       const inputs: InputState[] = [];
       for (let s = 0; s < fighters.length; s++) {
         if (fighters[s].ai) {
@@ -212,57 +231,39 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
 
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(120, now - last);
+      const dt = now - last;
       last = now;
-      if (!pausedRef.current) {
-        acc += dt;
-        let n = 0;
-        let stalled = false;
-        missingSlot = -1;
-        while (acc >= STEP && n < 4) {
-          if (online) {
-            if (!stepOnline()) {
-              stalled = true;
-              acc = 0;
-              break;
-            }
-          } else {
-            stepLocal();
-          }
-          acc -= STEP;
-          n++;
-        }
-        if (acc > STEP * 4) acc = 0;
-
-        // ── オンライン待機中インジケータ（短時間のジッターでは表示せず、350ms以上の実質的な停止時のみ表示） ──
-        // 停止は最長でもサーバーの入力タイムアウト時間（約0.2秒強）まで。
-        // それを超えて固まるのは「自分の下り回線がサーバーからの補完を受け取れていない」状態。
+      if (!pausedRef.current && (!online || (!sessionStopped && !matchEnded))) {
         if (online) {
-          if (stalled) {
-            if (stallStartTime === null) stallStartTime = now;
-            if (now - stallStartTime >= 350 && !isWaitingDisplayed) {
-              isWaitingDisplayed = true;
-              setWaiting(true);
-              setWaitingName(missingSlot >= 0 ? slotName(missingSlot) : null);
-            }
-          } else {
-            stallStartTime = null;
-            if (isWaitingDisplayed) {
-              isWaitingDisplayed = false;
-              setWaiting(false);
-              setWaitingName(null);
-            }
+          missingSlot = -1;
+          const progressed = onlineClock.advance(dt, frame, net.latestInputFrame, stepOnline);
+          if (progressed > 0) lastProgressTime = now;
+
+          // 描画フレームで実行機会がなかっただけでは待機を解除しない。
+          // 開始準備や短いジッターを「回線不安定」と決めつけない。
+          const message = now - lastProgressTime < 650 || matchEnded ? null
+            : frame <= netDelay ? '対戦相手の準備を待っています…'
+            : missingSlot >= 0 ? `${slotName(missingSlot)}の入力を待っています…`
+            : '入力の到着を待っています…';
+          if (message !== displayedWaitingMessage) {
+            displayedWaitingMessage = message;
+            setWaitingMessage(message);
           }
-          // サーバーが「重い」と通知したスロットを名前で表示（タイムアウト補完が始まる前段階の警告）
-          const names: string[] = [];
-          for (const s of net.lagSlots) {
-            if (!teamMode || !setup.fighters?.[s]?.ai) names.push(slotName(s));
-          }
+          const names = [...net.lagSlots].map(slotName);
           const sig = names.join('|');
           if (sig !== lastLagSig) {
             lastLagSig = sig;
             setLagNames(names);
           }
+        } else {
+          acc += Math.min(120, dt);
+          let n = 0;
+          while (acc >= STEP && n < 4) {
+            stepLocal();
+            acc -= STEP;
+            n++;
+          }
+          if (acc > STEP * 4) acc = 0;
         }
       }
       renderer.draw(battle);
@@ -296,6 +297,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       window.clearTimeout(endTimer);
       offLeft?.();
       offDesync?.();
+      offDisconnect?.();
     };
   }, [setup, online, mySide, teamMode, netDelay]);
 
@@ -322,18 +324,11 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         <div className="scanlines pointer-events-none absolute inset-0 opacity-60" />
         {cutin && <CutInOverlay key={cutin.key} c={cutin.c} />}
 
-        {/* 入力待機中バナー（350ms以上の実質停止時のみ安定表示。タイムアウトでサーバーが自動補完する） */}
-        {online && waiting && !oppLeft && (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 border-2 border-sky-400/90 bg-slate-950/90 px-3.5 py-1 text-xs text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.4)] backdrop-blur-sm">
-            <span className="inline-block h-2 w-2 animate-ping rounded-full bg-sky-400" />
-            {waitingName === null ? (
-              <span>入力を待機中…</span>
-            ) : (
-              <span>
-                <span className="text-amber-300">{waitingName}</span>
-                {waitingName === 'あなた' ? 'の通信が不安定です…' : 'の入力を待機中…（まもなく自動で進行）'}
-              </span>
-            )}
+        {/* 実際に進行が止まったときだけ表示。操作やメニューは遮らない。 */}
+        {online && waitingMessage && !oppLeft && !connectionError && (
+          <div role="status" className="pointer-events-none absolute left-1/2 top-10 z-30 flex -translate-x-1/2 items-center gap-2 border-2 border-sky-400/90 bg-slate-950/90 px-3.5 py-1 text-xs text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.4)] backdrop-blur-sm">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400" />
+            <span>{waitingMessage}</span>
           </div>
         )}
 
@@ -342,10 +337,10 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
           {online && net.latency >= 0 && (
             <div className="bg-black/60 px-2 py-0.5 text-[10px] text-slate-400 backdrop-blur-sm">PING {net.latency}ms</div>
           )}
-          {online && lagNames.length > 0 && !oppLeft && (
+          {online && lagNames.length > 0 && !oppLeft && !connectionError && (
             <div className="flex items-center gap-1 border border-amber-400/70 bg-black/70 px-2 py-0.5 text-[10px] text-amber-300 backdrop-blur-sm">
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-              回線不安定: {lagNames.join(', ')}
+              入力遅延: {lagNames.join(', ')}
             </div>
           )}
         </div>
@@ -384,11 +379,11 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
           </div>
         )}
 
-        {oppLeft && (
+        {(oppLeft || connectionError) && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
             <div className="animate-pop w-80 border-4 border-rose-400 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
-              <div className="pixel-text-shadow text-2xl text-rose-300">相手が退室しました</div>
-              <div className="mt-1 text-xs text-slate-400">「✝本質✝から逃げたか…」</div>
+              <div className="pixel-text-shadow text-2xl text-rose-300">{connectionError ? '接続が切れました' : '相手が退室しました'}</div>
+              <div className="mt-1 text-xs text-slate-400">{connectionError || 'タイトルから再度対戦を始められます。'}</div>
               <button
                 className="mt-4 w-full border-2 border-amber-300 bg-amber-300 py-1.5 text-slate-950 hover:bg-amber-200"
                 onClick={() => {
@@ -402,7 +397,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
           </div>
         )}
 
-        {paused && online && !oppLeft && (
+        {paused && online && !oppLeft && !connectionError && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
             <div className="animate-pop w-72 border-4 border-slate-100 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
               <div className="pixel-text-shadow text-3xl text-amber-300">MENU ✝</div>
@@ -459,7 +454,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
               {TEAM_NAMES[0]} {teamCounts[0]}人 vs {TEAM_NAMES[1]} {teamCounts[1]}人 ／ {st.name} ／ {online ? 'オンライン乱戦' : 'オフライン乱戦'} ／ M ミュート
             </span>
             <span>
-              {setup.mode === 'online' ? '回線待機あり' : 'Esc ポーズ'}
+              {setup.mode === 'online' ? 'Esc メニュー' : 'Esc ポーズ'}
             </span>
           </>
         ) : online ? (

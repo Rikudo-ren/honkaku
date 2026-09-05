@@ -39,6 +39,10 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
       setError(String(m ?? '通信エラー'));
       setStage('error');
     });
+    const offDisconnect = net.on('disconnected', (m) => {
+      setError(String(m));
+      setStage('error');
+    });
     const offLeft = net.on('opponent-left', () => {
       setReady(false);
     });
@@ -53,6 +57,7 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
       offLobby();
       offStart();
       offErr();
+      offDisconnect();
       offLeft();
       offPing();
     };

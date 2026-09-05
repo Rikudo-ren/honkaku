@@ -11,6 +11,7 @@ import { preloadPortraits } from '@/components/Portrait';
 import { STAGES } from '@/game/characters';
 import { audio } from '@/game/audio';
 import { net, type StartData } from '@/game/net';
+import { makeOnlineSetup } from '@/game/onlineSetup';
 import type { CharId, Difficulty, FighterSetup, Mode, Setup, Side, StageId } from '@/game/types';
 
 type Screen = 'loading' | 'title' | 'select' | 'teamsetup' | 'online' | 'versus' | 'battle' | 'result';
@@ -115,56 +116,7 @@ export default function App() {
   }, []);
 
   const onlineStart = useCallback((data: StartData) => {
-    const myId = net.sessionId;
-    let mySlot = data.fighters.findIndex((f) => f.sessionId !== null && f.sessionId === myId);
-    if (mySlot < 0) mySlot = 0;
-    if (data.fighters.length === 2) {
-      // 1対1クイック：従来通りのセットアップ
-      const mySide = (mySlot === 1 ? 1 : 0) as Side;
-      setSetup((s) => ({
-        ...s,
-        mode: 'online',
-        teamMode: false,
-        fighters: undefined,
-        mySlot: undefined,
-        p1: data.fighters[0].char,
-        p2: data.fighters[1].char,
-        stage: data.stage,
-        seed: data.seed,
-        onlineMatchId: data.matchId,
-        netInputDelay: data.inputDelay,
-        onlineSide: mySide,
-        onlineNames: data.fighters.map((f) => f.name ?? null),
-      }));
-    } else {
-      // チーム戦：全ファイター設定＋自分のスロット
-      const fighters: FighterSetup[] = data.fighters.map((f, i) => ({
-        char: f.char,
-        team: f.team,
-        ai: f.sessionId === null,
-        aiDifficulty: f.aiDifficulty,
-        // オンラインの人間枠はプレイヤー名をタグに使う（未設定なら従来表示）
-        tag: f.sessionId === null ? 'CPU' : f.name || (i === mySlot ? 'あなた' : 'NET'),
-        you: i === mySlot,
-      }));
-      const rep0 = fighters.find((f) => f.team === 0)?.char ?? 'mie';
-      const rep1 = fighters.find((f) => f.team === 1)?.char ?? 'ryoma';
-      setSetup((s) => ({
-        ...s,
-        mode: 'online',
-        teamMode: true,
-        fighters,
-        mySlot,
-        p1: rep0,
-        p2: rep1,
-        stage: data.stage,
-        seed: data.seed,
-        onlineMatchId: data.matchId,
-        netInputDelay: data.inputDelay,
-        onlineSide: (fighters[mySlot]?.team ?? 0) as Side,
-        onlineNames: data.fighters.map((f) => f.name ?? null),
-      }));
-    }
+    setSetup(makeOnlineSetup(data, net.sessionId));
     setScreen('versus');
   }, []);
 
