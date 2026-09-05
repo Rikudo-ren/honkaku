@@ -5,10 +5,12 @@ import type { CharId, Difficulty, InputState, Side, StageId, Team } from './type
 /** ─────────────────────────────────────────────
  *  オンライン対戦ネットワーク層（Colyseus クライアント）
  *
- *  方式：ディレイ方式ロックステップ
- *   - サーバーは「マッチメイキング＋入力リレー」のみ
+ * 方式：ディレイ方式ロックステップ（入力タイムアウト補完付き）
+ *   - サーバーは「マッチメイキング＋入力リレー」に加え、入力の遅延を監視
  *   - 全クライアントが同じシードで Battle を決定論的に実行
- *   - 各フレームの入力(8bitマスク)を全員で送り合う
+ *   - 各フレームの入力(8bitマスク)を全員で送り合う（自スロットもサーバー経由の正規値を使う）
+ *   - 誰かの入力が猶予時間を過ぎても届かない場合、サーバーがニュートラル(0)で
+ *     自動補完して全員へ配信 → 一人が重くても全員が固まらず試合が進行する
  *   - 1対1クイックマッチ＋多人数チーム戦（同時乱戦）対応
  *  ───────────────────────────────────────────── */
 
@@ -82,7 +84,7 @@ export interface StartData {
   fighters: StartFighter[];
 }
 
-type NetEvent = 'lobby' | 'start' | 'opponent-left' | 'error' | 'ping' | 'desync';
+type NetEvent = 'lobby' | 'start' | 'opponent-left' | 'error' | 'ping' | 'desync' | 'lag';
 
 /** InputState → 8bit マスク */
 const KEYS: (keyof InputState)[] = ['left', 'right', 'up', 'down', 'light', 'heavy', 'special', 'super'];
@@ -129,8 +131,15 @@ class NetClient {
   /** 自分のプレイヤー名（ロビー・対戦中の表示に使う。ブラウザに保存される） */
   name = loadName();
 
-  /** 他プレイヤーの入力バッファ frame → (slot → mask) */
+  /**
+   * サーバーが配信した正規入力バッファ frame → (slot → mask)。
+   * 自スロットの入力もサーバー経由（リレー）でここに入る。
+   * タイムアウト時はサーバーがニュートラル(0)を補完して配信するので、
+   * 誰か一人が重くても全員分の入力が必ず揃い、ゲームが固まらない。
+   */
   private remote = new Map<number, Map<number, number>>();
+  /** サーバーが「重い」と通知したスロット（HUD表示用） */
+  lagSlots = new Set<number>();
   /** 相手から届いた同期ハッシュ frame → hash */
   private remoteHash = new Map<number, number>();
   /** 自分が計算した同期ハッシュ frame → hash */
@@ -221,10 +230,11 @@ class NetClient {
       this.remote.clear();
       this.remoteHash.clear();
       this.localHash.clear();
+      this.lagSlots.clear();
       this.emit('start', d);
     });
     room.onMessage('i', (d: [number, number, number, number]) => {
-      // [matchId, frame, slot, mask]
+      // [matchId, frame, slot, mask]（自スロットのリレーも含む。タイムアウト補完の0もここに来る）
       if (!this.startData || d[0] !== this.startData.matchId) return;
       const frame = d[1];
       const slot = d[2];
@@ -234,7 +244,13 @@ class NetClient {
         row = new Map<number, number>();
         this.remote.set(frame, row);
       }
-      row.set(slot, mask);
+      // サーバーの正規ストリームは各 frame/slot につき最初に届いた値が確定。
+      // タイムアウト補完(0)が後から本物の入力で上書きされないよう先勝ちにする（決定論維持）。
+      if (!row.has(slot)) row.set(slot, mask);
+    });
+    room.onMessage('lag', (slots: number[]) => {
+      this.lagSlots = new Set(Array.isArray(slots) ? slots : []);
+      this.emit('lag');
     });
     room.onMessage('h', (d: [number, number, number]) => {
       // [matchId, frame, hash]
@@ -383,6 +399,7 @@ class NetClient {
     this.remote.clear();
     this.remoteHash.clear();
     this.localHash.clear();
+    this.lagSlots.clear();
   }
 }
 

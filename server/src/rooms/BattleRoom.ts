@@ -13,6 +13,18 @@ const MAX_HUMANS = 8;
 const BASE_INPUT_DELAY = 5;
 const MAX_INPUT_DELAY = 10;
 
+/** 入力監視ティック間隔(ms) */
+const INPUT_TICK_MS = 100;
+/**
+ * フレームの入力が「全員に必要な時刻」を過ぎてからも猶予する時間(ms)。
+ * これを過ぎても届かないプレイヤーの入力はニュートラル(0)で自動補完し、
+ * 全員がそのフレームを実行できるようにする（＝誰か一人が重くても全員が固まらない）。
+ */
+const INPUT_GRACE_MS = 150;
+/** 1ティックに補完する入力の上限（タブ放置などでの過去フレーム一斉送信を防ぐ） */
+const INJECT_PER_TICK = 10;
+const FRAME_MS = 1000 / 60;
+
 /** プレイヤー名の最大文字数（HUDやロビーの表示崩れ防止） */
 const MAX_NAME = 12;
 /** 名前を設定していない人の表示名 */
@@ -92,9 +104,18 @@ export class BattleRoom extends Room {
   /** 試合中の入力スロット所有者。クライアント入力のなりすまし防止に使う。 */
   private lastFighters: FighterSlot[] = [];
   private currentMatchId = 0;
+  /** 人間スロットごとに受信した最新の入力フレーム（AI枠は Infinity） */
+  private slotLatestFrame: number[] = [];
+  /** 現在の試合が開始した時刻（入力タイムアウト判定の基準） */
+  private matchStartedAt = 0;
+  /** 現在の試合の入力遅延フレーム数（start で配った値と同じ） */
+  private matchInputDelay = BASE_INPUT_DELAY;
 
   onCreate(options: { private?: boolean } = {}) {
     this.isPrivate = !!options?.private;
+
+    // 入力タイムアウトを監視するティック（誰かの入力が遅れたらニュートラルで補完）
+    this.setSimulationInterval(() => this.tickInputs(), INPUT_TICK_MS);
     this.teamMode = this.isPrivate;
     this.maxClients = this.teamMode ? MAX_HUMANS : 2;
     if (this.isPrivate) {
@@ -192,14 +213,25 @@ export class BattleRoom extends Room {
       this.tryStartTeam();
     });
 
-    // ロックステップ入力（[matchId, frame, slot, bitmask]）を他の全員へリレー
+    // ロックステップ入力（[matchId, frame, slot, bitmask]）
+    // 送信元も含めた全員にブロードキャストする。全クライアントがサーバーを通った
+    // 単一の正規入力ストリームでシミュレーションすることで決定論が保証される
+    // （タイムアウト時にサーバーが補完した入力を自スロットへ後から上書きされないためにも必要）。
     this.onMessage("i", (client, data) => {
       if (!this.started || !Array.isArray(data) || data.length !== 4) return;
       const [matchId, frame, slot, mask] = data;
       if (matchId !== this.currentMatchId) return;
       if (!Number.isInteger(frame) || frame < 0 || !Number.isInteger(slot) || slot < 0 || slot >= this.lastFighters.length || !Number.isInteger(mask) || mask < 0 || mask > 0xff) return;
       if (this.lastFighters[slot]?.sessionId !== client.sessionId) return;
-      this.relay(client, "i", [matchId, frame, slot, mask]);
+      // 再送や、タイムアウト補完済みフレームへの後着入力は無視する。
+      // （補完したニュートラルが全クライアントの正規入力。後から本物で上書きすると同期が崩れる）
+      if (frame <= (this.slotLatestFrame[slot] ?? -1)) return;
+      // フレーム時計は「最初の入力が届いた時刻」から起動する。
+      // スタート放送から実際に対戦が始まるまではバーサス画面などの空白時間があり、
+      // その間にタイムアウト判定すると健全なプレイヤーまでラグ扱いで補完してしまうため。
+      if (this.matchStartedAt === 0) this.matchStartedAt = Date.now();
+      this.slotLatestFrame[slot] = frame;
+      this.broadcast("i", [matchId, frame, slot, mask]);
     });
 
     // 同期チェック用ハッシュ（[matchId, frame, hash]）を他の全員へリレー
@@ -254,6 +286,9 @@ export class BattleRoom extends Room {
     if (wasActiveParticipant) {
       this.started = false;
       this.lastFighters = [];
+      this.slotLatestFrame = [];
+      this.matchStartedAt = 0;
+      this.matchInputDelay = BASE_INPUT_DELAY;
       if (this.teamMode) this.unlock();
     }
     // ホストが抜けたら次に入った人にホスト権を移譲
@@ -304,6 +339,9 @@ export class BattleRoom extends Room {
       name: p.name,
     }));
     this.lastFighters = fighters;
+    this.slotLatestFrame = fighters.map((f) => (f.sessionId === null ? Infinity : -1));
+    this.matchStartedAt = 0; // 最初の入力が届いた時点で起動（バーサス導入の空白を除外）
+    this.matchInputDelay = BASE_INPUT_DELAY;
     this.lock();
     this.broadcast("start", {
       matchId: this.currentMatchId,
@@ -340,11 +378,15 @@ export class BattleRoom extends Room {
       ...humans.map(([sessionId, p]) => ({ char: p.char, team: p.team, sessionId, aiDifficulty: "normal", name: p.name })),
       ...this.aiSlots.map((a) => ({ char: a.char, team: a.team, sessionId: null, aiDifficulty: a.difficulty, name: null })),
     ];
+    const inputDelay = calcInputDelay(humans.length);
     this.lastFighters = fighters;
+    this.slotLatestFrame = fighters.map((f) => (f.sessionId === null ? Infinity : -1));
+    this.matchStartedAt = 0; // 最初の入力が届いた時点で起動（バーサス導入の空白を除外）
+    this.matchInputDelay = inputDelay;
     this.lock();
     this.broadcast("start", {
       matchId: this.currentMatchId,
-      inputDelay: calcInputDelay(humans.length),
+      inputDelay,
       seed: Math.floor(Math.random() * 0xffffffff) >>> 0,
       stage: STAGES[Math.floor(Math.random() * STAGES.length)],
       fighters,
@@ -358,7 +400,53 @@ export class BattleRoom extends Room {
   private finishMatch() {
     this.started = false;
     this.lastFighters = [];
+    this.slotLatestFrame = [];
+    this.matchStartedAt = 0;
+    this.matchInputDelay = BASE_INPUT_DELAY;
     if (this.teamMode) this.unlock();
     this.broadcastLobby();
+  }
+
+  /**
+   * 試合中の入力タイムアウト監視。
+   *
+   * 全クライアントは各フレーム F について「F + inputDelay フレーム先」の入力を送る
+   * ロックステップ（ディレイ方式）。サーバー起算で「全員がフレーム F を実行する時刻」
+   * はマッチ開始から F フレーム後。あるスロットの最新受信フレームが F を満たさない
+   * （＝そのプレイヤーの入力が F フレーム分遅れている）まま猶予時間を過ぎたら、
+   * 足りないフレームの入力をニュートラル（mask 0 = 全ボタン離し）で補完して全員へ配信する。
+   *
+   * これにより「誰か一人が回線落ち/激重/タブ放置」でも全員のゲームが止まらずに進み、
+   * 遅れた本人の操作だけが一時的に無効になる（激しいラグでは動けないのと同じ挙動）。
+   * さらに現在遅延しているスロットを "lag" として通知し、HUDで全員に分かるようにする。
+   */
+  private tickInputs() {
+    // 最初の入力が届くまで（バーサス画面などの導入中）はタイムアウト判定しない
+    if (!this.started || this.lastFighters.length === 0 || this.matchStartedAt === 0) return;
+    const simFrame = Math.floor((Date.now() - this.matchStartedAt) / FRAME_MS);
+    // 各クライアントが「今まさに必要」な予約入力フレーム（simFrame + inputDelay）
+    const needNow = simFrame + this.matchInputDelay;
+    // 猶予込みで補完を開始する基準フレーム（これより遅れているスロットだけ補完）
+    const cutoff = needNow - Math.ceil(INPUT_GRACE_MS / FRAME_MS);
+    // 「重い」とHUD表示する基準（補完より数フレーム早めに警告。健全なプレイヤーは引っ掛けない）
+    const lagAt = needNow - 3;
+
+    const lagSlots: number[] = [];
+    for (let slot = 0; slot < this.lastFighters.length; slot++) {
+      if (this.lastFighters[slot].sessionId === null) continue; // AI枠は監視不要
+      const latest = this.slotLatestFrame[slot] ?? -1;
+      if (latest < lagAt) lagSlots.push(slot);
+
+      let f = latest + 1;
+      let injected = 0;
+      while (f <= cutoff && injected < INJECT_PER_TICK) {
+        this.broadcast("i", [this.currentMatchId, f, slot, 0]);
+        f++;
+        injected++;
+      }
+      if (injected > 0) this.slotLatestFrame[slot] = f - 1;
+    }
+
+    if (lagSlots.length > 0) this.broadcast("lag", lagSlots);
   }
 }
