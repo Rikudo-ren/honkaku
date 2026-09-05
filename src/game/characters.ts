@@ -1,6 +1,9 @@
 import type { CharDef, CharId, Difficulty, Look, StageDef } from './types';
 
-export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei'];
+export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei', 'sakura'];
+
+/** 隠しキャラクターのID。解放状態は localStorage で管理する（App.tsx 参照） */
+export const HIDDEN_CHAR: CharId = 'sakura';
 
 const JAB_BOX = { x: 5, y: -32, w: 14, h: 9 };
 const SWING_BOX = { x: 3, y: -38, w: 17, h: 18 };
@@ -538,6 +541,98 @@ export const CHARS: Record<CharId, CharDef> = {
     stats: { power: 4, speed: 4, honshitsu: 3, joushiki: 3 },
     desc: '偏差値八十五。理数科にいる理由は「家が近いから」。評価軸は「面白い」だけ。',
   },
+  sakura: {
+    id: 'sakura',
+    name: '櫻優',
+    kana: 'さくら・ゆう',
+    title: '恋愛学研究者（シュレディンガーの好意）',
+    affiliation: '中高一貫コース（二年）',
+    tie: '紺',
+    tieColor: '#2f4f8f',
+    color: '#f472b6',
+    light: '#ffe4ec',
+    hp: 95,
+    speed: 1.55,
+    jump: 6.2,
+    dmgMul: 1,
+    look: {
+      hair: 'messy',
+      hairColor: '#8a6642',
+      hairDark: '#6b4c2e',
+      eyeColor: '#5a6a7a',
+      glasses: true,
+      gender: 'm',
+      outfit: 'blazer',
+      tieColor: '#2f4f8f',
+      accessory: 'notebookFront',
+      weapon: 'notebook',
+      winPose: 'adjust',
+    },
+    moves: {
+      light: {
+        key: 'light',
+        name: '書いてもらいます',
+        desc: '恋愛学ノートの角で素早く突く。観測データ、n+1。',
+        callout: ['書いてもらいます', '研究なので', 'n+1'],
+        startup: 4,
+        active: 4,
+        recovery: 8,
+        dmg: 5,
+        hitstun: 14,
+        kbx: 1.6,
+        kby: 0,
+        box: JAB_BOX,
+        kind: 'melee',
+        pose: 'jab',
+        sfx: 'hit',
+      },
+      heavy: {
+        key: 'heavy',
+        name: '恋愛学ノート（完全版）',
+        desc: '去年から書き溜めた✝本質汚染ノートの束で殴る。物理的にも重い。',
+        callout: ['完全版です', '法則、十四まで', '重いんです'],
+        startup: 10,
+        active: 5,
+        recovery: 16,
+        dmg: 12,
+        hitstun: 24,
+        kbx: 3,
+        kby: 1.5,
+        knockdown: true,
+        box: SWING_BOX,
+        kind: 'melee',
+        pose: 'swing',
+        sfx: 'heavy',
+      },
+      special: {
+        key: 'special',
+        name: 'シュレディンガーの好意',
+        desc: '相手を「観測」して記録する。ダメージは無いが相手を動揺させ、サンプルn+2。nが無いと超必殺は有意にならない。',
+        callout: ['いま、観測しました', '重ね合わせ状態', 'データ採取'],
+        startup: 7,
+        active: 6,
+        recovery: 14,
+        dmg: 0,
+        hitstun: 0,
+        kbx: 0,
+        kby: 0,
+        box: { x: 4, y: -36, w: 16, h: 14 },
+        kind: 'melee',
+        pose: 'point',
+        sfx: 'special',
+        cooldown: 40,
+      },
+    },
+    superName: '恋愛発生第十五法則（暫定）',
+    superQuote: '〈面白い〉は理論を超える。',
+    superDesc: 'ノートに記録した法則を順に読み上げて叩き込む。試合中に当て／受けで蓄積したサンプル数nが多いほど読む法則が増え、最後の「観測確定」の威力も上がる。使用後nはリセット。',
+    intro: '少し聞きたいことがあって',
+    wins: ['この試合はデータとして記録します', 'nが大きい。統計的に有意です', '理論じゃない。研究なので', '両馬先輩に報告します'],
+    blockText: 'なるほど',
+    koText: '観測、完了',
+    stats: { power: 2, speed: 3, honshitsu: 4, joushiki: 2 },
+    desc: '紺ネクタイの内進生。恋愛学を研究するがノートは✝本質✝に完全汚染。内藤蘭に片思い中（消しゴム事象・n=1）。サンプル数nが全ての鍵。',
+  },
 };
 
 export const EXTRA_LOOKS: Record<'kuraishi' | 'heikatsu', Look> = {
@@ -603,6 +698,13 @@ export const INTRO_PAIRS: Record<string, { first: CharId; a: string; b: string; 
   'mie|rei': { first: 'rei', a: 'セット✝', b: '零、✝つけるな' },
   'mitsumine|ryoma': { first: 'ryoma', a: 'もう巻き込まれてるよ', b: 'は？' },
   'naito|ryoma': { first: 'ryoma', a: '✝本質✝は恋愛に適用可能', b: '面白い考え方だね' },
+  // ── 櫻優の掛け合い（原作のやりとりベース） ──
+  'mie|sakura': { first: 'mie', a: 'は？', b: 'その「は？」、データとして記録します', note: '（記録済み）' },
+  'ryoma|sakura': { first: 'sakura', a: '✝本質は恋愛に適用可能ですか', b: '全てに適用可能だよ。わかんないけど' },
+  'mitsumine|sakura': { first: 'mitsumine', a: '好きなら好きって言いなよ', b: '波動関数の崩壊が——' },
+  'naito|sakura': { first: 'naito', a: 'あ、消しゴム落ちてます', b: 'サンプル数1の事象……！' },
+  'rei|sakura': { first: 'rei', a: '面白いでいいんだよ', b: '第十五法則……！' },
+  'sakura|terachi': { first: 'sakura', a: '先輩、配信見てました', b: '……え、マジ？' },
 };
 
 export function pairKey(a: CharId, b: CharId): string {

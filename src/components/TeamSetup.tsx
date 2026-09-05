@@ -7,6 +7,7 @@ import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
 interface Props {
   defaultDifficulty: Difficulty;
+  sakuraUnlocked: boolean;
   onDone: (fighters: FighterSetup[]) => void;
   onBack: () => void;
 }
@@ -24,7 +25,8 @@ const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
 const CTRL_LABEL: Record<Ctrl, string> = { p1: '1P操作', p2: '2P操作', cpu: 'CPU' };
 
-export default function TeamSetup({ defaultDifficulty, onDone, onBack }: Props) {
+export default function TeamSetup({ defaultDifficulty, sakuraUnlocked, onDone, onBack }: Props) {
+  const pool = CHAR_ORDER.filter((id) => sakuraUnlocked || id !== 'sakura');
   const [rows, setRows] = useState<Row[]>([
     { char: 'mie', team: 0, ctrl: 'p1', aiDifficulty: defaultDifficulty },
     { char: 'ryoma', team: 0, ctrl: 'cpu', aiDifficulty: defaultDifficulty },
@@ -38,8 +40,8 @@ export default function TeamSetup({ defaultDifficulty, onDone, onBack }: Props) 
   };
 
   const cycleChar = (i: number, dir: 1 | -1) => {
-    const cur = CHAR_ORDER.indexOf(rows[i].char);
-    patch(i, { char: CHAR_ORDER[(cur + dir + CHAR_ORDER.length) % CHAR_ORDER.length] });
+    const cur = pool.indexOf(rows[i].char);
+    patch(i, { char: pool[(cur + dir + pool.length) % pool.length] });
   };
 
   const cycleCtrl = (i: number) => {
@@ -63,7 +65,7 @@ export default function TeamSetup({ defaultDifficulty, onDone, onBack }: Props) 
   const addRow = () => {
     if (rows.length >= MAX_FIGHTERS) return;
     const c0 = rows.filter((r) => r.team === 0).length;
-    setRows((rs) => [...rs, { char: CHAR_ORDER[rs.length % CHAR_ORDER.length], team: c0 <= rs.length / 2 ? 0 : 1, ctrl: 'cpu', aiDifficulty: defaultDifficulty }]);
+    setRows((rs) => [...rs, { char: pool[rs.length % pool.length], team: c0 <= rs.length / 2 ? 0 : 1, ctrl: 'cpu', aiDifficulty: defaultDifficulty }]);
     audio.sfx('confirm');
   };
 

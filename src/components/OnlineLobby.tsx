@@ -8,6 +8,7 @@ import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
 interface Props {
   onStart: (data: StartData) => void;
+  sakuraUnlocked: boolean;
   onBack: () => void;
 }
 
@@ -15,7 +16,12 @@ type Stage = 'menu' | 'code-input' | 'connecting' | 'lobby' | 'error';
 
 const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
-export default function OnlineLobby({ onStart, onBack }: Props) {
+/** 未解禁の隠しキャラを除いた選択可能ロスター */
+export function charPool(sakuraUnlocked: boolean): CharId[] {
+  return CHAR_ORDER.filter((id) => sakuraUnlocked || id !== 'sakura');
+}
+
+export default function OnlineLobby({ onStart, sakuraUnlocked, onBack }: Props) {
   // 再戦時：既に部屋に入っているならロビー画面から始める
   const [stage, setStage] = useState<Stage>(net.connected ? 'lobby' : 'menu');
   const [error, setError] = useState('');
@@ -86,6 +92,7 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
 
   const pickChara = (id: CharId) => {
     if (ready) return;
+    if (id === 'sakura' && !sakuraUnlocked) return; // 未解禁
     setSel(id);
     net.setChara(id);
     audio.sfx('move');
@@ -236,11 +243,11 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
         )}
 
         {stage === 'lobby' && lobby && !lobby.teamMode && (
-          <QuickLobbyView lobby={lobby} sel={sel} ready={ready} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
+          <QuickLobbyView lobby={lobby} sel={sel} ready={ready} sakuraUnlocked={sakuraUnlocked} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
         )}
 
         {stage === 'lobby' && lobby && lobby.teamMode && (
-          <TeamLobbyView lobby={lobby} sel={sel} ready={ready} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
+          <TeamLobbyView lobby={lobby} sel={sel} ready={ready} sakuraUnlocked={sakuraUnlocked} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
         )}
       </div>
     </div>
@@ -253,6 +260,7 @@ function QuickLobbyView({
   lobby,
   sel,
   ready,
+  sakuraUnlocked,
   pickChara,
   toggleReady,
   leave,
@@ -260,6 +268,7 @@ function QuickLobbyView({
   lobby: LobbyInfo;
   sel: CharId;
   ready: boolean;
+  sakuraUnlocked: boolean;
   pickChara: (id: CharId) => void;
   toggleReady: () => void;
   leave: () => void;
@@ -277,18 +286,26 @@ function QuickLobbyView({
             {CHARS[sel].name}
           </div>
           <div className="text-[10px] text-slate-400">{CHARS[sel].title}</div>
-          <div className="mt-2 grid grid-cols-3 gap-1">
-            {CHAR_ORDER.map((id) => (
-              <button
-                key={id}
-                onClick={() => pickChara(id)}
-                disabled={ready}
-                className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${sel === id ? 'scale-105 border-amber-300' : 'border-slate-600 opacity-70 hover:opacity-100'} disabled:cursor-not-allowed`}
-                style={{ background: `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
-              >
-                <Portrait id={id} alt={CHARS[id].name} className="h-full w-full object-contain object-bottom" />
-              </button>
-            ))}
+          <div className="mt-2 grid grid-cols-4 gap-1">
+            {CHAR_ORDER.map((id) => {
+              const hiddenLocked = id === 'sakura' && !sakuraUnlocked;
+              return (
+                <button
+                  key={id}
+                  onClick={() => pickChara(id)}
+                  disabled={ready || hiddenLocked}
+                  title={hiddenLocked ? '？？？' : CHARS[id].name}
+                  className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${sel === id ? 'scale-105 border-amber-300' : 'border-slate-600 opacity-70 hover:opacity-100'} disabled:cursor-not-allowed ${hiddenLocked ? 'opacity-40' : ''}`}
+                  style={{ background: hiddenLocked ? '#0f1016' : `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
+                >
+                  {hiddenLocked ? (
+                    <span className="pixel-text-shadow absolute inset-0 flex items-center justify-center text-xl text-slate-600">？</span>
+                  ) : (
+                    <Portrait id={id} alt={CHARS[id].name} className="h-full w-full object-contain object-bottom" />
+                  )}
+                </button>
+              );
+            })}
           </div>
           <button
             className={`mt-3 w-full border-2 py-2 text-sm ${ready ? 'border-slate-500 text-slate-300 hover:bg-slate-800' : 'border-amber-300 bg-amber-300 text-slate-950 hover:bg-amber-200'}`}
@@ -343,6 +360,7 @@ function TeamLobbyView({
   lobby,
   sel,
   ready,
+  sakuraUnlocked,
   pickChara,
   toggleReady,
   leave,
@@ -350,6 +368,7 @@ function TeamLobbyView({
   lobby: LobbyInfo;
   sel: CharId;
   ready: boolean;
+  sakuraUnlocked: boolean;
   pickChara: (id: CharId) => void;
   toggleReady: () => void;
   leave: () => void;
@@ -389,9 +408,16 @@ function TeamLobbyView({
 
   const addAi = (team: Team) => {
     if (full) return;
-    const ai: LobbyAi = { team, char: CHAR_ORDER[Math.floor(Math.random() * CHAR_ORDER.length)], difficulty: 'normal' };
+    const pool = charPool(sakuraUnlocked);
+    const ai: LobbyAi = { team, char: pool[Math.floor(Math.random() * pool.length)], difficulty: 'normal' };
     net.addAi(ai);
     audio.sfx('confirm');
+  };
+
+  const nextAiChar = (cur: CharId): CharId => {
+    const pool = charPool(sakuraUnlocked);
+    const i = pool.indexOf(cur);
+    return pool[(i + 1) % pool.length];
   };
 
   return (
@@ -433,19 +459,26 @@ function TeamLobbyView({
           )}
           {isHost && <div className="text-[10px] text-slate-500">ホストは準備ボタン不要（開始ボタンで開戦）</div>}
         </div>
-        <div className="mt-2 grid grid-cols-6 gap-1">
-          {CHAR_ORDER.map((id) => (
-            <button
-              key={id}
-              onClick={() => pickChara(id)}
-              disabled={ready}
-              title={CHARS[id].name}
-              className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${sel === id ? 'scale-105 border-amber-300' : 'border-slate-600 opacity-70 hover:opacity-100'} disabled:cursor-not-allowed`}
-              style={{ background: `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
-            >
-              <Portrait id={id} alt={CHARS[id].name} className="h-full w-full object-contain object-bottom" />
-            </button>
-          ))}
+        <div className="mt-2 grid grid-cols-7 gap-1">
+          {CHAR_ORDER.map((id) => {
+            const hiddenLocked = id === 'sakura' && !sakuraUnlocked;
+            return (
+              <button
+                key={id}
+                onClick={() => pickChara(id)}
+                disabled={ready || hiddenLocked}
+                title={hiddenLocked ? '？？？' : CHARS[id].name}
+                className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${sel === id ? 'scale-105 border-amber-300' : 'border-slate-600 opacity-70 hover:opacity-100'} disabled:cursor-not-allowed ${hiddenLocked ? 'opacity-40' : ''}`}
+                style={{ background: hiddenLocked ? '#0f1016' : `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
+              >
+                {hiddenLocked ? (
+                  <span className="pixel-text-shadow absolute inset-0 flex items-center justify-center text-xl text-slate-600">？</span>
+                ) : (
+                  <Portrait id={id} alt={CHARS[id].name} className="h-full w-full object-contain object-bottom" />
+                )}
+              </button>
+            );
+          })}
         </div>
         {isHost && (
           <div className="mt-1 px-1 text-[10px] text-slate-500">※ホストのキャラは選択した時点で確定（部屋にいる全員に見えています）</div>
@@ -522,8 +555,7 @@ function TeamLobbyView({
                       <div className="flex shrink-0 items-center gap-1">
                         <button
                           onClick={() => {
-                            const i = CHAR_ORDER.indexOf(a.char);
-                            net.updateAi(a.index, { char: CHAR_ORDER[(i + 1) % CHAR_ORDER.length] });
+                            net.updateAi(a.index, { char: nextAiChar(a.char) });
                             audio.sfx('move');
                           }}
                           title="キャラ変更"

@@ -42,7 +42,7 @@ export interface DrawOpts {
 function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): PoseParams {
   const base: PoseParams = { dy: 0, lean: 0, armF: 'down', armB: 'down', legs: 'stand', legFrame: 0, face: 'normal' };
   const bob = Math.floor(t / 24) % 2;
-  const hug = look.accessory === 'bookFront';
+  const hug = look.accessory === 'bookFront' || look.accessory === 'notebookFront';
   switch (pose) {
     case 'idle':
       return { ...base, dy: bob, armF: hug ? 'hold' : 'down', armB: hug ? 'hold' : 'down' };
@@ -113,6 +113,7 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
       if (wp === 'shy') return { ...base, dy: bob, face: 'smile', armF: 'block' };
       if (wp === 'peace') return { ...base, dy: bob, face: 'smile', armF: 'up' };
       if (wp === 'hug') return { ...base, dy: bob, face: 'smile', armF: 'hold', armB: 'hold' };
+      if (wp === 'adjust') return { ...base, dy: bob, face: 'smile', armF: 'block' }; // 眼鏡をくい、と上げる
       return { ...base, dy: bob, face: 'smile', armF: 'up', armB: 'up', legs: bob ? 'wide' : 'stand' };
     }
   }
@@ -140,6 +141,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   const skinD = look.skinDark ?? '#d9a986';
   const isF = look.gender === 'f';
   const outfit = look.outfit;
+  // 櫻優（内進・紺ネクタイ）など、キャラ固有のネクタイ色
+  const tieC = look.tieColor ?? (isF ? '#2f4f8f' : outfit === 'suit' ? '#7a5230' : '#a8262e');
   const blazer = '#26335f';
   const blazerD = '#1b2547';
   const sleeve = outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : blazer;
@@ -331,10 +334,10 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     R(-2 + ln, -30 + dy, 4, 2, '#f4f4f8');
     R(-1 + ln, -28 + dy, 2, 3, '#f4f4f8');
     if (isF) {
-      R(-2 + ln, -28 + dy, 4, 2, '#2f4f8f');
+      R(-2 + ln, -28 + dy, 4, 2, tieC);
       R(0 + ln, -28 + dy, 1, 2, '#c9a56a');
     } else {
-      R(0 + ln, -28 + dy, 1, 8, outfit === 'suit' ? '#7a5230' : '#a8262e');
+      R(0 + ln, -28 + dy, 1, 8, tieC);
     }
     if (outfit === 'blazer') {
       R(-1 + ln, -21 + dy, 1, 1, '#c9a86a');
@@ -365,6 +368,13 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(3 + ln, -27 + dy, 5, 7, '#f4f4f8');
         R(5 + ln, -26 + dy, 1, 5, '#111111');
         R(4 + ln, -24 + dy, 3, 1, '#111111');
+        break;
+      case 'notebookFront':
+        // 櫻優：恋愛学ノートを胸に抱える（ピンクの表紙・黒い背表紙）
+        R(-3 + ln, -28 + dy, 9, 7, '#e8b7c0');
+        R(-3 + ln, -28 + dy, 1, 7, '#8a5560');
+        R(-1 + ln, -26 + dy, 5, 1, '#7a4a52');
+        R(-1 + ln, -24 + dy, 4, 1, '#7a4a52');
         break;
       case 'map':
         R(4 + ln, -30 + dy, 3, 13, '#e6dcc0');
@@ -526,6 +536,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(hx, hy - 5, 6, 1, '#99a0aa');
         R(hx, hy - 3, 6, 1, '#99a0aa');
         R(hx, hy - 1, 4, 1, '#99a0aa');
+        break;
+      case 'notebook':
+        // 恋愛学ノート（ピンク表紙・黒背表紙・書き込み線）
+        R(hx - 2, hy - 8, 7, 9, '#e8b7c0');
+        R(hx - 2, hy - 8, 1, 9, '#8a5560');
+        R(hx, hy - 6, 3, 1, '#7a4a52');
+        R(hx, hy - 4, 3, 1, '#7a4a52');
+        R(hx, hy - 2, 2, 1, '#7a4a52');
         break;
       case 'python':
         for (let i = 0; i < 11; i++) {
