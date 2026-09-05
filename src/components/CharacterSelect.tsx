@@ -2,22 +2,30 @@ import { useEffect, useRef, useState } from 'react';
 import { CHARS, CHAR_ORDER, DIFFICULTY_SHORT } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
+import { SAKURA_UNLOCK_TEXT } from '@/game/unlocks';
 import type { CharDef, CharId, Difficulty, Mode } from '@/game/types';
 
 interface Props {
   mode: Mode;
   difficulty: Difficulty;
+  /** 解放済みキャラのID一覧（隠しキャラは含まれない） */
+  unlocked: CharId[];
   onDone: (p1: CharId, p2: CharId) => void;
   onBack: () => void;
 }
 
 const COLS = 3;
 
-export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Props) {
+export default function CharacterSelect({ mode, difficulty, unlocked, onDone, onBack }: Props) {
+  // 選択できるのは解放済みキャラだけ。未解放の隠しキャラは「???」として最後に並ぶ。
+  const LIST = unlocked.length ? unlocked : (['mie'] as CharId[]);
+  const LOCKED = CHAR_ORDER.filter((id) => !LIST.includes(id));
+  const ROWS = Math.max(1, Math.ceil(LIST.length / COLS));
   const [cur, setCur] = useState<[number, number]>([0, 1]);
   const [locked, setLocked] = useState<[boolean, boolean]>([false, false]);
   const [turn, setTurn] = useState<0 | 1>(0);
   const [rouletting, setRouletting] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const ref = useRef({ cur, locked, turn, rouletting });
   ref.current = { cur, locked, turn, rouletting };
   // 1Pモードでも相手CPUはプレイヤーが選べる（ランダムは自己対話のみ）
@@ -29,9 +37,11 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
     let col = c % COLS;
     let row = Math.floor(c / COLS);
     col = (col + dx + COLS) % COLS;
-    row = (row + dy + 2) % 2;
+    row = (row + dy + ROWS) % ROWS;
+    // 最終行に空きがある場合（7人など）は、はみ出した分を末尾に寄せる
+    const idx = Math.min(row * COLS + col, LIST.length - 1);
     const next: [number, number] = [...ref.current.cur] as [number, number];
-    next[side] = row * COLS + col;
+    next[side] = idx;
     setCur(next);
     audio.sfx('move');
   };
@@ -68,7 +78,7 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
     const id = window.setInterval(() => {
       n++;
       const next: [number, number] = [...ref.current.cur] as [number, number];
-      next[side] = Math.floor(Math.random() * CHAR_ORDER.length);
+      next[side] = Math.floor(Math.random() * LIST.length);
       setCur(next);
       audio.sfx('move');
       if (n >= total) {
@@ -83,7 +93,7 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
 
   useEffect(() => {
     if (locked[0] && locked[1]) {
-      const t = window.setTimeout(() => onDone(CHAR_ORDER[cur[0]], CHAR_ORDER[cur[1]]), 700);
+      const t = window.setTimeout(() => onDone(LIST[cur[0]], LIST[cur[1]]), 700);
       return () => window.clearTimeout(t);
     }
   }, [locked, cur, onDone]);
@@ -158,9 +168,21 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const hintTimer = useRef<number | null>(null);
+  const showHint = (text: string) => {
+    setHint(text);
+    if (hintTimer.current) window.clearTimeout(hintTimer.current);
+    hintTimer.current = window.setTimeout(() => setHint(null), 4200);
+  };
+
   const onCardClick = (idx: number) => {
     const { locked: lk, rouletting: rl } = ref.current;
     if (rl) return;
+    if (idx >= LIST.length) {
+      audio.sfx('back');
+      showHint(`？？？ は未解放 ── 解放条件：${SAKURA_UNLOCK_TEXT}`);
+      return;
+    }
     const side: 0 | 1 = !lk[0] ? 0 : 1;
     if (isAi[side] && !cpuSelectable) return;
     if (side === 1 && !cpuSelectable && isAi[1]) return;
@@ -173,8 +195,8 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
     }
   };
 
-  const c1 = CHARS[CHAR_ORDER[cur[0]]];
-  const c2 = CHARS[CHAR_ORDER[cur[1]]];
+  const c1 = CHARS[LIST[cur[0]]];
+  const c2 = CHARS[LIST[cur[1]]];
   const status =
     locked[0] && locked[1]
       ? '決定！ ✝'
@@ -217,11 +239,16 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
       <div className={`relative z-10 mt-3 border-2 px-4 py-1 text-sm md:text-base ${locked[0] && locked[1] ? 'border-amber-300 bg-amber-300 text-slate-950' : 'border-slate-600 bg-slate-950/70'}`}>
         <span className="animate-blink">▶</span> {status}
       </div>
+      {hint && (
+        <div className="relative z-10 mt-2 animate-pop border-2 border-cyan-400 bg-cyan-950/85 px-4 py-1 text-center text-xs text-cyan-100 md:text-sm">
+          {hint}
+        </div>
+      )}
 
       <div className="relative z-10 mt-4 grid w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_auto_1fr]">
         <DetailPanel def={c1} side={0} label={isAi[0] ? 'CPU' : '1P'} locked={locked[0]} />
         <div className="order-first grid grid-cols-3 gap-2 self-center lg:order-none">
-          {CHAR_ORDER.map((id, i) => {
+          {LIST.map((id, i) => {
             const d = CHARS[id];
             const s1 = cur[0] === i;
             const s2 = cur[1] === i && (locked[0] || isAi[0] || cpuSelectable);
@@ -255,6 +282,33 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
                 <div className="absolute left-0 top-0 h-full w-1.5" style={{ background: d.tieColor }} />
                 {s1 && <Tag text={isAi[0] ? 'CPU' : '1P'} color="bg-sky-400" side="left" locked={locked[0]} />}
                 {s2 && <Tag text={isAi[1] && !cpuSelectable ? 'CPU' : mode === '1p' ? 'CPU' : '2P'} color="bg-rose-400" side="right" locked={locked[1]} />}
+              </button>
+            );
+          })}
+          {/* 未解放の隠しキャラ（選べないが存在だけは見える） */}
+          {LOCKED.map((id) => {
+            const d = CHARS[id];
+            return (
+              <button
+                key={id}
+                onClick={() => {
+                  audio.sfx('back');
+                  showHint(`？？？ は未解放 ── 解放条件：${SAKURA_UNLOCK_TEXT}`);
+                }}
+                onMouseEnter={() => showHint(`？？？ は未解放 ── 解放条件：${SAKURA_UNLOCK_TEXT}`)}
+                onMouseLeave={() => setHint(null)}
+                title="未解放"
+                className="group relative aspect-[3/4] w-[26vw] max-w-[150px] cursor-not-allowed overflow-hidden border-4 border-slate-800 bg-slate-900 text-left lg:w-[150px]"
+              >
+                <div className="flex h-full w-full items-center justify-center bg-[repeating-linear-gradient(45deg,#0f172a_0_6px,#1e293b_6px_12px)]">
+                  <span className="pixel-text-shadow text-4xl text-slate-600">？</span>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 bg-slate-950/90 px-1.5 py-1">
+                  <div className="text-sm leading-tight text-slate-400 md:text-base">？？？</div>
+                  <div className="truncate text-[10px] text-slate-500">隠しキャラ（未解放）</div>
+                </div>
+                <div className="absolute left-0 top-0 h-full w-1.5" style={{ background: d.tieColor }} />
+                <div className="absolute right-1 top-1 bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-200">🔒 LOCKED</div>
               </button>
             );
           })}
@@ -299,6 +353,11 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
         {mode === '1p'
           ? '1P：WASD／矢印で移動・F/Enter 決定・G/Esc 戻る　※自分→相手の順で両方選べます'
           : '1P：WASD 移動・F 決定・G 戻る ／ 2P：矢印 移動・K 決定・L 戻る ／ クリックでも選べる'}
+        {LOCKED.length > 0 && (
+          <div className="mt-1 text-cyan-300">
+            🔒 ？？？ は未解放 ── 解放条件：{SAKURA_UNLOCK_TEXT}
+          </div>
+        )}
       </div>
     </div>
   );

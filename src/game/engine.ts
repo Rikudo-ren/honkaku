@@ -1,5 +1,5 @@
 import { CHARS, INTRO_PAIRS, pairKey } from './characters';
-import { COMBO_COMMENTS, HIT_TEXTS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
+import { COMBO_COMMENTS, HIT_TEXTS, SAKURA_LAWS, SAKURA_MEMOS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
 import { EMPTY_INPUT } from './types';
 import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId, Team } from './types';
 
@@ -556,6 +556,8 @@ export class Battle {
         return 'paper';
       case 'rei':
         return 'point';
+      case 'sakura':
+        return 'paper';
     }
   }
 
@@ -629,6 +631,8 @@ export class Battle {
         this.bubble(first.idx, pair.a);
         this.queue.push({ at: this.t + 30, fn: () => this.bubble(other.idx, pair.b) });
         if (pair.note) this.queue.push({ at: this.t + 34, fn: () => this.text(pair.note!, W / 2, 70, { size: 9, color: '#fca5a5', life: 50, vy: -0.2 }) });
+        // 二往復目（あれば first がもう一言）
+        if (pair.c) this.queue.push({ at: this.t + 62, fn: () => this.bubble(first.idx, pair.c!) });
       } else {
         this.bubble(a.idx, a.def.intro);
         this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, b.def.intro) });
@@ -670,7 +674,19 @@ export class Battle {
     if (winner === -1) this.setBanner('DOUBLE K.O.', '自演？', '#fca5a5', 130, true);
     else {
       const w = this.teamRep(winner);
-      this.setBanner(w.def.koText, w.id === 'mie' ? '四百二十一回目' : w.id === 'rei' ? '面白かった' : undefined, w.def.color, 130, true);
+      this.setBanner(
+        w.def.koText,
+        w.id === 'mie'
+          ? '四百二十一回目'
+          : w.id === 'rei'
+            ? '面白かった'
+            : w.id === 'sakura'
+              ? 'n=1（分析不能）'
+              : undefined,
+        w.def.color,
+        130,
+        true,
+      );
     }
     this.sfx('ko');
   }
@@ -1178,6 +1194,10 @@ export class Battle {
     const hy = vic.y - 28;
     this.spark(hx, hy, dmg >= 10 ? '#fca5a5' : '#fff6a0', dmg >= 10 ? 12 : 7, dmg >= 10 ? 2 : 1);
     if (att?.id === 'ryoma') this.crossBurst(hx, hy, 3);
+    // 櫻優は当てた瞬間にも観測メモを走り書きする
+    if (att?.id === 'sakura' && this.rng() < 0.4) {
+      this.text(this.pick(SAKURA_MEMOS), hx, hy - 22, { size: 7, color: '#a5f3fc', life: 34, vy: -0.6 });
+    }
     const label = att?.combo && att.combo >= 2 ? undefined : this.pick(HIT_TEXTS);
     if (label) this.text(label, hx, hy - 10, { size: dmg >= 10 ? 11 : 8, color: dmg >= 10 ? '#fecaca' : '#ffffff', life: 30, vy: -0.7 });
     if (att && att.combo >= 2) {
@@ -1292,6 +1312,12 @@ export class Battle {
           } else {
             this.applyHit(att, f, p.dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: p.kby, knockdown: p.knockdown }, dir, p.kind === 'cross' ? 'cross' : 'hit');
             if (p.kind === 'cross') this.crossBurst(f.x, f.y - 30, 4);
+            if (p.kind === 'note') {
+              // シュレディンガーの好意：観測された瞬間に重ね合わせが崩れ、相手の✝本質✝が確定して削れる
+              f.meter = Math.max(0, f.meter - 12);
+              this.text('観測', f.x, f.y - 68, { size: 10, color: '#67e8f9', life: 45, vy: -0.4 });
+              this.text('波動関数、崩壊', f.x, f.y - 80, { size: 7, color: '#a5f3fc', life: 45, vy: -0.3 });
+            }
             if (p.kind === 'kuraishi') this.text('✝✝✝', f.x, f.y - 62, { size: 12, color: '#f8fafc', life: 40, vy: -0.5 });
             if (p.kind === 'basketball') this.text('用は済んだ', p.x, p.y - 14, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
             if (p.kind === 'kusa') this.text('草', f.x + (this.rng() - 0.5) * 20, f.y - 40 - this.rng() * 20, { size: 8, color: '#4ade80', life: 30, vy: -0.8 });
@@ -1493,6 +1519,51 @@ export class Battle {
           this.sfx('cross');
         }
         if (T >= 64) this.setState(f, 'idle');
+        break;
+      }
+      case 'sakura': {
+        // 研究ノートの全ページが飛び出す。観測された理論は崩壊する。
+        if (T === 1) {
+          this.setBanner('恋愛発生の第十五法則（暫定）', '〈面白い〉は理論を超える', c, 120);
+          this.text('観測します', f.x, f.y - 58, { size: 8, color: '#a5f3fc', life: 50, vy: -0.4 });
+        }
+        if (T >= 6 && T <= 40 && T % 3 === 0) {
+          this.spawnProj({
+            kind: 'note',
+            owner: f.idx,
+            x: f.x + f.facing * 8,
+            y: f.y - 30,
+            vx: f.facing * (1.4 + this.rng() * 1.8),
+            vy: -2.6 + this.rng() * 5.2,
+            w: 9,
+            h: 6,
+            dmg: 3,
+            hitstun: 12,
+            kbx: 0.8,
+            kby: 0,
+            life: 170,
+            homing: o.idx,
+            text: this.pick(SAKURA_LAWS),
+          });
+          if (T % 9 === 0) this.sfx('special');
+        }
+        if (T === 46) {
+          // 観測：波動関数、崩壊
+          const dir: Facing = o.x >= f.x ? 1 : -1;
+          if (this.hittable(o)) {
+            this.applyHit(f, o, 14, { hitstun: 30, kbx: 4, kby: 4.5, knockdown: true }, dir, 'heavy');
+            o.meter = 0;
+            this.text('観測', o.x, o.y - 58, { size: 16, color: '#67e8f9', life: 55, vy: -0.4, shake: true });
+            this.text('理論、崩壊', o.x, o.y - 72, { size: 9, color: '#e0f2fe', life: 55, vy: -0.3 });
+            this.ring(o.x, o.y - 26, '#22d3ee', 40);
+            this.shake = Math.max(this.shake, 8);
+          } else {
+            this.text('観測不能', f.x, f.y - 58, { size: 10, color: '#67e8f9', life: 45, vy: -0.4 });
+          }
+          this.sfx('heavy');
+        }
+        if (T === 52) this.text('……助けて。', f.x, f.y - 58, { size: 8, color: '#a5f3fc', life: 60, vy: -0.3 });
+        if (T >= 62) this.setState(f, 'idle');
         break;
       }
     }

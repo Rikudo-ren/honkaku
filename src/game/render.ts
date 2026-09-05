@@ -284,6 +284,21 @@ export class Renderer {
         drawCross(g, x + 10, y - 30 + bob, '#f8fafc', '#e2e8f0');
         break;
       }
+      case 'note': {
+        // 櫻優の研究ノート（観測されるまで中身は確定しない）
+        const flap = Math.floor(t / 5) % 2;
+        g.fillStyle = '#1e3a5f';
+        g.fillRect(x - 4, y - 3, 9, 7);
+        g.fillStyle = '#f8fafc';
+        g.fillRect(x - 3, y - 2, 7, 5);
+        g.fillStyle = '#94a3b8';
+        g.fillRect(x - 2, y - 1 + flap, 5, 1);
+        g.fillRect(x - 2, y + 1 + flap, 5, 1);
+        g.fillStyle = '#22d3ee';
+        g.fillRect(x - 4, y - 3, 9, 1);
+        g.fillRect(x - 4, y + 3, 9, 1);
+        break;
+      }
       case 'formula':
       case 'qed':
       case 'kusa':
@@ -812,6 +827,7 @@ export class Renderer {
       if (p.kind === 'formula') this.txt(p.text ?? '∑', p.x, p.y, 8 + Math.sin(p.t / 4) * 1, '#ffffff', 'center', '#1e3a8a');
       else if (p.kind === 'qed') this.txt('Q.E.D.', p.x, p.y, 10, '#fde68a', 'center', '#7c2d12');
       else if (p.kind === 'kusa') this.txt('草', p.x, p.y, 8, '#4ade80', 'center', '#052e16');
+      else if (p.kind === 'note') this.txt(p.text ?? '要検証', p.x, p.y - 9, 7, '#0e7490', 'center', '#e0f2fe');
     }
 
     // fighter status labels

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { CHARS, DIFFICULTY_LABELS } from '@/game/characters';
+import { CHARS, DIFFICULTY_LABELS, MATCHUP_SCRIPTS, pairKey, type MatchupScript } from '@/game/characters';
 import { HONSHITSU_QUOTES } from '@/game/quotes';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
-import type { Setup, Side } from '@/game/types';
+import type { CharId, Setup, Side } from '@/game/types';
 
 interface Props {
   setup: Setup;
@@ -12,11 +12,12 @@ interface Props {
   onSelect: () => void;
   onTitle: () => void;
   willUnlockExtreme?: boolean;
+  willUnlockSakura?: boolean;
 }
 
 const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
-export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme }: Props) {
+export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme, willUnlockSakura }: Props) {
   const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
   if (teamMode) return <TeamResult setup={setup} result={result} onRematch={onRematch} onSelect={onSelect} onTitle={onTitle} />;
   const w = result.winner;
@@ -27,6 +28,8 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
   const [quote] = useState(() => pick(wd.wins));
   const [hq] = useState(() => pick(HONSHITSU_QUOTES));
   const [postNo] = useState(() => 200 + Math.floor(Math.random() * 700));
+  // 試合後の掛け合い（特定の組み合わせのみ・原作の会話を再現）
+  const script = MATCHUP_SCRIPTS[pairKey(setup.p1, setup.p2)];
   const winnerLabel =
     setup.mode === 'online'
       ? w === setup.onlineSide
@@ -66,7 +69,9 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
             ? `全科目学年首席、格闘でも首席。本人談「面白かった」。`
             : wd.id === 'naito'
               ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
-              : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
+              : wd.id === 'sakura'
+                ? `紺のネクタイが${ld.name}を観測した。n=1。本人は「記録しました」と言った。`
+                : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#0b0b18] px-4 py-8 text-slate-100">
@@ -117,6 +122,14 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               <div className="mt-1 text-xs text-slate-300">タイトルに戻ると豪華演出が流れます</div>
             </div>
           )}
+          {willUnlockSakura && (
+            <div className="mt-4 animate-pop border-2 border-cyan-300 bg-cyan-950/80 p-3 text-center">
+              <div className="text-xs tracking-widest text-cyan-300">NEW FIGHTER</div>
+              <div className="text-xl font-bold text-cyan-100">隠しキャラ「櫻優」解禁間近…</div>
+              <div className="mt-1 text-xs text-slate-300">タイトルに戻ると豪華演出が流れます</div>
+            </div>
+          )}
+          {script && <MatchupScriptBox script={script} a={setup.p1} b={setup.p2} />}
           <div className="mt-5 border-2 border-slate-700 bg-slate-950/80 p-3 text-sm">
             <div className="text-xs text-emerald-300">匿名掲示板「ヘイカツ雑談スレ」に新着</div>
             <div className="mt-1 text-slate-200">
@@ -260,6 +273,32 @@ function TeamResult({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 試合後の掛け合い（特定の組み合わせだけ表示。原作の会話を再現した二〜三往復） */
+function MatchupScriptBox({ script, a, b }: { script: MatchupScript; a: CharId; b: CharId }) {
+  const firstIsA = script.first === a;
+  const firstDef = CHARS[script.first];
+  const otherDef = CHARS[firstIsA ? b : a];
+  return (
+    <div className="mt-4 animate-pop border-2 border-amber-300/70 bg-slate-950/85 p-3">
+      <div className="text-[10px] tracking-widest text-amber-300">試合後の記録 ── 観測ノートより</div>
+      <div className="mt-1.5 space-y-1">
+        {script.lines.map((line, i) => {
+          const who = i % 2 === 0 ? firstDef : otherDef;
+          return (
+            <div key={i} className="text-xs leading-snug md:text-sm">
+              <span className="mr-1 font-bold" style={{ color: who.color }}>
+                {who.name}
+              </span>
+              <span className="text-slate-200">「{line}」</span>
+            </div>
+          );
+        })}
+      </div>
+      {script.note && <div className="mt-2 border-t border-slate-700 pt-1 text-[10px] leading-snug text-slate-400">{script.note}</div>}
     </div>
   );
 }

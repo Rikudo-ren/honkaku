@@ -1,4 +1,4 @@
-export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei';
+export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura';
 export type Side = 0 | 1;
 /** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
 export type Team = 0 | 1;
@@ -101,7 +101,8 @@ export type ProjKind =
   | 'mikan'
   | 'vending'
   | 'kuraishi'
-  | 'qed';
+  | 'qed'
+  | 'note';
 
 export interface ProjectileSpec {
   kind: ProjKind;
@@ -174,6 +175,8 @@ export interface CharDef {
   dmgMul: number;
   look: Look;
   moves: { light: MoveDef; heavy: MoveDef; special: MoveDef };
+  /** 隠しキャラクター（解放条件を満たすまで選択不可） */
+  hidden?: boolean;
   superName: string;
   superQuote: string;
   superDesc: string;
