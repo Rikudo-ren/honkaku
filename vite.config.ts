@@ -17,6 +17,15 @@ export default defineConfig({
     },
   },
   server: {
+    host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      "/colyseus": {
+        target: "http://127.0.0.1:2567",
+        ws: true,
+        changeOrigin: true,
+        rewrite: (url) => url.replace(/^\/colyseus/, ""),
+      },
+    },
   },
 });

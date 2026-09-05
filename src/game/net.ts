@@ -1,12 +1,13 @@
 import { Client, Room } from 'colyseus.js';
 import { EMPTY_INPUT } from './types';
+import { InputBuffer } from './lockstep';
 import type { CharId, Difficulty, InputState, Side, StageId, Team } from './types';
 
 /** ─────────────────────────────────────────────
  *  オンライン対戦ネットワーク層（Colyseus クライアント）
  *
  * 方式：ディレイ方式ロックステップ（入力タイムアウト補完付き）
- *   - サーバーは「マッチメイキング＋入力リレー」に加え、入力の遅延を監視
+ *   - サーバーは実入力で要求されたフレームだけを監視（実時間で先走らない）
  *   - 全クライアントが同じシードで Battle を決定論的に実行
  *   - 各フレームの入力(8bitマスク)を全員で送り合う（自スロットもサーバー経由の正規値を使う）
  *   - 誰かの入力が猶予時間を過ぎても届かない場合、サーバーがニュートラル(0)で
@@ -84,7 +85,7 @@ export interface StartData {
   fighters: StartFighter[];
 }
 
-type NetEvent = 'lobby' | 'start' | 'opponent-left' | 'error' | 'ping' | 'desync' | 'lag';
+type NetEvent = 'lobby' | 'start' | 'opponent-left' | 'error' | 'ping' | 'desync' | 'lag' | 'disconnected';
 
 /** InputState → 8bit マスク */
 const KEYS: (keyof InputState)[] = ['left', 'right', 'up', 'down', 'light', 'heavy', 'special', 'super'];
@@ -104,15 +105,11 @@ export function unmask(m: number): InputState {
 
 /** 接続先エンドポイントの決定 */
 function resolveEndpoint(): string {
-  const fromEnv = import.meta.env.VITE_COLYSEUS_URL as string | undefined;
+  const fromEnv = (import.meta.env.VITE_COLYSEUS_URL as string | undefined)?.trim();
   if (fromEnv) return fromEnv;
-  const h = window.location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1') return 'ws://localhost:2567';
-  // サンドボックス/プレビュー環境（{port}-{id}.e2b.app）ではポート差し替えで推測
-  const m = h.match(/^\d+-(.+\.e2b\.app)$/);
-  if (m) return `wss://2567-${m[1]}`;
-  // 本番は VITE_COLYSEUS_URL を必ず設定すること
-  return 'ws://localhost:2567';
+  // 開発・プレビューは同一オリジンの Vite プロキシ経由。利用者の localhost は参照しない。
+  if (import.meta.env.DEV) return `${window.location.origin.replace(/^http/, 'ws')}/colyseus`;
+  throw new Error('オンライン対戦サーバーが未設定です。VITE_COLYSEUS_URL を設定して再デプロイしてください。');
 }
 
 class NetClient {
@@ -130,14 +127,17 @@ class NetClient {
   latency = -1;
   /** 自分のプレイヤー名（ロビー・対戦中の表示に使う。ブラウザに保存される） */
   name = loadName();
+  /** 対戦画面への遷移中に届いた切断・退室通知も取りこぼさない。 */
+  disconnectReason: string | null = null;
+  opponentLeft = false;
 
   /**
    * サーバーが配信した正規入力バッファ frame → (slot → mask)。
    * 自スロットの入力もサーバー経由（リレー）でここに入る。
    * タイムアウト時はサーバーがニュートラル(0)を補完して配信するので、
-   * 誰か一人が重くても全員分の入力が必ず揃い、ゲームが固まらない。
+   * 試合開始後の一時的な遅延を補完し、全員が同じ入力で進行する。
    */
-  private remote = new Map<number, Map<number, number>>();
+  private remote = new InputBuffer();
   /** サーバーが「重い」と通知したスロット（HUD表示用） */
   lagSlots = new Set<number>();
   /** 相手から届いた同期ハッシュ frame → hash */
@@ -145,6 +145,10 @@ class NetClient {
   /** 自分が計算した同期ハッシュ frame → hash */
   private localHash = new Map<number, number>();
   private pingTimer: number | null = null;
+
+  get latestInputFrame() {
+    return this.remote.latestFrame;
+  }
 
   get connected() {
     return !!this.room;
@@ -214,45 +218,49 @@ class NetClient {
 
   private async join(fn: (c: Client) => Promise<Room>) {
     this.leave();
-    this.client = new Client(resolveEndpoint());
-    const room = await fn(this.client);
+    const client = new Client(resolveEndpoint());
+    this.client = client;
+    const room = await fn(client);
+    if (this.client !== client) {
+      void room.leave().catch(() => undefined);
+      throw new Error('入室をキャンセルしました。');
+    }
     this.room = room;
+    const onMessage = <T>(type: string, callback: (data: T) => void) => {
+      room.onMessage<T>(type, (data) => {
+        if (this.room === room) callback(data);
+      });
+    };
 
-    room.onMessage('welcome', (d: { side: Side }) => {
+    onMessage('welcome', (d: { side: Side }) => {
       this.side = d.side;
     });
-    room.onMessage('lobby', (d: LobbyInfo) => {
+    onMessage('lobby', (d: LobbyInfo) => {
       this.lobby = d;
       this.emit('lobby', d);
     });
-    room.onMessage('start', (d: StartData) => {
+    onMessage('start', (d: StartData) => {
       this.startData = d;
+      this.opponentLeft = false;
       this.remote.clear();
       this.remoteHash.clear();
       this.localHash.clear();
       this.lagSlots.clear();
       this.emit('start', d);
     });
-    room.onMessage('i', (d: [number, number, number, number]) => {
+    onMessage('i', (d: [number, number, number, number]) => {
       // [matchId, frame, slot, mask]（自スロットのリレーも含む。タイムアウト補完の0もここに来る）
       if (!this.startData || d[0] !== this.startData.matchId) return;
       const frame = d[1];
       const slot = d[2];
       const mask = d[3];
-      let row = this.remote.get(frame);
-      if (!row) {
-        row = new Map<number, number>();
-        this.remote.set(frame, row);
-      }
-      // サーバーの正規ストリームは各 frame/slot につき最初に届いた値が確定。
-      // タイムアウト補完(0)が後から本物の入力で上書きされないよう先勝ちにする（決定論維持）。
-      if (!row.has(slot)) row.set(slot, mask);
+      this.remote.add(frame, slot, mask);
     });
-    room.onMessage('lag', (slots: number[]) => {
+    onMessage('lag', (slots: number[]) => {
       this.lagSlots = new Set(Array.isArray(slots) ? slots : []);
       this.emit('lag');
     });
-    room.onMessage('h', (d: [number, number, number]) => {
+    onMessage('h', (d: [number, number, number]) => {
       // [matchId, frame, hash]
       if (!this.startData || d[0] !== this.startData.matchId) return;
       const frame = d[1];
@@ -262,18 +270,25 @@ class NetClient {
       const mine = this.localHash.get(frame);
       if (mine !== undefined && mine !== hash) this.emit('desync');
     });
-    room.onMessage('pong', (t: number) => {
+    onMessage('pong', (t: number) => {
       this.latency = Math.round(performance.now() - t);
       this.emit('ping', this.latency);
     });
-    room.onMessage('opponent-left', () => {
+    onMessage('opponent-left', () => {
+      this.opponentLeft = true;
       this.emit('opponent-left');
     });
-    room.onError((_code, message) => this.emit('error', message ?? '通信エラー'));
+    room.onError((_code, message) => {
+      if (this.room === room) this.emit('error', message ?? '通信エラー');
+    });
     room.onLeave(() => {
+      // 古い部屋の遅れて届いた onLeave で、新しく入った部屋を消さない。
+      if (this.room !== room) return;
       this.room = null;
       this.client = null;
       this.stopPing();
+      this.disconnectReason = 'サーバーとの接続が切れました。タイトルから再度入室してください。';
+      this.emit('disconnected', this.disconnectReason);
     });
 
     room.send('hello');
@@ -351,18 +366,15 @@ class NetClient {
 
   /** 他プレイヤーのフレーム入力を取得（未着なら undefined） */
   remoteInput(frame: number, slot: number): number | undefined {
-    return this.remote.get(frame)?.get(slot);
+    return this.remote.get(frame, slot);
   }
 
   /** 実行済みフレームの受信バッファを掃除 */
   discardConsumedFrame(frame: number) {
-    this.remote.delete(frame);
+    this.remote.discard(frame);
     const minFrame = frame - HASH_WINDOW;
     this.trimHashMap(this.remoteHash, minFrame);
     this.trimHashMap(this.localHash, minFrame);
-    for (const key of this.remote.keys()) {
-      if (key < minFrame) this.remote.delete(key);
-    }
   }
 
   /** 同期チェック：ハッシュ送信と比較 */
@@ -387,13 +399,17 @@ class NetClient {
   /** 退室 */
   leave() {
     this.stopPing();
+    const room = this.room;
+    this.room = null;
+    this.client = null;
     try {
-      this.room?.leave();
+      void room?.leave().catch(() => undefined);
     } catch {
       /* ignore */
     }
-    this.client = null;
-    this.room = null;
+    this.disconnectReason = null;
+    this.opponentLeft = false;
+    this.latency = -1;
     this.lobby = null;
     this.startData = null;
     this.remote.clear();
