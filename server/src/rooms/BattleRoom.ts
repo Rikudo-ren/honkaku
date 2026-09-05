@@ -57,6 +57,8 @@ export class BattleRoom extends Room {
   private isPrivate = false;
   private teamMode = false;
   private started = false;
+  /** 試合中の入力スロット所有者。クライアント入力のなりすまし防止に使う。 */
+  private lastFighters: Array<{ sessionId: string | null }> = [];
 
   onCreate(options: { private?: boolean } = {}) {
     this.isPrivate = !!options?.private;
@@ -149,9 +151,20 @@ export class BattleRoom extends Room {
     });
 
     // ロックステップ入力（[frame, slot, bitmask]）を他の全員へリレー
-    this.onMessage("i", (client, data) => this.relay(client, "i", data));
+    this.onMessage("i", (client, data) => {
+      if (!this.started || !Array.isArray(data) || data.length !== 3) return;
+      const [frame, slot, mask] = data;
+      if (!Number.isInteger(frame) || frame < 0 || !Number.isInteger(slot) || slot < 0 || slot >= this.lastFighters.length || !Number.isInteger(mask) || mask < 0 || mask > 0xff) return;
+      if (this.lastFighters[slot]?.sessionId !== client.sessionId) return;
+      this.relay(client, "i", [frame, slot, mask]);
+    });
     // 同期チェック用ハッシュ（[frame, hash]）を他の全員へリレー
-    this.onMessage("h", (client, data) => this.relay(client, "h", data));
+    this.onMessage("h", (client, data) => {
+      if (!this.started || !Array.isArray(data) || data.length !== 2) return;
+      const [frame, hash] = data;
+      if (!Number.isInteger(frame) || frame < 0 || !Number.isInteger(hash)) return;
+      this.relay(client, "h", [frame, hash]);
+    });
 
     this.onMessage("ping", (client, t) => client.send("pong", t));
     this.onMessage("end", () => {
@@ -219,6 +232,7 @@ export class BattleRoom extends Room {
       sessionId,
       aiDifficulty: "normal",
     }));
+    this.lastFighters = fighters.map(({ sessionId }) => ({ sessionId }));
     this.broadcast("start", {
       seed: Math.floor(Math.random() * 0xffffffff) >>> 0,
       stage: STAGES[Math.floor(Math.random() * STAGES.length)],
@@ -251,6 +265,7 @@ export class BattleRoom extends Room {
       ...humans.map(([sessionId, p]) => ({ char: p.char, team: p.team, sessionId, aiDifficulty: "normal" })),
       ...this.aiSlots.map((a) => ({ char: a.char, team: a.team, sessionId: null, aiDifficulty: a.difficulty })),
     ];
+    this.lastFighters = fighters.map(({ sessionId }) => ({ sessionId }));
     this.broadcast("start", {
       seed: Math.floor(Math.random() * 0xffffffff) >>> 0,
       stage: STAGES[Math.floor(Math.random() * STAGES.length)],
