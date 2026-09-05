@@ -6,7 +6,8 @@ import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import { CHARS, STAGES } from '@/game/characters';
 import { net, maskOf, unmask } from '@/game/net';
-import type { InputState, Setup, Side } from '@/game/types';
+import type { FighterSetup, InputState, Setup, Side } from '@/game/types';
+import { EMPTY_INPUT, TEAM_NAMES } from '@/game/types';
 
 /** オンライン時の入力遅延フレーム数（この分だけ先のフレームに自分の入力を予約してジッターを吸収する） */
 const NET_DELAY = 5;
@@ -75,6 +76,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
   const st = STAGES.find((s) => s.id === setup.stage) ?? STAGES[0];
   const online = setup.mode === 'online';
   const mySide: Side = online ? (setup.onlineSide ?? 0) : 0;
+  const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
 
   useEffect(() => {
     const game = gameRef.current;
@@ -86,10 +88,18 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     const renderer = new Renderer(game, fx);
     let cutinTimer = 0;
     let endTimer = 0;
+    // チーム戦／1対1 のファイター構成を決める
+    const fighters: FighterSetup[] = teamMode
+      ? setup.fighters!
+      : [
+          { char: setup.p1, team: 0, ai: online ? false : setup.mode === 'cpu', tag: online ? (mySide === 0 ? 'あなた' : '相手') : setup.mode === 'cpu' ? 'CPU' : '1P' },
+          { char: setup.p2, team: 1, ai: online ? false : setup.mode !== '2p', tag: online ? (mySide === 1 ? 'あなた' : '相手') : setup.mode === '2p' ? '2P' : 'CPU' },
+        ];
     const battle = new Battle({
       p1: setup.p1,
       p2: setup.p2,
       ai: online ? [false, false] : [setup.mode === 'cpu', setup.mode !== '2p'],
+      fighters: fighters.map((f) => ({ char: f.char, team: f.team, ai: f.ai, aiDifficulty: f.aiDifficulty, tag: f.tag })),
       difficulty: setup.difficulty,
       stage: setup.stage,
       seed: setup.seed,
@@ -123,6 +133,9 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     let acc = 0;
     const STEP = 1000 / 60;
 
+    // オンラインで自分が操作するスロット（1対1では side と一致）
+    const mySlot = teamMode ? (setup.mySlot ?? 0) : mySide;
+
     const stepOnline = (): boolean => {
       // 自分の入力を NET_DELAY フレーム先に予約して送信
       const target = frame + NET_DELAY;
@@ -130,21 +143,39 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         // オンラインではどちらのキー配置（WASD系・矢印系・タッチ）でも操作できるようマージ
         const mask = maskOf(im.poll(0)) | maskOf(im.poll(1));
         localBuf.set(target, mask);
-        net.sendInput(target, mask);
+        net.sendInput(target, mySlot, mask);
       }
-      // このフレームに必要な入力が揃っているか
-      const mine = frame < NET_DELAY ? 0 : localBuf.get(frame);
-      const theirs = frame < NET_DELAY ? 0 : net.remoteInput(frame);
-      if (mine === undefined || theirs === undefined) {
-        return false; // 相手の入力待ち
+      // このフレームに必要な入力が揃っているか（人間スロット全員分）
+      const inputs: InputState[] = [];
+      for (let s = 0; s < fighters.length; s++) {
+        if (fighters[s].ai) {
+          inputs.push(EMPTY_INPUT);
+          continue;
+        }
+        if (frame < NET_DELAY) {
+          inputs.push(EMPTY_INPUT);
+          continue;
+        }
+        const m = s === mySlot ? localBuf.get(frame) : net.remoteInput(frame, s);
+        if (m === undefined) return false; // 誰かの入力待ち
+        inputs.push(unmask(m));
       }
-      const inputs: [InputState, InputState] = mySide === 0 ? [unmask(mine), unmask(theirs)] : [unmask(theirs), unmask(mine)];
       battle.step(inputs);
       localBuf.delete(frame - 60);
       frame++;
       // 定期的に同期チェック
       if (frame % 60 === 0) net.sendHash(frame, battle.stateHash());
       return true;
+    };
+
+    const stepLocal = () => {
+      const polls = [im.poll(0), im.poll(1)];
+      const inputs: InputState[] = fighters.map((f, i) => {
+        if (f.ai) return EMPTY_INPUT;
+        if (teamMode) return f.pad == null ? EMPTY_INPUT : polls[f.pad];
+        return polls[i] ?? EMPTY_INPUT;
+      });
+      battle.step(inputs);
     };
 
     const loop = (now: number) => {
@@ -163,7 +194,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
               break;
             }
           } else {
-            battle.step([im.poll(0), im.poll(1)]);
+            stepLocal();
           }
           acc -= STEP;
           n++;
@@ -219,7 +250,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       offLeft?.();
       offDesync?.();
     };
-  }, [setup, online, mySide]);
+  }, [setup, online, mySide, teamMode]);
 
   const resume = () => {
     pausedRef.current = false;
@@ -229,6 +260,12 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
 
   const p1 = CHARS[setup.p1];
   const p2 = CHARS[setup.p2];
+  // タッチ操作が駆動するパッド：オンラインは0（両パッドをマージして送信するためどちらでも可）、
+  // ローカルチーム戦は最初の人間ファイターのパッド、1対1ローカルは0
+  const touchPad: Side = online ? 0 : teamMode ? (setup.fighters?.find((f) => !f.ai && f.pad != null)?.pad ?? 0) : 0;
+  const myFighter = teamMode && setup.fighters ? setup.fighters[online ? (setup.mySlot ?? 0) : 0] : null;
+  const myChar = myFighter ? CHARS[myFighter.char] : mySide === 0 ? p1 : p2;
+  const teamCounts = teamMode && setup.fighters ? [setup.fighters.filter((f) => f.team === 0).length, setup.fighters.filter((f) => f.team === 1).length] : null;
 
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center bg-[#05050c] select-none">
@@ -338,7 +375,7 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
                   再開（Esc）
                 </button>
                 <button className="border-2 border-slate-400 py-1.5 text-slate-100 hover:bg-slate-800" onClick={() => onQuit('select')}>
-                  キャラクター選択へ
+                  {teamMode ? 'チーム編成へ' : 'キャラクター選択へ'}
                 </button>
                 <button className="border-2 border-slate-400 py-1.5 text-slate-100 hover:bg-slate-800" onClick={() => onQuit('title')}>
                   タイトルへ
@@ -349,11 +386,23 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         )}
 
         {/* タッチ操作UI（D-pad & アクションボタン） */}
-        {showTouchControls && input && !paused && <TouchControls input={input} side={mySide} />}
+        {showTouchControls && input && !paused && <TouchControls input={input} side={touchPad} />}
       </div>
 
       <div className="mt-2 hidden w-full max-w-5xl items-center justify-between px-3 text-[11px] text-slate-400 md:flex">
-        {online ? (
+        {teamMode && teamCounts ? (
+          <>
+            <span>
+              <span style={{ color: myChar.color }}>{myChar.name}</span>（あなた）：WASD/矢印/タッチ 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
+            </span>
+            <span className="text-slate-500">
+              {TEAM_NAMES[0]} {teamCounts[0]}人 vs {TEAM_NAMES[1]} {teamCounts[1]}人 ／ {st.name} ／ {online ? 'オンライン乱戦' : 'オフライン乱戦'} ／ M ミュート
+            </span>
+            <span>
+              {setup.mode === 'online' ? '回線待機あり' : 'Esc ポーズ'}
+            </span>
+          </>
+        ) : online ? (
           <>
             <span>
               <span style={{ color: (mySide === 0 ? p1 : p2).color }}>{(mySide === 0 ? p1 : p2).name}</span>（あなた）：WASD/矢印/タッチ 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺

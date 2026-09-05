@@ -1,32 +1,55 @@
 import { Client, Room } from 'colyseus.js';
 import { EMPTY_INPUT } from './types';
-import type { CharId, InputState, Side, StageId } from './types';
+import type { CharId, Difficulty, InputState, Side, StageId, Team } from './types';
 
 /** ─────────────────────────────────────────────
  *  オンライン対戦ネットワーク層（Colyseus クライアント）
  *
  *  方式：ディレイ方式ロックステップ
  *   - サーバーは「マッチメイキング＋入力リレー」のみ
- *   - 両クライアントが同じシードで Battle を決定論的に実行
- *   - 各フレームの入力(8bitマスク)を相手に送り合う
+ *   - 全クライアントが同じシードで Battle を決定論的に実行
+ *   - 各フレームの入力(8bitマスク)を全員で送り合う
+ *   - 1対1クイックマッチ＋多人数チーム戦（同時乱戦）対応
  *  ───────────────────────────────────────────── */
 
 export interface LobbyPlayer {
-  side: Side;
+  /** サーバー発行のセッションID */
+  id: string;
+  team: Team;
   char: CharId | null;
   ready: boolean;
+  host: boolean;
+}
+
+export interface LobbyAi {
+  team: Team;
+  char: CharId;
+  difficulty: Difficulty;
 }
 
 export interface LobbyInfo {
   code: string;
   private: boolean;
+  /** true=チーム戦ルーム（ホスト開始式）、false=1対1クイック（両者readyで自動開始） */
+  teamMode: boolean;
+  maxHumans: number;
   players: LobbyPlayer[];
+  ai: LobbyAi[];
+}
+
+/** 試合開始時にサーバーから配られるファイター1人分 */
+export interface StartFighter {
+  char: CharId;
+  team: Team;
+  /** 人間が操作するスロットならそのセッションID、AIなら null */
+  sessionId: string | null;
+  aiDifficulty: Difficulty;
 }
 
 export interface StartData {
   seed: number;
   stage: StageId;
-  chars: [CharId, CharId];
+  fighters: StartFighter[];
 }
 
 type NetEvent = 'lobby' | 'start' | 'opponent-left' | 'error' | 'ping' | 'desync';
@@ -64,7 +87,7 @@ class NetClient {
   private room: Room | null = null;
   private listeners = new Map<NetEvent, Set<(data?: unknown) => void>>();
 
-  /** 自分のサイド（部屋に入ると確定） */
+  /** 自分のサイド（1対1用。チーム戦では mySlot を使う） */
   side: Side = 0;
   /** 現在のロビー情報 */
   lobby: LobbyInfo | null = null;
@@ -73,8 +96,8 @@ class NetClient {
   /** 直近の計測レイテンシ(ms) */
   latency = -1;
 
-  /** 相手の入力バッファ frame → mask */
-  private remote = new Map<number, number>();
+  /** 他プレイヤーの入力バッファ `${frame}:${slot}` → mask */
+  private remote = new Map<string, number>();
   /** 相手から届いた同期ハッシュ frame → hash */
   private remoteHash = new Map<number, number>();
   /** 自分が計算した同期ハッシュ frame → hash */
@@ -89,6 +112,21 @@ class NetClient {
     return this.room?.roomId ?? null;
   }
 
+  /** 自分のセッションID（StartData.fighters[].sessionId と照合して mySlot を求める） */
+  get sessionId(): string | null {
+    return this.room?.sessionId ?? null;
+  }
+
+  /** 自分のロビー情報（チーム戦用） */
+  get me(): LobbyPlayer | null {
+    if (!this.lobby || !this.sessionId) return null;
+    return this.lobby.players.find((p) => p.id === this.sessionId) ?? null;
+  }
+
+  get isHost(): boolean {
+    return this.me?.host ?? false;
+  }
+
   on(ev: NetEvent, fn: (data?: unknown) => void): () => void {
     if (!this.listeners.has(ev)) this.listeners.set(ev, new Set());
     this.listeners.get(ev)!.add(fn);
@@ -99,12 +137,12 @@ class NetClient {
     this.listeners.get(ev)?.forEach((fn) => fn(data));
   }
 
-  /** クイックマッチ（空いてる公開部屋に入る／なければ作る） */
+  /** クイックマッチ（1対1。空いてる公開部屋に入る／なければ作る） */
   async quickMatch() {
     await this.join((c) => c.joinOrCreate('battle', {}));
   }
 
-  /** 合言葉付きプライベート部屋を作る */
+  /** 合言葉付きプライベート部屋を作る（チーム戦対応・最大8人） */
   async createPrivate() {
     await this.join((c) => c.create('battle', { private: true }));
   }
@@ -134,8 +172,9 @@ class NetClient {
       this.localHash.clear();
       this.emit('start', d);
     });
-    room.onMessage('i', (d: [number, number]) => {
-      this.remote.set(d[0], d[1]);
+    room.onMessage('i', (d: [number, number, number]) => {
+      // [frame, slot, mask]
+      this.remote.set(`${d[0]}:${d[1]}`, d[2]);
     });
     room.onMessage('h', (d: [number, number]) => {
       this.remoteHash.set(d[0], d[1]);
@@ -190,14 +229,39 @@ class NetClient {
     this.room?.send('ready', ready);
   }
 
-  /** フレーム入力を送信 */
-  sendInput(frame: number, mask: number) {
-    this.room?.send('i', [frame, mask]);
+  /** [ホスト専用] プレイヤーのチームを変更 */
+  setTeam(playerId: string, team: Team) {
+    this.room?.send('team', [playerId, team]);
   }
 
-  /** フレームの相手入力を取得（未着なら undefined） */
-  remoteInput(frame: number): number | undefined {
-    return this.remote.get(frame);
+  /** [ホスト専用] AIを追加 */
+  addAi(ai: LobbyAi) {
+    this.room?.send('ai-add', ai);
+  }
+
+  /** [ホスト専用] AIの設定を変更 */
+  updateAi(index: number, patch: Partial<LobbyAi>) {
+    this.room?.send('ai-set', { index, ...patch });
+  }
+
+  /** [ホスト専用] AIを削除 */
+  removeAi(index: number) {
+    this.room?.send('ai-del', index);
+  }
+
+  /** [ホスト専用] 試合開始（チーム戦ルーム） */
+  startGame() {
+    this.room?.send('start-game');
+  }
+
+  /** フレーム入力を送信（slot=自分のファイター番号） */
+  sendInput(frame: number, slot: number, mask: number) {
+    this.room?.send('i', [frame, slot, mask]);
+  }
+
+  /** 他プレイヤーのフレーム入力を取得（未着なら undefined） */
+  remoteInput(frame: number, slot: number): number | undefined {
+    return this.remote.get(`${frame}:${slot}`);
   }
 
   /** 同期チェック：ハッシュ送信と比較 */

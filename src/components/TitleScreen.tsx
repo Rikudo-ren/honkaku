@@ -16,7 +16,8 @@ interface Props {
 const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[] = [
   { id: '1p', label: '1P 対 CPU', sub: '理数科B組の日常に殴り込む' },
   { id: '2p', label: '2P 対戦', sub: '同じキーボードで殴り合う（内進 vs 理数科）' },
-  { id: 'online', label: 'オンライン対戦 ✝', sub: 'ネット越しに✝本質✝をぶつけ合う（クイック／合言葉）' },
+  { id: 'team', label: 'チーム戦（乱戦）✝', sub: '2対2も3対1も自由・全員同時出場（オフライン）' },
+  { id: 'online', label: 'オンライン対戦 ✝', sub: 'ネット越しに✝本質✝をぶつけ合う（クイック／合言葉・チーム戦可）' },
   { id: 'cpu', label: '自己対話モード', sub: 'CPU 対 CPU。自演じゃなくて自己対話だよ' },
   { id: 'diff', label: 'CPUの偏差値', sub: '◀ ▶ で変更（対戦相手の強さ）' },
   { id: 'help', label: '操作説明', sub: 'キー配置と基本ルール' },
@@ -32,8 +33,6 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
   const [showUnlock, setShowUnlock] = useState(!!justUnlocked);
   const stateRef = useRef({ cursor, diff, modal, extremeUnlocked });
   stateRef.current = { cursor, diff, modal, extremeUnlocked };
-
-  const diffs: Difficulty[] = extremeUnlocked ? ['easy', 'normal', 'hard', 'extreme'] : ['easy', 'normal', 'hard'];
 
   useEffect(() => {
     if (justUnlocked) {
@@ -262,7 +261,8 @@ function HelpContent() {
         </div>
       </div>
       <ul className="list-disc space-y-1 pl-5 text-slate-300">
-        <li>2本先取。制限時間99秒（授業終了で体力の多い方が勝ち）。</li>
+        <li>2本先取。制限時間99秒（授業終了で体力の多い方が勝ち）。チーム戦は相手チーム全滅で1本。</li>
+        <li>チーム戦（乱戦）は最大8人が同時に戦う。味方への攻撃は当たらない。青●と赤●が目印。</li>
         <li>攻撃を当てる／受けると✝本質✝ゲージが溜まる。MAXで超必殺技（立ち絵カットイン付き）。</li>
         <li>空中でも弱・強攻撃が出せる。三重の「は？」は当身。飛び道具も跳ね返す。</li>
         <li>試合中はランダムで✝本質✝イベントが発生する。ヘイカツが窓の外を見たら全員止まる。</li>

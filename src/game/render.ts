@@ -110,10 +110,9 @@ export class Renderer {
     // ground props (items) behind fighters
     for (const p of b.projectiles) if (p.item || p.kind === 'vending') this.drawProjectile(p, b.t);
 
-    // fighters: draw the "active" one last
-    const [a, c] = b.f;
-    const aActive = a.state === 'attack' || a.state === 'super' || a.state === 'launch';
-    const order = aActive ? [c, a] : [a, c];
+    // fighters: draw the "active" ones last
+    const isActive = (f: Fighter) => f.state === 'attack' || f.state === 'super' || f.state === 'launch';
+    const order = [...b.f].sort((p, q) => Number(isActive(p)) - Number(isActive(q)));
     for (const f of order) this.drawFighter(f, b);
 
     for (const p of b.projectiles) if (!p.item && p.kind !== 'vending') this.drawProjectile(p, b.t);
@@ -819,9 +818,13 @@ export class Renderer {
     for (const f of b.f) {
       if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - 52, 5, '#e2e8f0');
       if (b.phase === 'intro' || (b.phase === 'fight' && b.phaseT < 150)) {
-        const tag = f.ai ? 'CPU' : f.side === 0 ? '1P' : '2P';
+        const tag = f.tag ?? (f.ai ? 'CPU' : f.side === 0 ? '1P' : '2P');
         const bob = Math.sin(b.t / 6) * 1.5;
-        this.txt(`${tag}▼`, f.x, f.y - 56 + bob, 5.5, f.def.color);
+        this.txt(`${tag}▼`, f.x, f.y - 56 + bob, 5.5, tag === 'あなた' ? '#fde68a' : f.def.color);
+      }
+      // チームカラーの足元マーカー（チーム戦のみ）
+      if (!b.isDuel && f.hp > 0 && b.phase !== 'matchEnd') {
+        this.txt(f.team === 0 ? '●' : '●', f.x, f.y + 3.5, 5, f.team === 0 ? '#38bdf8' : '#fb7185');
       }
     }
 
@@ -838,7 +841,7 @@ export class Renderer {
 
     // bubbles
     for (const bb of b.bubbles) {
-      const f = b.f[bb.side];
+      const f = b.f[bb.idx] ?? b.f[0];
       const k = bb.t < bb.life - 8 ? 1 : (bb.life - bb.t) / 8;
       const grow = Math.min(1, bb.t / 4);
       c.globalAlpha = k;
@@ -872,6 +875,10 @@ export class Renderer {
   }
 
   private drawHud(b: Battle) {
+    if (!b.isDuel) {
+      this.drawTeamHud(b);
+      return;
+    }
     const c = this.c;
     const [p1, p2] = b.f;
     const barY = 8;
@@ -930,6 +937,60 @@ export class Renderer {
       this.txt('✝', 198 + i * 8 + 12, 28, 8, b.wins[1] > i ? '#fde68a' : '#334155', 'center', '#000', 1.5);
     }
     this.txt(`ROUND ${b.round}`, 192, 28, 4.5, '#cbd5e1');
+  }
+
+  /** チーム戦（同時乱戦）用HUD：両チームのメンバーをコンパクトに並べる */
+  private drawTeamHud(b: Battle) {
+    const c = this.c;
+    const team0 = b.f.filter((f) => f.team === 0);
+    const team1 = b.f.filter((f) => f.team === 1);
+    const drawList = (list: Fighter[], right: boolean, teamColor: string, label: string) => {
+      const x0 = right ? W - 8 : 8;
+      const align = right ? ('right' as const) : ('left' as const);
+      this.txt(label, x0, 7, 5, teamColor, align, '#000', 1);
+      list.forEach((f, i) => {
+        const y = 13 + i * 13;
+        const w = 104;
+        const bx = right ? W - 8 - w : 8;
+        // 名前＋タグ
+        const tag = f.tag ? `(${f.tag})` : '';
+        this.txt(`${f.def.name}${tag}`, right ? W - 8 : 8, y, 4.5, f.hp <= 0 ? '#64748b' : '#ffffff', align, '#000', 1);
+        // HPバー
+        c.fillStyle = '#0f1016';
+        c.fillRect(bx - 1, y + 2, w + 2, 4);
+        const hw = (Math.max(0, f.hp) / f.def.hp) * w;
+        c.fillStyle = f.hp <= 0 ? '#334155' : f.hp / f.def.hp < 0.3 ? (b.t % 20 < 10 ? '#fb923c' : '#fde047') : '#fde047';
+        c.fillRect(right ? W - 8 - hw : 8, y + 3, hw, 2);
+        // ゲージ（細バー）
+        const mw = (Math.min(100, f.meter) / 100) * w;
+        c.fillStyle = f.meter >= 100 ? (b.t % 10 < 5 ? '#ffffff' : f.def.color) : '#475569';
+        c.fillRect(right ? W - 8 - mw : 8, y + 6, mw, 1);
+        // メーターMAX表示
+        if (f.meter >= 100 && f.hp > 0) this.txt('✝', right ? W - 8 - w - 4 : 8 + w + 4, y + 4, 5, '#fde68a', 'center');
+      });
+    };
+    drawList(team0, false, '#38bdf8', '青');
+    drawList(team1, true, '#fb7185', '赤');
+    // timer
+    c.fillStyle = '#0f1016';
+    c.fillRect(174, 4, 36, 18);
+    c.strokeStyle = '#475569';
+    c.lineWidth = 1;
+    c.strokeRect(174.5, 4.5, 35, 17);
+    const sec = b.timerSec;
+    this.txt(String(sec), 192, 13.5, 13, sec <= 10 ? '#f87171' : '#ffffff', 'center', '#000', 2);
+    // round marks（チームの勝利数）
+    for (let i = 0; i < 2; i++) {
+      this.txt('✝', 186 - i * 8 - 12, 28, 8, b.wins[0] > i ? '#38bdf8' : '#334155', 'center', '#000', 1.5);
+      this.txt('✝', 198 + i * 8 + 12, 28, 8, b.wins[1] > i ? '#fb7185' : '#334155', 'center', '#000', 1.5);
+    }
+    this.txt(`ROUND ${b.round}`, 192, 28, 4.5, '#cbd5e1');
+    // コンボ表示（チーム戦は発生位置の近くに）
+    for (const f of b.f) {
+      if (f.combo >= 2 && f.comboTimer > 0) {
+        this.txt(`${f.combo}HIT`, Math.max(20, Math.min(W - 20, f.x)), f.y - 68, 7, f.def.color);
+      }
+    }
   }
 
   private drawBanner(b: Battle) {
