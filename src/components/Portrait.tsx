@@ -14,6 +14,7 @@ const PORTRAIT_FILES: Record<CharId, string> = {
   mitsumine: 'BnEZx.jpg',
   terachi: 'b1eQ6.jpg',
   rei: 'OCvNF.jpg',
+  sakura: 'SakuraYu.png', // 仮の立ち絵。差し替える場合は同名ファイルを上書きすること
 };
 
 const mods = import.meta.glob<string>('../assets/portraits/*', {
@@ -35,6 +36,7 @@ export const USER_PORTRAIT_URLS: Record<CharId, string | null> = {
   mitsumine: byName[PORTRAIT_FILES.mitsumine.toLowerCase()] ?? null,
   terachi: byName[PORTRAIT_FILES.terachi.toLowerCase()] ?? null,
   rei: byName[PORTRAIT_FILES.rei.toLowerCase()] ?? null,
+  sakura: byName[PORTRAIT_FILES.sakura.toLowerCase()] ?? null,
 };
 
 // ───────────────────────── 背景（白 or 黒）の透過処理 ─────────────────────────

@@ -1,5 +1,5 @@
 import { CHARS, INTRO_PAIRS, pairKey } from './characters';
-import { COMBO_COMMENTS, HIT_TEXTS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
+import { COMBO_COMMENTS, HIT_TEXTS, SAKURA_LAWS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
 import { EMPTY_INPUT } from './types';
 import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId, Team } from './types';
 
@@ -85,6 +85,8 @@ export interface Fighter {
   grabbedBy: number;
   superT: number;
   superData: Record<string, unknown> | TerachiOutcome | null;
+  /** 櫻優専用：サンプル数n（当てる／受ける／観測で蓄積。超必殺の威力になる） */
+  sampleN: number;
 }
 
 export interface Projectile {
@@ -289,6 +291,7 @@ function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficu
     grabbedBy: -1,
     superT: 0,
     superData: null,
+    sampleN: 0,
   };
 }
 
@@ -556,6 +559,8 @@ export class Battle {
         return 'paper';
       case 'rei':
         return 'point';
+      case 'sakura':
+        return 'paper';
     }
   }
 
@@ -592,6 +597,7 @@ export class Battle {
       f.grabbedBy = -1;
       f.flash = 0;
       f.superData = null;
+      f.sampleN = 0;
       if (f.ai) f.ai = { plan: 'wait', planT: 0, nextDecision: 20, held: null };
     }
     this.projectiles = [];
@@ -622,7 +628,8 @@ export class Battle {
       const pair = INTRO_PAIRS[key];
       if (a.id === b.id && this.isDuel) {
         this.bubble(a.idx, a.def.intro);
-        this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, '自演じゃなくて自己対話だよ') });
+        const mirror = a.id === 'sakura' ? 'n=2……統計的に有意！' : '自演じゃなくて自己対話だよ';
+        this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, mirror) });
       } else if (pair) {
         const first = a.id === pair.first ? a : b;
         const other = first === a ? b : a;
@@ -1127,6 +1134,11 @@ export class Battle {
           this.triggerCounter(o, f);
           break;
         }
+        // 櫻優の必殺「シュレディンガーの好意」：ダメージ0の観測（記録）
+        if (f.id === 'sakura' && m.key === 'special' && !this.isBlocking(o)) {
+          this.sakuraRecord(f, o);
+          break;
+        }
         if (this.isBlocking(o)) this.applyBlock(f, o, m.dmg, m.hitstun);
         else this.applyHit(f, o, m.dmg * f.def.dmgMul, m, f.facing, m.sfx);
         break; // 1振り1ヒット（多人数でも1人だけ）
@@ -1145,6 +1157,19 @@ export class Battle {
     this.flash = 6;
     this.shake = Math.max(this.shake, 8);
     mie.meter = Math.min(100, mie.meter + 15);
+  }
+
+  /** 櫻優の必殺「シュレディンガーの好意」：相手を観測（動揺）してサンプルn+2 */
+  private sakuraRecord(f: Fighter, o: Fighter) {
+    this.setState(o, 'stun', 26);
+    o.vx = 0;
+    f.sampleN = Math.min(12, f.sampleN + 2);
+    f.vx = -f.facing * 2.2; // 記録を取りながら一歩下がる
+    this.text('観測', o.x, o.y - 62, { size: 10, color: '#fda4af', life: 40, vy: -0.4 });
+    this.text(`n=${f.sampleN}`, f.x, f.y - 70, { size: 8, color: '#fecdd3', life: 40, vy: -0.5 });
+    this.text('……は？', o.x, o.y - 52, { size: 7, color: '#e2e8f0', life: 34, vy: -0.3 });
+    this.spark(o.x, o.y - 30, '#fda4af', 8, 1);
+    this.sfx('item');
   }
 
   applyHit(att: Fighter | null, vic: Fighter, dmg: number, m: HitSpec, dir: Facing, sfx: SfxName = 'hit') {
@@ -1170,7 +1195,10 @@ export class Battle {
       att.maxCombo = Math.max(att.maxCombo, att.combo);
       att.meter = Math.min(100, att.meter + 6 + dmg * 0.35);
       att.hitstop = dmg >= 10 ? 7 : 4;
+      // 櫻優：当てる／受けるたびにサンプルn+1（超必殺の威力源）
+      if (att.id === 'sakura') att.sampleN = Math.min(12, att.sampleN + 1);
     }
+    if (vic.id === 'sakura') vic.sampleN = Math.min(12, vic.sampleN + 1);
     vic.meter = Math.min(100, vic.meter + 3 + dmg * 0.2);
     vic.hitstop = dmg >= 10 ? 7 : 4;
     this.shake = Math.max(this.shake, dmg >= 10 ? 5 : 2);
@@ -1493,6 +1521,53 @@ export class Battle {
           this.sfx('cross');
         }
         if (T >= 64) this.setState(f, 'idle');
+        break;
+      }
+      case 'sakura': {
+        // 超必殺「恋愛発生第十五法則（暫定）」
+        // サンプル数nに応じて法則の読み上げ回数と最後の「観測確定」の威力が決まる。
+        const d = f.superData as { n?: number; L?: number };
+        if (T === 1) {
+          d.n = Math.min(12, f.sampleN);
+          d.L = clamp(1 + Math.floor((d.n ?? 0) / 2), 1, SAKURA_LAWS.length);
+          this.setBanner('恋愛発生第十五法則（暫定）', '〈面白い〉は理論を超える。', c, 110);
+          this.text(`n=${d.n} で観測します`, f.x, f.y - 66, { size: 8, color: '#fda4af', life: 50, vy: -0.3 });
+        }
+        if (T === 10) {
+          // 相手を「重ね合わせ状態」（動揺）に捕える
+          if (this.hittable(o) && o.y >= GROUND - 4) {
+            this.setState(o, 'stun', (d.L ?? 1) * 9 + 50);
+            o.vx = 0;
+            this.text('いま、観測しました', o.x, o.y - 70, { size: 9, color: '#fda4af', life: 60, vy: -0.3 });
+            this.text('重ね合わせ状態', o.x, o.y - 60, { size: 7, color: '#fecdd3', life: 60, vy: -0.2 });
+            this.ring(o.x, o.y - 28, '#f472b6', 26);
+            this.sfx('special');
+          }
+        }
+        const L = d.L ?? 1;
+        for (let i = 0; i < L; i++) {
+          if (T === 20 + i * 9) {
+            this.text(SAKURA_LAWS[i], W / 2, 60 + (i % 3) * 9, { size: 6.5, color: '#fbcfe8', life: 40, vy: -0.2 });
+            if (this.hittable(o)) {
+              this.applyHit(f, o, 2, { hitstun: 12, kbx: 0.4, kby: 0 }, f.facing, 'hit');
+            }
+            this.sfx('item');
+          }
+        }
+        const finT = 20 + L * 9 + 8;
+        if (T === finT) {
+          if (this.hittable(o)) {
+            this.applyHit(f, o, 8 + (d.n ?? 0), { hitstun: 30, kbx: 4, kby: 4.5, knockdown: true }, f.facing, 'heavy');
+            this.text('観測、確定', o.x, o.y - 72, { size: 14, color: '#fb7185', life: 60, vy: -0.3, shake: true });
+            this.text('〈面白い〉は理論を超える', o.x, o.y - 58, { size: 7, color: '#fecdd3', life: 60, vy: -0.2 });
+          } else {
+            this.text('n=1では統計的処理は不可能……', f.x, f.y - 62, { size: 8, color: '#e2e8f0', life: 50, vy: -0.2 });
+          }
+          this.flash = 8;
+          this.shake = 7;
+          f.sampleN = 0;
+        }
+        if (T >= finT + 18) this.setState(f, 'idle');
         break;
       }
     }
@@ -2074,6 +2149,9 @@ export class Battle {
         return oppAttacking || projIncoming;
       case 'rei':
         return dist > 60;
+      case 'sakura':
+        // 観測（記録）は接近戦でのみ有効
+        return dist < 42;
       default:
         return this.canSpecial(f);
     }

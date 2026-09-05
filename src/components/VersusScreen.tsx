@@ -89,7 +89,11 @@ export function DuelVersus({ setup, onDone }: Props) {
             「{pair.a}」「{pair.b}」{pair.note ?? ''}
           </div>
         )}
-        {a.id === b.id && <div className="mt-2 whitespace-nowrap bg-black/80 px-3 py-1 text-center text-xs text-amber-100 md:text-base">自演じゃなくて自己対話だよ</div>}
+        {a.id === b.id && (
+          <div className="mt-2 whitespace-nowrap bg-black/80 px-3 py-1 text-center text-xs text-amber-100 md:text-base">
+            {a.id === 'sakura' ? 'n=2……統計的に有意！' : '自演じゃなくて自己対話だよ'}
+          </div>
+        )}
       </div>
       <div className="absolute inset-x-0 bottom-0 bg-black/85 py-3 text-center">
         <div className="text-base text-amber-200 md:text-xl">STAGE：{st.name}</div>

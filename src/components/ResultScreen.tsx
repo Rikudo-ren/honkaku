@@ -12,11 +12,12 @@ interface Props {
   onSelect: () => void;
   onTitle: () => void;
   willUnlockExtreme?: boolean;
+  willUnlockSakura?: boolean;
 }
 
 const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
-export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme }: Props) {
+export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme, willUnlockSakura }: Props) {
   const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
   if (teamMode) return <TeamResult setup={setup} result={result} onRematch={onRematch} onSelect={onSelect} onTitle={onTitle} />;
   const w = result.winner;
@@ -64,9 +65,11 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
           ? `本質配信の巫女が${ld.name}を倒した。本人は「俺はペットボトル」と主張。`
           : wd.id === 'rei'
             ? `全科目学年首席、格闘でも首席。本人談「面白かった」。`
-            : wd.id === 'naito'
-              ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
-              : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
+        : wd.id === 'naito'
+          ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
+          : wd.id === 'sakura'
+            ? `${wd.name}は${ld.name}との試合をノートに記録した。「n=1。ただし有意な差あり。要検証」`
+            : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#0b0b18] px-4 py-8 text-slate-100">
@@ -115,6 +118,13 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               <div className="text-xs tracking-widest text-fuchsia-300">NEW DIFFICULTY</div>
               <div className="text-xl font-bold text-fuchsia-100">偏差値100 解禁間近…</div>
               <div className="mt-1 text-xs text-slate-300">タイトルに戻ると豪華演出が流れます</div>
+            </div>
+          )}
+          {willUnlockSakura && (
+            <div className="mt-4 animate-pop border-2 border-rose-400 bg-rose-950/80 p-3 text-center">
+              <div className="text-xs tracking-widest text-rose-300">OBSERVATION COMPLETE</div>
+              <div className="text-xl font-bold text-rose-100">紺ネクタイの観測者、記録済み…</div>
+              <div className="mt-1 text-xs text-slate-300">タイトルに戻ると「？？？」の正体が明かされます</div>
             </div>
           )}
           <div className="mt-5 border-2 border-slate-700 bg-slate-950/80 p-3 text-sm">

@@ -1,4 +1,4 @@
-export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei';
+export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura';
 export type Side = 0 | 1;
 /** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
 export type Team = 0 | 1;
@@ -76,9 +76,11 @@ export interface Look {
   glasses?: boolean;
   gender: 'm' | 'f';
   outfit: 'blazer' | 'vest' | 'suit';
-  accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map';
-  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'none';
-  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug';
+  /** 未指定時は性別・服装に応じた既定色（男=えんじ／女=紺）。櫻優は紺ネクタイの内進生。 */
+  tieColor?: string;
+  accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'notebookFront' | 'map';
+  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'notebook' | 'none';
+  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug' | 'adjust';
 }
 
 export interface Box {

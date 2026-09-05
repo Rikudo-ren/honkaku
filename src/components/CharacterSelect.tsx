@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHARS, CHAR_ORDER, DIFFICULTY_SHORT } from '@/game/characters';
+import { CHARS, CHAR_ORDER, DIFFICULTY_SHORT, HIDDEN_CHAR } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import type { CharDef, CharId, Difficulty, Mode } from '@/game/types';
@@ -7,19 +7,23 @@ import type { CharDef, CharId, Difficulty, Mode } from '@/game/types';
 interface Props {
   mode: Mode;
   difficulty: Difficulty;
+  sakuraUnlocked: boolean;
   onDone: (p1: CharId, p2: CharId) => void;
   onBack: () => void;
 }
 
 const COLS = 3;
+const ROWS = Math.ceil(CHAR_ORDER.length / COLS);
 
-export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Props) {
+export default function CharacterSelect({ mode, difficulty, sakuraUnlocked, onDone, onBack }: Props) {
   const [cur, setCur] = useState<[number, number]>([0, 1]);
   const [locked, setLocked] = useState<[boolean, boolean]>([false, false]);
   const [turn, setTurn] = useState<0 | 1>(0);
   const [rouletting, setRouletting] = useState(false);
-  const ref = useRef({ cur, locked, turn, rouletting });
-  ref.current = { cur, locked, turn, rouletting };
+  const [hiddenHint, setHiddenHint] = useState(false);
+  const ref = useRef({ cur, locked, turn, rouletting, sakuraUnlocked });
+  ref.current = { cur, locked, turn, rouletting, sakuraUnlocked };
+  const isHiddenLocked = (id: CharId) => id === HIDDEN_CHAR && !sakuraUnlocked;
   // 1Pモードでも相手CPUはプレイヤーが選べる（ランダムは自己対話のみ）
   const isAi: [boolean, boolean] = [mode === 'cpu', mode === 'cpu'];
   const cpuSelectable = mode === '1p';
@@ -29,15 +33,24 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
     let col = c % COLS;
     let row = Math.floor(c / COLS);
     col = (col + dx + COLS) % COLS;
-    row = (row + dy + 2) % 2;
-    const next: [number, number] = [...ref.current.cur] as [number, number];
-    next[side] = row * COLS + col;
-    setCur(next);
+    row = (row + dy + ROWS) % ROWS;
+    let next = row * COLS + col;
+    if (next >= CHAR_ORDER.length) next = CHAR_ORDER.length - 1;
+    const nextCur: [number, number] = [...ref.current.cur] as [number, number];
+    nextCur[side] = next;
+    setCur(nextCur);
     audio.sfx('move');
   };
 
   const lock = (side: 0 | 1) => {
     if (ref.current.locked[side]) return;
+    // 未解禁の隠しキャラは選べない（ヒントを出す）
+    if (CHAR_ORDER[ref.current.cur[side]] === HIDDEN_CHAR && !ref.current.sakuraUnlocked) {
+      setHiddenHint(true);
+      window.setTimeout(() => setHiddenHint(false), 2200);
+      audio.sfx('back');
+      return;
+    }
     const nl: [boolean, boolean] = [...ref.current.locked] as [boolean, boolean];
     nl[side] = true;
     setLocked(nl);
@@ -65,10 +78,12 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
     setRouletting(true);
     let n = 0;
     const total = 14 + Math.floor(Math.random() * 6);
+    // 未解禁の隠しキャラはルーレットの対象外
+    const pool = CHAR_ORDER.map((cid, i) => ({ cid, i })).filter(({ cid }) => !(cid === HIDDEN_CHAR && !ref.current.sakuraUnlocked));
     const id = window.setInterval(() => {
       n++;
       const next: [number, number] = [...ref.current.cur] as [number, number];
-      next[side] = Math.floor(Math.random() * CHAR_ORDER.length);
+      next[side] = pool[Math.floor(Math.random() * pool.length)].i;
       setCur(next);
       audio.sfx('move');
       if (n >= total) {
@@ -218,8 +233,14 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
         <span className="animate-blink">▶</span> {status}
       </div>
 
+      {hiddenHint && (
+        <div className="animate-pop relative z-20 mt-2 border-2 border-fuchsia-400 bg-fuchsia-950/90 px-4 py-1 text-xs text-fuchsia-100 md:text-sm">
+          ？？？ ── 偏差値100の「あの人」に勝った者だけが観測できる…
+        </div>
+      )}
+
       <div className="relative z-10 mt-4 grid w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_auto_1fr]">
-        <DetailPanel def={c1} side={0} label={isAi[0] ? 'CPU' : '1P'} locked={locked[0]} />
+        <DetailPanel def={c1} side={0} label={isAi[0] ? 'CPU' : '1P'} locked={locked[0]} mystery={isHiddenLocked(c1.id)} />
         <div className="order-first grid grid-cols-3 gap-2 self-center lg:order-none">
           {CHAR_ORDER.map((id, i) => {
             const d = CHARS[id];
@@ -247,12 +268,28 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
                 } ${s1 || s2 ? 'scale-105 shadow-[4px_4px_0_#000]' : 'hover:border-slate-400'}`}
                 style={{ background: `linear-gradient(180deg, #fff 0%, ${d.light} 100%)` }}
               >
-                <Portrait id={id} alt={d.name} className="h-full w-full object-contain object-bottom px-1 pb-7" />
-                <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-1.5 py-1">
-                  <div className="text-sm leading-tight text-white md:text-base">{d.name}</div>
-                  <div className="truncate text-[10px] text-slate-300">{d.title}</div>
-                </div>
-                <div className="absolute left-0 top-0 h-full w-1.5" style={{ background: d.tieColor }} />
+                {isHiddenLocked(id) ? (
+                  <>
+                    <div className="flex h-full w-full flex-col items-center justify-center bg-slate-950 px-1 pb-7">
+                      <div className="pixel-text-shadow text-4xl text-slate-600">？</div>
+                      <div className="mt-1 text-[9px] leading-tight text-slate-500">？？？</div>
+                    </div>
+                    <div className="absolute inset-x-0 bottom-0 bg-slate-950/95 px-1.5 py-1">
+                      <div className="text-sm leading-tight text-slate-500 md:text-base">？？？</div>
+                      <div className="truncate text-[10px] text-slate-600">観測されていない</div>
+                    </div>
+                    <div className="absolute left-0 top-0 h-full w-1.5 bg-slate-700" />
+                  </>
+                ) : (
+                  <>
+                    <Portrait id={id} alt={d.name} className="h-full w-full object-contain object-bottom px-1 pb-7" />
+                    <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-1.5 py-1">
+                      <div className="text-sm leading-tight text-white md:text-base">{d.name}</div>
+                      <div className="truncate text-[10px] text-slate-300">{d.title}</div>
+                    </div>
+                    <div className="absolute left-0 top-0 h-full w-1.5" style={{ background: d.tieColor }} />
+                  </>
+                )}
                 {s1 && <Tag text={isAi[0] ? 'CPU' : '1P'} color="bg-sky-400" side="left" locked={locked[0]} />}
                 {s2 && <Tag text={isAi[1] && !cpuSelectable ? 'CPU' : mode === '1p' ? 'CPU' : '2P'} color="bg-rose-400" side="right" locked={locked[1]} />}
               </button>
@@ -266,6 +303,7 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
           locked={locked[1]}
           dim={!locked[0] && !isAi[0]}
           difficulty={mode === '1p' ? difficulty : undefined}
+          mystery={isHiddenLocked(c2.id)}
         />
       </div>
 
@@ -333,6 +371,7 @@ function DetailPanel({
   locked,
   dim,
   difficulty,
+  mystery,
 }: {
   def: CharDef;
   side: 0 | 1;
@@ -340,8 +379,25 @@ function DetailPanel({
   locked: boolean;
   dim?: boolean;
   difficulty?: Difficulty;
+  mystery?: boolean;
 }) {
   const right = side === 1;
+  if (mystery) {
+    return (
+      <div className={`flex gap-3 border-4 bg-slate-950/80 p-3 shadow-[6px_6px_0_#000] ${right ? 'border-rose-400 lg:flex-row-reverse' : 'border-sky-400'} ${dim ? 'opacity-40' : ''}`}>
+        <div className="relative flex aspect-[3/4] w-28 shrink-0 items-center justify-center self-start border-2 border-slate-700 bg-slate-900 md:w-36">
+          <div className="pixel-text-shadow text-5xl text-slate-600">？</div>
+          <div className={`absolute top-1 ${right ? 'right-1' : 'left-1'} px-1.5 text-xs text-slate-950 ${right ? 'bg-rose-400' : 'bg-sky-400'}`}>{label}</div>
+        </div>
+        <div className={`min-w-0 flex-1 ${right ? 'text-right' : ''}`}>
+          <div className="text-xs text-slate-600">？？？</div>
+          <div className="text-2xl leading-tight text-slate-500">？？？</div>
+          <div className="text-xs text-slate-600">観測されていない存在</div>
+          <p className="mt-2 text-[11px] leading-snug text-slate-500">紺のネクタイの気配だけがする。偏差値100の「あの人」に勝てば、姿を観測できるかもしれない…</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`flex gap-3 border-4 bg-slate-950/80 p-3 shadow-[6px_6px_0_#000] transition-opacity ${right ? 'border-rose-400 lg:flex-row-reverse' : 'border-sky-400'} ${dim ? 'opacity-40' : ''}`}>
       <div

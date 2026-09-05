@@ -919,6 +919,10 @@ export class Renderer {
         const bob = Math.sin(b.t / 5) * 1.2;
         this.txt('超必殺 OK', right ? W - 16 - mw - 4 : 16 + mw + 4, my + 1 + bob, 5, '#fde68a', right ? 'right' : 'left');
       }
+      // 櫻優：サンプル数nの表示（超必殺の威力源）
+      if (f.id === 'sakura') {
+        this.txt(`サンプル n=${f.sampleN}`, right ? W - 16 : 16, my + 8, 4.5, f.sampleN >= 12 ? '#fb7185' : '#fda4af', right ? 'right' : 'left', '#000', 1);
+      }
       if (f.combo >= 2 && f.comboTimer > 0) {
         const cx = right ? W - 60 : 60;
         this.txt(`${f.combo}`, cx, 58, 16, f.def.color);
@@ -958,8 +962,9 @@ export class Renderer {
         const bx = right ? W - 8 - w : 8;
         // 名前＋タグ
         const tag = f.tag ? `(${f.tag})` : '';
+        const nTag = f.id === 'sakura' ? ` n${f.sampleN}` : '';
         const nameColor = f.hp <= 0 ? '#64748b' : f.you ? '#fde68a' : '#ffffff';
-        this.txt(`${f.def.name}${tag}`, right ? W - 8 : 8, y, 4.5, nameColor, align, '#000', 1);
+        this.txt(`${f.def.name}${nTag}${tag}`, right ? W - 8 : 8, y, 4.5, nameColor, align, '#000', 1);
         // HPバー
         c.fillStyle = '#0f1016';
         c.fillRect(bx - 1, y + 2, w + 2, 4);
