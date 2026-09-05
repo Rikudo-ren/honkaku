@@ -613,8 +613,9 @@ export class Battle {
     // 各チームの代表同士で掛け合い（チーム戦でも代表2人がしゃべる）
     const a = this.teamRep(0);
     const b = this.teamRep(1);
+    // 1勝1敗で迎えた3本目＝最終ラウンド（掛け合いの差し替えにも使う）
+    const final = this.wins[0] === 1 && this.wins[1] === 1;
     if (this.phaseT === 1) {
-      const final = this.wins[0] === 1 && this.wins[1] === 1;
       const sub = this.isDuel ? undefined : `${this.f.length}人乱戦`;
       this.setBanner(final ? 'FINAL ROUND' : `ROUND ${this.round}`, sub, '#fde68a', 70);
       this.sfx('round');
@@ -626,13 +627,19 @@ export class Battle {
         this.bubble(a.idx, a.def.intro);
         this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, '自演じゃなくて自己対話だよ') });
       } else if (pair) {
+        // 最終ラウンド（1勝1敗の3本目）は専用の掛け合いがあればそちらを使う
+        const src = final && pair.final ? pair.final : pair;
+        const lineA = src.a;
+        const lineB = src.b;
+        const lineC = src.c;
+        const note = src.note;
         const first = a.id === pair.first ? a : b;
         const other = first === a ? b : a;
-        this.bubble(first.idx, pair.a);
-        this.queue.push({ at: this.t + 30, fn: () => this.bubble(other.idx, pair.b) });
-        if (pair.note) this.queue.push({ at: this.t + 34, fn: () => this.text(pair.note!, W / 2, 70, { size: 9, color: '#fca5a5', life: 50, vy: -0.2 }) });
+        this.bubble(first.idx, lineA);
+        this.queue.push({ at: this.t + 30, fn: () => this.bubble(other.idx, lineB) });
+        if (note) this.queue.push({ at: this.t + 34, fn: () => this.text(note, W / 2, 70, { size: 9, color: '#fca5a5', life: 50, vy: -0.2 }) });
         // 二往復目（あれば first がもう一言）
-        if (pair.c) this.queue.push({ at: this.t + 62, fn: () => this.bubble(first.idx, pair.c!) });
+        if (lineC) this.queue.push({ at: this.t + 62, fn: () => this.bubble(first.idx, lineC) });
       } else {
         this.bubble(a.idx, a.def.intro);
         this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, b.def.intro) });
@@ -2145,6 +2152,9 @@ export class Battle {
         return oppAttacking || projIncoming;
       case 'rei':
         return dist > 60;
+      case 'sakura':
+        // 観測者は距離を取ってからノートを投げる（密着では撃たない）
+        return dist > 46;
       default:
         return this.canSpecial(f);
     }

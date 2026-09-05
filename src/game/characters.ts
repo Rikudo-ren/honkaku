@@ -698,6 +698,8 @@ export interface IntroPair {
   /** 二往復目のセリフ（first が言う） */
   c?: string;
   note?: string;
+  /** 最終ラウンド（1勝1敗で迎えた3本目）専用の掛け合い。あれば a/b の代わりに使われる */
+  final?: { a: string; b: string; c?: string; note?: string };
 }
 
 // 特殊な試合前の掛け合い（idの辞書順ペア → [先に言う側のid, セリフ, 返す側のセリフ]）
@@ -720,6 +722,12 @@ export const INTRO_PAIRS: Record<string, IntroPair> = {
     b: '観測データとして有用です',
     c: 'それを法則にするなよ',
     note: '（三重：法則にしないと処理できないんです）',
+    final: {
+      a: '四百二十二回目だぞ',
+      b: '……記録が、追いつきません',
+      c: '四百二十三回目',
+      note: '（サンプルG-07、観測限界を突破）',
+    },
   },
   'ryoma|sakura': {
     first: 'sakura',
@@ -727,6 +735,12 @@ export const INTRO_PAIRS: Record<string, IntroPair> = {
     b: '壊れたんじゃなくて、広がったんじゃない？',
     c: '理論の枠が、広がった……',
     note: '（三重：今のは十回に一回の方だった）',
+    final: {
+      a: '両馬先輩を、法則にしました',
+      b: 'お、ついに俺が法則になった',
+      c: '第七法則、改訂版。不理解の引力（両馬二郎）',
+      note: '（✝本質✝が理論に収められた、唯一の日）',
+    },
   },
   'naito|sakura': {
     first: 'sakura',
@@ -734,6 +748,12 @@ export const INTRO_PAIRS: Record<string, IntroPair> = {
     b: 'あ、ありがとう',
     c: 'なんで二回お礼言うの？',
     note: '（恋愛学に核爆弾が落ちた）',
+    final: {
+      a: '内藤さん。理論が崩壊しても、観測は続けます',
+      b: '分類しなくていいじゃん。そのまま言って',
+      c: '……そのまま、言います',
+      note: '（恋愛発生の第十五法則、実戦投入）',
+    },
   },
   'mitsumine|sakura': {
     first: 'mitsumine',
@@ -741,6 +761,12 @@ export const INTRO_PAIRS: Record<string, IntroPair> = {
     b: 'それは波動関数の崩壊の——',
     c: '波動関数の話もいい！',
     note: '（作戦ノート、二ページ目）',
+    final: {
+      a: '櫻！ 作戦ノート、最終ページ！',
+      b: '最終ページに、何が書いて——',
+      c: '「好きなら好きって言いなよ」だよ',
+      note: '（A4ルーズリーフ、二十一ページ目）',
+    },
   },
   'sakura|terachi': {
     first: 'sakura',
@@ -748,6 +774,12 @@ export const INTRO_PAIRS: Record<string, IntroPair> = {
     b: '……え、マジ？',
     c: '〈意味わかんないけど安心する〉と',
     note: '（寺地：なんで嬉しいかわかんないけど、嬉しいな）',
+    final: {
+      a: '寺地先輩。登録者、千人いきましたね',
+      b: '……え、マジ？ 見ててくれたの？',
+      c: 'はい。ずっと観測してました',
+      note: '（本質配信 #7、再生数は関係ない）',
+    },
   },
   'rei|sakura': {
     first: 'rei',
@@ -755,6 +787,12 @@ export const INTRO_PAIRS: Record<string, IntroPair> = {
     b: 'やめたら、何を頼りにすれば——',
     c: '何も頼りにしない。それが面白いんじゃない？',
     note: '（櫻：怖い。でも✝本質✝的にはこっちが正しい気がする）',
+    final: {
+      a: '枠の外に出る勇気、ある？',
+      b: '……あります。たぶん',
+      c: '外に出た理論は、消えないよ',
+      note: '（恋愛発生の第十六法則（暫定）：消えない）',
+    },
   },
 };
 

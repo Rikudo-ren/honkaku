@@ -72,6 +72,9 @@ test('櫻優は全キャラと試合前・試合後の掛け合いを持つ', ()
     assert.ok(intro.first === 'sakura' || intro.first === id, `first must be one of the pair: ${key}`);
     assert.ok(intro.c, `二往復目が無い: ${key}`);
 
+    assert.ok(intro.final, `最終ラウンド用の掛け合いが無い: ${key}`);
+    assert.ok(intro.final!.a.length > 0 && intro.final!.b.length > 0, `empty final line: ${key}`);
+
     const script = MATCHUP_SCRIPTS[key];
     assert.ok(script, `MATCHUP_SCRIPTS missing: ${key}`);
     assert.ok(script.first === 'sakura' || script.first === id, `first must be one of the pair: ${key}`);
@@ -158,4 +161,24 @@ test('櫻優の超必殺は複数ページのノートを飛ばして相手の�
   assert.ok(sawSuper, '超必殺が発動する');
   assert.ok(pages.size >= 5, `研究ノートのページが飛ぶ（観測: ${pages.size}枚）`);
   assert.ok(battle.f[1].hp < CHARS.naito.hp, '観測された相手はダメージを受ける');
+});
+
+test('最終ラウンド（1勝1敗の3本目）は専用の掛け合いに差し替わる', () => {
+  const battle = new Battle({
+    p1: 'sakura',
+    p2: 'naito',
+    stage: 'classroom',
+    difficulty: 'normal',
+    seed: 7,
+    ai: [false, false],
+  });
+  const pair = INTRO_PAIRS[pairKey('sakura', 'naito')];
+  // 1勝1敗の状態からラウンドを開始させる（内部状態なのでテストからのみ触る）
+  const raw = battle as unknown as { wins: [number, number]; startRound: () => void };
+  raw.wins = [1, 1];
+  raw.startRound();
+  for (let i = 0; i < 10; i++) battle.step([{ ...EMPTY_INPUT }, { ...EMPTY_INPUT }]);
+  const said = battle.bubbles.map((b) => b.text);
+  assert.ok(said.includes(pair.final!.a), `最終ラウンド用のセリフが出ない: ${said.join(' / ')}`);
+  assert.equal(said.includes(pair.a), false, '通常ラウンドのセリフは出ない');
 });
