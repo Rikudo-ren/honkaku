@@ -5,7 +5,11 @@ import { InputManager } from '@/game/input';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import { CHARS, STAGES } from '@/game/characters';
+import { net, maskOf, unmask } from '@/game/net';
 import type { InputState, Setup, Side } from '@/game/types';
+
+/** オンライン時の入力遅延フレーム数（この分だけ先のフレームに自分の入力を予約する） */
+const NET_DELAY = 4;
 
 interface Props {
   setup: Setup;
@@ -20,10 +24,15 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
   const [paused, setPaused] = useState(false);
   const [cutin, setCutin] = useState<{ c: CutIn; key: number } | null>(null);
   const [input, setInput] = useState<InputManager | null>(null);
+  const [waiting, setWaiting] = useState(false);
+  const [oppLeft, setOppLeft] = useState(false);
+  const [desync, setDesync] = useState(false);
   const [touch] = useState(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
   const st = STAGES.find((s) => s.id === setup.stage) ?? STAGES[0];
+  const online = setup.mode === 'online';
+  const mySide: Side = online ? (setup.onlineSide ?? 0) : 0;
 
   useEffect(() => {
     const game = gameRef.current;
@@ -38,9 +47,10 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     const battle = new Battle({
       p1: setup.p1,
       p2: setup.p2,
-      ai: [setup.mode === 'cpu', setup.mode !== '2p'],
+      ai: online ? [false, false] : [setup.mode === 'cpu', setup.mode !== '2p'],
       difficulty: setup.difficulty,
       stage: setup.stage,
+      seed: setup.seed,
       onCutin: (c) => {
         setCutin({ c, key: Date.now() });
         window.clearTimeout(cutinTimer);
@@ -48,13 +58,59 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       },
       onSfx: (s) => audio.sfx(s),
       onMatchEnd: (winner, wins) => {
+        if (online) net.sendEnd();
         endTimer = window.setTimeout(() => onEndRef.current(winner, wins), 1600);
       },
     });
+
+    // ── オンライン（ロックステップ）用 ──
+    let frame = 0; // 実行済みフレーム数
+    const localBuf = new Map<number, number>(); // 自分の予約入力 frame → mask
+    let waitingNow = false;
+    const offLeft = online
+      ? net.on('opponent-left', () => {
+          setOppLeft(true);
+        })
+      : null;
+    const offDesync = online ? net.on('desync', () => setDesync(true)) : null;
+
     let raf = 0;
     let last = performance.now();
     let acc = 0;
     const STEP = 1000 / 60;
+
+    const stepOnline = (): boolean => {
+      // 自分の入力を NET_DELAY フレーム先に予約して送信
+      const target = frame + NET_DELAY;
+      if (!localBuf.has(target)) {
+        // オンラインではどちらのキー配置（WASD系・矢印系）でも操作できるようマージ
+        const mask = maskOf(im.poll(0)) | maskOf(im.poll(1));
+        localBuf.set(target, mask);
+        net.sendInput(target, mask);
+      }
+      // このフレームに必要な入力が揃っているか
+      const mine = frame < NET_DELAY ? 0 : localBuf.get(frame);
+      const theirs = frame < NET_DELAY ? 0 : net.remoteInput(frame);
+      if (mine === undefined || theirs === undefined) {
+        if (!waitingNow) {
+          waitingNow = true;
+          setWaiting(true);
+        }
+        return false; // 相手の入力待ち
+      }
+      if (waitingNow) {
+        waitingNow = false;
+        setWaiting(false);
+      }
+      const inputs: [InputState, InputState] = mySide === 0 ? [unmask(mine), unmask(theirs)] : [unmask(theirs), unmask(mine)];
+      battle.step(inputs);
+      localBuf.delete(frame - 60);
+      frame++;
+      // 定期的に同期チェック
+      if (frame % 60 === 0) net.sendHash(frame, battle.stateHash());
+      return true;
+    };
+
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       const dt = Math.min(120, now - last);
@@ -63,7 +119,14 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         acc += dt;
         let n = 0;
         while (acc >= STEP && n < 4) {
-          battle.step([im.poll(0), im.poll(1)]);
+          if (online) {
+            if (!stepOnline()) {
+              acc = 0;
+              break;
+            }
+          } else {
+            battle.step([im.poll(0), im.poll(1)]);
+          }
           acc -= STEP;
           n++;
         }
@@ -77,6 +140,14 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Escape' || e.code === 'KeyP') {
+        if (online) {
+          // オンライン中は試合を止められない（メニュー表示のみ）
+          setPaused((p) => {
+            audio.sfx(p ? 'confirm' : 'back');
+            return !p;
+          });
+          return;
+        }
         pausedRef.current = !pausedRef.current;
         setPaused(pausedRef.current);
         im.reset();
@@ -90,6 +161,8 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
       window.removeEventListener('keydown', onKey);
       window.clearTimeout(cutinTimer);
       window.clearTimeout(endTimer);
+      offLeft?.();
+      offDesync?.();
     };
   }, [setup]);
 
@@ -109,7 +182,59 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         <canvas ref={fxRef} className="absolute inset-0 h-full w-full" />
         <div className="scanlines pointer-events-none absolute inset-0 opacity-60" />
         {cutin && <CutInOverlay key={cutin.key} c={cutin.c} />}
-        {paused && (
+        {online && waiting && !oppLeft && (
+          <div className="absolute left-1/2 top-2 z-30 -translate-x-1/2 border-2 border-sky-400 bg-black/80 px-3 py-1 text-xs text-sky-200">
+            <span className="animate-blink">▶</span> 相手の入力を待機中…（回線状況）
+          </div>
+        )}
+        {online && net.latency >= 0 && (
+          <div className="absolute left-2 top-2 z-30 bg-black/60 px-2 py-0.5 text-[10px] text-slate-400">PING {net.latency}ms</div>
+        )}
+        {online && desync && (
+          <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2 border border-rose-400 bg-black/80 px-2 py-0.5 text-[10px] text-rose-300">
+            ⚠ 同期ずれを検出しました（結果が食い違う可能性があります）
+          </div>
+        )}
+        {oppLeft && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
+            <div className="animate-pop w-80 border-4 border-rose-400 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
+              <div className="pixel-text-shadow text-2xl text-rose-300">相手が退室しました</div>
+              <div className="mt-1 text-xs text-slate-400">「✝本質✝から逃げたか…」</div>
+              <button
+                className="mt-4 w-full border-2 border-amber-300 bg-amber-300 py-1.5 text-slate-950 hover:bg-amber-200"
+                onClick={() => {
+                  net.leave();
+                  onQuit('title');
+                }}
+              >
+                タイトルへ
+              </button>
+            </div>
+          </div>
+        )}
+        {paused && online && !oppLeft && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
+            <div className="animate-pop w-72 border-4 border-slate-100 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
+              <div className="pixel-text-shadow text-3xl text-amber-300">MENU ✝</div>
+              <div className="mt-1 text-xs text-slate-400">オンライン対戦中は試合は止まりません</div>
+              <div className="mt-4 flex flex-col gap-2">
+                <button className="border-2 border-amber-300 bg-amber-300 py-1.5 text-slate-950 hover:bg-amber-200" onClick={() => setPaused(false)}>
+                  閉じる（Esc）
+                </button>
+                <button
+                  className="border-2 border-rose-400 py-1.5 text-rose-200 hover:bg-rose-950"
+                  onClick={() => {
+                    net.leave();
+                    onQuit('title');
+                  }}
+                >
+                  対戦を放棄してタイトルへ
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {paused && !online && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70">
             <div className="animate-pop w-72 border-4 border-slate-100 bg-slate-950 p-4 text-center shadow-[8px_8px_0_#000]">
               <div className="pixel-text-shadow text-3xl text-amber-300">PAUSE ✝</div>
@@ -131,15 +256,31 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         {touch && input && !paused && <TouchControls input={input} />}
       </div>
       <div className="mt-2 hidden w-full max-w-5xl items-center justify-between px-3 text-[11px] text-slate-400 md:flex">
-        <span>
-          <span style={{ color: p1.color }}>{p1.name}</span>：WASD 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
-        </span>
-        <span className="text-slate-500">
-          {st.name} ── {st.sub} ／ Esc ポーズ ／ M ミュート
-        </span>
-        <span>
-          <span style={{ color: p2.color }}>{p2.name}</span>：矢印 移動 ／ K 弱 ／ L 強 ／ ; 必殺 ／ Enter 超必殺{setup.mode !== '2p' ? '（CPU操作中）' : ''}
-        </span>
+        {online ? (
+          <>
+            <span>
+              <span style={{ color: (mySide === 0 ? p1 : p2).color }}>{(mySide === 0 ? p1 : p2).name}</span>（あなた）：WASD/矢印 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
+            </span>
+            <span className="text-slate-500">
+              {st.name} ── {st.sub} ／ オンライン対戦 ／ M ミュート
+            </span>
+            <span>
+              <span style={{ color: (mySide === 0 ? p2 : p1).color }}>{(mySide === 0 ? p2 : p1).name}</span>（相手）
+            </span>
+          </>
+        ) : (
+          <>
+            <span>
+              <span style={{ color: p1.color }}>{p1.name}</span>：WASD 移動 ／ F 弱 ／ G 強 ／ H 必殺 ／ Space 超必殺
+            </span>
+            <span className="text-slate-500">
+              {st.name} ── {st.sub} ／ Esc ポーズ ／ M ミュート
+            </span>
+            <span>
+              <span style={{ color: p2.color }}>{p2.name}</span>：矢印 移動 ／ K 弱 ／ L 強 ／ ; 必殺 ／ Enter 超必殺{setup.mode !== '2p' ? '（CPU操作中）' : ''}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

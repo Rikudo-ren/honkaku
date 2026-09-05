@@ -16,6 +16,7 @@ interface Props {
 const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[] = [
   { id: '1p', label: '1P 対 CPU', sub: '理数科B組の日常に殴り込む' },
   { id: '2p', label: '2P 対戦', sub: '同じキーボードで殴り合う（内進 vs 理数科）' },
+  { id: 'online', label: 'オンライン対戦 ✝', sub: 'ネット越しに✝本質✝をぶつけ合う（クイック／合言葉）' },
   { id: 'cpu', label: '自己対話モード', sub: 'CPU 対 CPU。自演じゃなくて自己対話だよ' },
   { id: 'diff', label: 'CPUの偏差値', sub: '◀ ▶ で変更（対戦相手の強さ）' },
   { id: 'help', label: '操作説明', sub: 'キー配置と基本ルール' },

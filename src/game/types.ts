@@ -3,7 +3,7 @@ export type Side = 0 | 1;
 export type Facing = 1 | -1;
 export type StageId = 'classroom' | 'lake' | 'sakura' | 'hawaii';
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'extreme';
-export type Mode = '1p' | '2p' | 'cpu';
+export type Mode = '1p' | '2p' | 'cpu' | 'online';
 
 export interface InputState {
   left: boolean;
@@ -187,4 +187,8 @@ export interface Setup {
   p1: CharId;
   p2: CharId;
   stage: StageId;
+  /** オンライン対戦：試合の決定論シード */
+  seed?: number;
+  /** オンライン対戦：自分がどちら側か */
+  onlineSide?: Side;
 }

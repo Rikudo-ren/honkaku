@@ -15,8 +15,9 @@ export default function VersusScreen({ setup, onDone }: Props) {
   const st = STAGES.find((s) => s.id === setup.stage) ?? STAGES[0];
   const [tip] = useState(() => LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]);
   const pair = INTRO_PAIRS[pairKey(a.id, b.id)];
-  const p2Label = setup.mode === '2p' ? '2P' : 'CPU';
-  const p1Label = setup.mode === 'cpu' ? 'CPU' : '1P';
+  const online = setup.mode === 'online';
+  const p2Label = online ? (setup.onlineSide === 1 ? 'あなた' : '相手') : setup.mode === '2p' ? '2P' : 'CPU';
+  const p1Label = online ? (setup.onlineSide === 0 ? 'あなた' : '相手') : setup.mode === 'cpu' ? 'CPU' : '1P';
   const showDiff = setup.mode === '1p' || setup.mode === 'cpu';
   const diffColor =
     setup.difficulty === 'extreme' ? 'text-fuchsia-300 border-fuchsia-400' : setup.difficulty === 'hard' ? 'text-rose-300 border-rose-400' : 'text-amber-200 border-amber-400';

@@ -162,6 +162,8 @@ export interface BattleOptions {
   ai: [boolean, boolean];
   difficulty: Difficulty;
   stage: StageId;
+  /** 決定論的な再現のためのシード（オンライン対戦で使用）。未指定ならランダム。 */
+  seed?: number;
   onCutin?: (c: CutIn) => void;
   onSfx?: (s: SfxName) => void;
   onMatchEnd?: (winner: Side, wins: [number, number]) => void;
@@ -210,7 +212,6 @@ const EVENT_NAMES = ['window', 'feikatsu', 'soupBack', 'soupGone', 'matome', 'ku
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const overlap = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 function makeFighter(side: Side, id: CharId, ai: boolean): Fighter {
   const def = CHARS[id];
@@ -281,12 +282,47 @@ export class Battle {
   private lastEvent = '';
   private queue: { at: number; fn: () => void }[] = [];
   private matchEndNotified = false;
+  private rngState: number;
 
   constructor(opts: BattleOptions) {
     this.opts = opts;
     this.stage = opts.stage;
+    this.rngState = (opts.seed ?? (Math.random() * 0xffffffff)) >>> 0;
     this.f = [makeFighter(0, opts.p1, opts.ai[0]), makeFighter(1, opts.p2, opts.ai[1])];
     this.startRound();
+  }
+
+  /** 決定論的な乱数（mulberry32）。同じシード＋同じ入力列なら全クライアントで同じ試合になる。 */
+  private rng(): number {
+    this.rngState = (this.rngState + 0x6d2b79f5) >>> 0;
+    let t = this.rngState;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  private pick<T>(arr: readonly T[]): T {
+    return arr[Math.floor(this.rng() * arr.length)];
+  }
+
+  /** オンライン同期チェック用の状態ハッシュ（ゲームプレイに影響する値のみ） */
+  stateHash(): number {
+    let h = 2166136261 >>> 0;
+    const mix = (v: number) => {
+      h ^= (v * 1000) & 0xffffffff;
+      h = Math.imul(h, 16777619) >>> 0;
+    };
+    for (const f of this.f) {
+      mix(f.x);
+      mix(f.y);
+      mix(f.hp);
+      mix(f.meter);
+      mix(f.stateT);
+    }
+    mix(this.timer);
+    mix(this.wins[0] * 7 + this.wins[1]);
+    mix(this.rngState);
+    return h;
   }
 
   // ───────────────────────── helpers ─────────────────────────
@@ -324,9 +360,9 @@ export class Battle {
 
   private spark(x: number, y: number, color = '#fff6a0', n = 8, size = 2) {
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 1 + Math.random() * 2;
-      this.fx.push({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 10 + Math.random() * 8, color, size });
+      const a = this.rng() * Math.PI * 2;
+      const sp = 1 + this.rng() * 2;
+      this.fx.push({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 10 + this.rng() * 8, color, size });
     }
   }
 
@@ -335,19 +371,19 @@ export class Battle {
   }
 
   private dust(x: number) {
-    for (let i = 0; i < 5; i++) this.fx.push({ kind: 'dust', x: x + (Math.random() - 0.5) * 10, y: GROUND - 1, vx: (Math.random() - 0.5) * 1.2, vy: -Math.random() * 0.8, t: 0, life: 14, color: '#c9c2b4', size: 1 });
+    for (let i = 0; i < 5; i++) this.fx.push({ kind: 'dust', x: x + (this.rng() - 0.5) * 10, y: GROUND - 1, vx: (this.rng() - 0.5) * 1.2, vy: -this.rng() * 0.8, t: 0, life: 14, color: '#c9c2b4', size: 1 });
   }
 
   private crossBurst(x: number, y: number, n = 6) {
-    for (let i = 0; i < n; i++) this.fx.push({ kind: 'crossburst', x, y, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 2, t: 0, life: 30, color: '#fde68a', size: 3 });
+    for (let i = 0; i < n; i++) this.fx.push({ kind: 'crossburst', x, y, vx: (this.rng() - 0.5) * 3, vy: -1 - this.rng() * 2, t: 0, life: 30, color: '#fde68a', size: 3 });
   }
 
   private hearts(x: number, y: number) {
-    for (let i = 0; i < 6; i++) this.fx.push({ kind: 'heart', x: x + (Math.random() - 0.5) * 16, y, vx: (Math.random() - 0.5) * 0.6, vy: -0.6 - Math.random() * 0.6, t: 0, life: 40, color: '#f9a8d4', size: 3 });
+    for (let i = 0; i < 6; i++) this.fx.push({ kind: 'heart', x: x + (this.rng() - 0.5) * 16, y, vx: (this.rng() - 0.5) * 0.6, vy: -0.6 - this.rng() * 0.6, t: 0, life: 40, color: '#f9a8d4', size: 3 });
   }
 
   private sparkles(x: number, y: number, color: string) {
-    for (let i = 0; i < 10; i++) this.fx.push({ kind: 'sparkle', x: x + (Math.random() - 0.5) * 24, y: y + (Math.random() - 0.5) * 30, vx: 0, vy: -0.5 - Math.random(), t: 0, life: 30 + Math.random() * 20, color, size: 2 });
+    for (let i = 0; i < 10; i++) this.fx.push({ kind: 'sparkle', x: x + (this.rng() - 0.5) * 24, y: y + (this.rng() - 0.5) * 30, vx: 0, vy: -0.5 - this.rng(), t: 0, life: 30 + this.rng() * 20, color, size: 2 });
   }
 
   private afterimage(f: Fighter) {
@@ -376,7 +412,7 @@ export class Battle {
   }
 
   private spawnProj(p: Omit<Projectile, 'hitMask' | 't' | 'seed'>) {
-    this.projectiles.push({ ...p, hitMask: 0, t: 0, seed: Math.random() });
+    this.projectiles.push({ ...p, hitMask: 0, t: 0, seed: this.rng() });
   }
 
   /** 描画用ポーズ */
@@ -510,7 +546,7 @@ export class Battle {
     if (this.phaseT >= 100) {
       this.phase = 'fight';
       this.phaseT = 0;
-      this.nextEventT = 420 + Math.random() * 360;
+      this.nextEventT = 420 + this.rng() * 360;
     }
   }
 
@@ -571,7 +607,7 @@ export class Battle {
         this.setState(w, 'win');
         w.invuln = 9999;
         if (l.state !== 'down' && l.state !== 'launch') this.setState(l, 'lose');
-        this.bubble(kw, pick(w.def.wins), 150);
+        this.bubble(kw, this.pick(w.def.wins), 150);
         this.sparkles(w.x, w.y - 30, w.def.color);
       } else {
         for (const f of this.f) if (f.state !== 'down' && f.state !== 'launch') this.setState(f, 'lose');
@@ -869,7 +905,7 @@ export class Battle {
     f.moveHit = false;
     f.movePhase = 0;
     if (!air) f.vx = 0;
-    if (m.callout && Math.random() < 0.7) this.text(pick(m.callout), f.x, f.y - 52, { size: 7, color: '#ffffff', life: 34, vy: -0.5 });
+    if (m.callout && this.rng() < 0.7) this.text(this.pick(m.callout), f.x, f.y - 52, { size: 7, color: '#ffffff', life: 34, vy: -0.5 });
     this.sfx(m.kind === 'melee' ? 'swing' : m.kind === 'counter' ? 'ha' : 'special');
   }
 
@@ -1025,7 +1061,7 @@ export class Battle {
     const hy = vic.y - 28;
     this.spark(hx, hy, dmg >= 10 ? '#fca5a5' : '#fff6a0', dmg >= 10 ? 12 : 7, dmg >= 10 ? 2 : 1);
     if (att?.id === 'ryoma') this.crossBurst(hx, hy, 3);
-    const label = att?.combo && att.combo >= 2 ? undefined : pick(HIT_TEXTS);
+    const label = att?.combo && att.combo >= 2 ? undefined : this.pick(HIT_TEXTS);
     if (label) this.text(label, hx, hy - 10, { size: dmg >= 10 ? 11 : 8, color: dmg >= 10 ? '#fecaca' : '#ffffff', life: 30, vy: -0.7 });
     if (att && att.combo >= 2) {
       const c = [...COMBO_COMMENTS].reverse().find(([n]) => att.combo >= n);
@@ -1059,10 +1095,14 @@ export class Battle {
       p.life--;
       if (p.homing !== undefined) {
         const tg = this.f[p.homing];
-        const ang = Math.atan2(tg.y - 26 - p.y, tg.x - p.x);
-        p.vx += Math.cos(ang) * 0.4;
-        p.vy += Math.sin(ang) * 0.4;
-        const sp = Math.hypot(p.vx, p.vy);
+        // NOTE: atan2/cos/sin はブラウザ間で結果が一致する保証がないため、
+        // オンライン同期（決定論）のためベクトル正規化で代用する
+        const dx = tg.x - p.x;
+        const dy = tg.y - 26 - p.y;
+        const dl = Math.sqrt(dx * dx + dy * dy) || 1;
+        p.vx += (dx / dl) * 0.4;
+        p.vy += (dy / dl) * 0.4;
+        const sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
         const max = p.kind === 'qed' ? 5.5 : 4.2;
         if (sp > max) {
           p.vx = (p.vx / sp) * max;
@@ -1135,7 +1175,7 @@ export class Battle {
             if (p.kind === 'cross') this.crossBurst(f.x, f.y - 30, 4);
             if (p.kind === 'kuraishi') this.text('✝✝✝', f.x, f.y - 62, { size: 12, color: '#f8fafc', life: 40, vy: -0.5 });
             if (p.kind === 'basketball') this.text('用は済んだ', p.x, p.y - 14, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
-            if (p.kind === 'kusa') this.text('草', f.x + (Math.random() - 0.5) * 20, f.y - 40 - Math.random() * 20, { size: 8, color: '#4ade80', life: 30, vy: -0.8 });
+            if (p.kind === 'kusa') this.text('草', f.x + (this.rng() - 0.5) * 20, f.y - 40 - this.rng() * 20, { size: 8, color: '#4ade80', life: 30, vy: -0.8 });
           }
           p.hitMask |= 1 << s;
           if (!p.pierce) dead = true;
@@ -1154,7 +1194,7 @@ export class Battle {
     f.facing = o.x >= f.x ? 1 : -1;
     const cut: CutIn = { side: f.side, char: f.id, name: f.def.superName, quote: f.def.superQuote };
     if (f.id === 'terachi') {
-      const oc = pick(TERACHI_OUTCOMES);
+      const oc = this.pick(TERACHI_OUTCOMES);
       cut.paper = oc.text;
       f.superData = oc;
     } else f.superData = {};
@@ -1185,7 +1225,7 @@ export class Battle {
           for (let i = 0; i < 44; i++) {
             this.queue.push({
               at: this.t + i,
-              fn: () => this.text('は？', 10 + Math.random() * (W - 20), 20 + Math.random() * (H - 50), { size: 7 + Math.random() * 18, color: Math.random() < 0.5 ? '#ffffff' : '#7dd3fc', life: 40 + Math.random() * 30, vy: -0.3, shake: true }),
+              fn: () => this.text('は？', 10 + this.rng() * (W - 20), 20 + this.rng() * (H - 50), { size: 7 + this.rng() * 18, color: this.rng() < 0.5 ? '#ffffff' : '#7dd3fc', life: 40 + this.rng() * 30, vy: -0.3, shake: true }),
             });
           }
           this.sfx('ha');
@@ -1205,8 +1245,8 @@ export class Battle {
       case 'ryoma': {
         if (T === 1) this.setBanner('フェイカツ降臨', '受験生よ、来い。✝', c, 110);
         if (T <= 66 && T % 3 === 0) {
-          const near = Math.random() < 0.6;
-          this.spawnProj({ kind: 'cross', owner: f.side, x: clamp(near ? o.x + (Math.random() - 0.5) * 90 : Math.random() * W, 8, W - 8), y: -12 - Math.random() * 20, vx: (Math.random() - 0.5) * 0.6, vy: 2.6 + Math.random() * 1.2, w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 220 });
+          const near = this.rng() < 0.6;
+          this.spawnProj({ kind: 'cross', owner: f.side, x: clamp(near ? o.x + (this.rng() - 0.5) * 90 : this.rng() * W, 8, W - 8), y: -12 - this.rng() * 20, vx: (this.rng() - 0.5) * 0.6, vy: 2.6 + this.rng() * 1.2, w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 220 });
           if (T % 9 === 0) this.sfx('cross');
         }
         if (T === 30) this.text('✝本質✝は止まらない', f.x, f.y - 60, { size: 9, color: '#fde68a', life: 50, vy: -0.3 });
@@ -1222,7 +1262,7 @@ export class Battle {
             this.setState(o, 'stun', 135);
             o.vx = 0;
             o.meter = 0;
-            for (let i = 0; i < 6; i++) this.text('？', o.x + (Math.random() - 0.5) * 24, o.y - 50 - Math.random() * 16, { size: 10 + Math.random() * 8, color: '#c4b5fd', life: 60, vy: -0.3 });
+            for (let i = 0; i < 6; i++) this.text('？', o.x + (this.rng() - 0.5) * 24, o.y - 50 - this.rng() * 16, { size: 10 + this.rng() * 8, color: '#c4b5fd', life: 60, vy: -0.3 });
             this.text('分類できない', o.x, o.y - 70, { size: 8, color: '#e9d5ff', life: 60, vy: -0.2 });
           }
           f.hp = Math.min(f.def.hp, f.hp + 25);
@@ -1304,7 +1344,7 @@ export class Battle {
       case 'rei': {
         if (T === 1) this.setBanner('面白いデータが出たので見てください', '全科目学年首席', c, 110);
         if (T <= 36 && T % 3 === 0) {
-          this.spawnProj({ kind: 'formula', owner: f.side, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * (1.5 + Math.random() * 2), vy: -3 + Math.random() * 6, w: 8, h: 8, dmg: 3, hitstun: 12, kbx: 0.8, kby: 0, life: 160, homing: o.side, text: pick(FORMULAS) });
+          this.spawnProj({ kind: 'formula', owner: f.side, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * (1.5 + this.rng() * 2), vy: -3 + this.rng() * 6, w: 8, h: 8, dmg: 3, hitstun: 12, kbx: 0.8, kby: 0, life: 160, homing: o.side, text: this.pick(FORMULAS) });
           if (T % 9 === 0) this.sfx('special');
         }
         if (T === 50) {
@@ -1329,7 +1369,7 @@ export class Battle {
         for (let i = 0; i < 30; i++) {
           this.queue.push({
             at: this.t + i * 2,
-            fn: () => this.spawnProj({ kind: 'kusa', owner: f.side, x: clamp(o.x + (Math.random() - 0.5) * 70, 8, W - 8), y: -10, vx: 0, vy: 3 + Math.random() * 2, w: 8, h: 8, dmg: 1.2, hitstun: 8, kbx: 0.4, kby: 0, life: 120 }),
+            fn: () => this.spawnProj({ kind: 'kusa', owner: f.side, x: clamp(o.x + (this.rng() - 0.5) * 70, 8, W - 8), y: -10, vx: 0, vy: 3 + this.rng() * 2, w: 8, h: 8, dmg: 1.2, hitstun: 8, kbx: 0.4, kby: 0, life: 120 }),
           });
         }
         break;
@@ -1369,12 +1409,12 @@ export class Battle {
     if (this.phase !== 'fight') return;
     this.nextEventT--;
     if (this.nextEventT > 0) return;
-    this.nextEventT = 660 + Math.random() * 600;
+    this.nextEventT = 660 + this.rng() * 600;
     this.fireEvent();
   }
 
   private fireEvent(forced?: (typeof EVENT_NAMES)[number]) {
-    let name = forced ?? pick(EVENT_NAMES);
+    let name = forced ?? this.pick(EVENT_NAMES);
     if (name === this.lastEvent) name = EVENT_NAMES[(EVENT_NAMES.indexOf(name) + 1) % EVENT_NAMES.length];
     this.lastEvent = name;
     this.sfx('event');
@@ -1390,25 +1430,25 @@ export class Battle {
         for (let i = 0; i < 12; i++) {
           this.queue.push({
             at: this.t + i * 6,
-            fn: () => this.spawnProj({ kind: 'cross', owner: -1, x: 20 + Math.random() * (W - 40), y: -12, vx: 0, vy: 2.2 + Math.random(), w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 200 }),
+            fn: () => this.spawnProj({ kind: 'cross', owner: -1, x: 20 + this.rng() * (W - 40), y: -12, vx: 0, vy: 2.2 + this.rng(), w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 200 }),
           });
         }
         break;
       case 'soupBack':
         this.setBanner('コーンスープ、六ヶ月ぶりに補充', '取った方が回復する', '#fde68a');
-        this.spawnProj({ kind: 'soup', owner: -1, x: 60 + Math.random() * (W - 120), y: -10, vx: 0, vy: 1.5, w: 8, h: 12, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 18 });
+        this.spawnProj({ kind: 'soup', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 1.5, w: 8, h: 12, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 18 });
         break;
       case 'soupGone': {
-        const tgt = Math.random() < 0.5 ? a : b;
+        const tgt = this.rng() < 0.5 ? a : b;
         this.setBanner('コーンスープの不在', '業者が忘れている（自販機が降ってくる）', '#94a3b8');
         this.text('！', tgt.x, 30, { size: 14, color: '#fca5a5', life: 60, vy: 0 });
-        this.spawnProj({ kind: 'vending', owner: -1, x: clamp(tgt.x + (Math.random() - 0.5) * 24, 20, W - 20), y: -40, vx: 0, vy: 0, grav: 0.22, w: 16, h: 26, dmg: 16, hitstun: 30, kbx: 2, kby: 4, knockdown: true, life: 420, ground: true, pierce: true });
+        this.spawnProj({ kind: 'vending', owner: -1, x: clamp(tgt.x + (this.rng() - 0.5) * 24, 20, W - 20), y: -40, vx: 0, vy: 0, grav: 0.22, w: 16, h: 26, dmg: 16, hitstun: 30, kbx: 2, kby: 4, knockdown: true, life: 420, ground: true, pierce: true });
         break;
       }
       case 'matome':
         this.setBanner('まとめサイトに載った', '【永久保存版】wwwww', '#4ade80');
         this.shake = 14;
-        for (let i = 0; i < 40; i++) this.text('草', Math.random() * W, Math.random() * H, { size: 6 + Math.random() * 12, color: '#4ade80', vy: -0.3 - Math.random() * 0.6, life: 60 + Math.random() * 60 });
+        for (let i = 0; i < 40; i++) this.text('草', this.rng() * W, this.rng() * H, { size: 6 + this.rng() * 12, color: '#4ade80', vy: -0.3 - this.rng() * 0.6, life: 60 + this.rng() * 60 });
         for (const f of this.f) {
           if (this.canBeAffected(f)) {
             f.hp = Math.max(1, f.hp - 8);
@@ -1418,7 +1458,7 @@ export class Battle {
         }
         break;
       case 'kuraishi': {
-        const fromLeft = Math.random() < 0.5;
+        const fromLeft = this.rng() < 0.5;
         this.setBanner('倉石暁、乱入', '✝✝✝は重い', '#f8fafc');
         this.spawnProj({ kind: 'kuraishi', owner: -1, x: fromLeft ? -20 : W + 20, y: GROUND - 20, vx: fromLeft ? 3.2 : -3.2, vy: 0, w: 14, h: 40, dmg: 8, hitstun: 24, kbx: 3, kby: 3.5, knockdown: true, life: 230, pierce: true });
         this.text('教祖に会えた', fromLeft ? 60 : W - 60, GROUND - 60, { size: 8, color: '#f8fafc', life: 60, vy: -0.2 });
@@ -1434,7 +1474,7 @@ export class Battle {
           }
         break;
       case 'threepoint': {
-        const fromLeft = Math.random() < 0.5;
+        const fromLeft = this.rng() < 0.5;
         this.setBanner('砂糖のスリーポイント', '用は済んだ', '#fb923c');
         this.spawnProj({ kind: 'basketball', owner: -1, x: fromLeft ? -8 : W + 8, y: 120, vx: fromLeft ? 2.8 : -2.8, vy: -3.4, grav: 0.11, w: 8, h: 8, dmg: 10, hitstun: 20, kbx: 2, kby: 2, life: 280 });
         break;
@@ -1460,7 +1500,7 @@ export class Battle {
         break;
       case 'mikan':
         this.setBanner('三重県産みかん、臣下が剥く', '白い筋の境界線（回復）', '#fdba74');
-        this.spawnProj({ kind: 'mikan', owner: -1, x: 60 + Math.random() * (W - 120), y: -10, vx: 0, vy: 1.4, w: 8, h: 8, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 12 });
+        this.spawnProj({ kind: 'mikan', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 1.4, w: 8, h: 8, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 12 });
         break;
     }
   }
@@ -1551,7 +1591,7 @@ export class Battle {
       o.state !== 'down' &&
       o.state !== 'getup' &&
       dist < 160 &&
-      Math.random() < superP
+      this.rng() < superP
     ) {
       inp.super = true;
       return inp;
@@ -1564,9 +1604,9 @@ export class Battle {
       const closing = p.homing === s || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
       return closing && Math.abs(dx) < 110 && Math.abs(p.y - (f.y - 22)) < 50;
     });
-    if (proj && grounded && Math.random() < projP) {
+    if (proj && grounded && this.rng() < projP) {
       // 三重は当身で跳ね返す
-      if (f.id === 'mie' && f.cooldown <= 0 && f.silence <= 0 && Math.random() < 0.65) {
+      if (f.id === 'mie' && f.cooldown <= 0 && f.silence <= 0 && this.rng() < 0.65) {
         inp.special = true;
         return inp;
       }
@@ -1575,7 +1615,7 @@ export class Battle {
         inp[fwd] = true;
       } else {
         inp.up = true;
-        if (Math.random() < 0.5) inp[fwd] = true;
+        if (this.rng() < 0.5) inp[fwd] = true;
       }
       return inp;
     }
@@ -1591,9 +1631,9 @@ export class Battle {
     const threat = (oMelee && dist < 62 && Math.abs(o.y - f.y) < 40) || oGrabThreat || jumpInThreat;
 
     if (threat && grounded) {
-      if (Math.random() < blockP) {
+      if (this.rng() < blockP) {
         // 三重は当身優先
-        if (f.id === 'mie' && f.cooldown <= 0 && f.silence <= 0 && Math.random() < 0.5) {
+        if (f.id === 'mie' && f.cooldown <= 0 && f.silence <= 0 && this.rng() < 0.5) {
           inp.special = true;
         } else {
           inp[back] = true;
@@ -1601,7 +1641,7 @@ export class Battle {
         return inp;
       }
       // ガード失敗時は何もしない（被弾）か、低確率でジャンプ避け
-      if (Math.random() < 0.15) {
+      if (this.rng() < 0.15) {
         inp.up = true;
         return inp;
       }
@@ -1610,7 +1650,7 @@ export class Battle {
     // ── 4. カウンター立ち（三重の「は？」）には触らない ──
     if (o.countering) {
       if (dist < 70) inp[back] = true;
-      else if (f.cooldown <= 0 && dist < 110 && this.aiCanSpecial(f, dist, false, !!proj) && Math.random() < 0.35) {
+      else if (f.cooldown <= 0 && dist < 110 && this.aiCanSpecial(f, dist, false, !!proj) && this.rng() < 0.35) {
         inp.special = true;
       } else inp[fwd] = true;
       return inp;
@@ -1627,7 +1667,7 @@ export class Battle {
     if (oVuln && grounded) {
       if (dist > heavyR + 4) {
         inp[fwd] = true;
-      } else if (inHeavy && Math.random() < 0.7) {
+      } else if (inHeavy && this.rng() < 0.7) {
         inp.heavy = true;
       } else if (inLight) {
         inp.light = true;
@@ -1662,12 +1702,12 @@ export class Battle {
     if (dist > 100) {
       if (
         this.aiCanSpecial(f, dist, false, !!proj) &&
-        Math.random() < specialP * 0.7
+        this.rng() < specialP * 0.7
       ) {
         inp.special = true;
         return inp;
       }
-      if (Math.random() < 0.08) {
+      if (this.rng() < 0.08) {
         inp.up = true;
         inp[fwd] = true;
       } else {
@@ -1680,12 +1720,12 @@ export class Battle {
     if (dist > heavyR + 6) {
       if (
         this.aiCanSpecial(f, dist, false, !!proj) &&
-        Math.random() < specialP * 0.35
+        this.rng() < specialP * 0.35
       ) {
         inp.special = true;
         return inp;
       }
-      if (Math.random() < 0.1) {
+      if (this.rng() < 0.1) {
         inp.up = true;
         inp[fwd] = true;
       } else {
@@ -1697,9 +1737,9 @@ export class Battle {
     // ── 10. 攻撃距離内：リーチを見てから撃つ（ここが一番重要）──
     // 近すぎるときは軽攻撃 or 下がる
     if (dist < 18) {
-      if (Math.random() < 0.35) {
+      if (this.rng() < 0.35) {
         inp[back] = true;
-      } else if (Math.random() < agg) {
+      } else if (this.rng() < agg) {
         inp.light = true;
       } else {
         inp[back] = true;
@@ -1708,7 +1748,7 @@ export class Battle {
     }
 
     // リーチ内なら攻撃、外なら歩いて詰める
-    const r = Math.random();
+    const r = this.rng();
     if (inHeavy && r < agg * 0.55) {
       inp.heavy = true;
     } else if (inLight && r < agg * 0.85) {
@@ -1716,7 +1756,7 @@ export class Battle {
     } else if (
       this.aiCanSpecial(f, dist, false, !!proj) &&
       r < agg * 0.95 &&
-      Math.random() < specialP
+      this.rng() < specialP
     ) {
       inp.special = true;
     } else if (r < 0.55) {
@@ -1775,7 +1815,7 @@ export class Battle {
     // 三重の「は？」構えには絶対に触らない
     if (o.countering) {
       if (dist < 68) inp[back] = true;
-      else if (f.cooldown <= 0 && dist < 100 && Math.random() < 0.4) inp.special = true;
+      else if (f.cooldown <= 0 && dist < 100 && this.rng() < 0.4) inp.special = true;
       else inp[fwd] = true;
       return inp;
     }
@@ -1790,10 +1830,10 @@ export class Battle {
       if (proj.ground) {
         inp.up = true;
         inp[fwd] = true;
-      } else if (f.cooldown <= 0 && Math.random() < (d === 'extreme' ? 0.55 : 0.4)) inp.special = true;
+      } else if (f.cooldown <= 0 && this.rng() < (d === 'extreme' ? 0.55 : 0.4)) inp.special = true;
       else {
         inp.up = true;
-        if (Math.random() < 0.55) inp[fwd] = true;
+        if (this.rng() < 0.55) inp[fwd] = true;
       }
       return inp;
     }
@@ -1803,8 +1843,8 @@ export class Battle {
       (oMelee && dist < 56 && Math.abs(o.y - f.y) < 36) ||
       (o.y < GROUND - 8 && dist < 58 && o.vy > -1.2);
     if (oThreat && grounded) {
-      if (Math.random() > blockP) return inp;
-      if (f.cooldown <= 0 && Math.random() < teleP) inp.special = true;
+      if (this.rng() > blockP) return inp;
+      if (f.cooldown <= 0 && this.rng() < teleP) inp.special = true;
       else inp[back] = true;
       return inp;
     }
@@ -1844,21 +1884,21 @@ export class Battle {
     }
     // 攻め：間合いを維持して poke（リーチ外では撃たない）
     if (dist > heavyR + 4) {
-      if (dist > 105 && f.cooldown <= 0 && Math.random() < (d === 'extreme' ? 0.12 : 0.06)) {
+      if (dist > 105 && f.cooldown <= 0 && this.rng() < (d === 'extreme' ? 0.12 : 0.06)) {
         inp.special = true;
-      } else if (dist > 110 && Math.random() < 0.06) {
+      } else if (dist > 110 && this.rng() < 0.06) {
         inp.up = true;
         inp[fwd] = true;
       } else inp[fwd] = true;
       return inp;
     }
     if (dist < 20) {
-      if (f.cooldown <= 0 && Math.random() < (d === 'extreme' ? 0.22 : 0.14)) inp.special = true;
+      if (f.cooldown <= 0 && this.rng() < (d === 'extreme' ? 0.22 : 0.14)) inp.special = true;
       else if (dist <= lightR) inp.light = true;
       else inp[back] = true;
       return inp;
     }
-    const r = Math.random();
+    const r = this.rng();
     if (r < pokeHeavy && dist <= heavyR) inp.heavy = true;
     else if (r < pokeHeavy + 0.14) inp[fwd] = true;
     else if (r < pokeHeavy + 0.22 && dist <= lightR) inp.light = true;
