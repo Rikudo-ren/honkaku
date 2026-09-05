@@ -269,7 +269,33 @@ export default function CharacterSelect({ mode, difficulty, onDone, onBack }: Pr
         />
       </div>
 
-      <div className="relative z-10 mt-4 text-center text-xs text-slate-400 md:text-sm">
+      <div className="relative z-10 mt-3 flex items-center justify-center gap-3">
+        {!locked[0] && !isAi[0] ? (
+          <button
+            onClick={() => lock(0)}
+            className="border-2 border-amber-300 bg-amber-300 px-6 py-1.5 text-sm font-bold text-slate-950 shadow-[3px_3px_0_#000] hover:bg-amber-200 active:scale-95"
+          >
+            1P 決定 ✝
+          </button>
+        ) : locked[0] && !locked[1] && (mode === '1p' || mode === '2p' || !isAi[1]) ? (
+          <div className="flex gap-2">
+            <button
+              onClick={() => lock(1)}
+              className="border-2 border-amber-300 bg-amber-300 px-6 py-1.5 text-sm font-bold text-slate-950 shadow-[3px_3px_0_#000] hover:bg-amber-200 active:scale-95"
+            >
+              {mode === '1p' ? '対戦相手（CPU）決定 ✝' : '2P 決定 ✝'}
+            </button>
+            <button
+              onClick={() => unlock(0)}
+              className="border-2 border-slate-500 bg-slate-900 px-4 py-1.5 text-sm text-slate-200 shadow-[3px_3px_0_#000] hover:bg-slate-800"
+            >
+              1P 再選択
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="relative z-10 mt-2 text-center text-xs text-slate-400 md:text-sm">
         {mode === '1p'
           ? '1P：WASD／矢印で移動・F/Enter 決定・G/Esc 戻る　※自分→相手の順で両方選べます'
           : '1P：WASD 移動・F 決定・G 戻る ／ 2P：矢印 移動・K 決定・L 戻る ／ クリックでも選べる'}
