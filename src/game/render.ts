@@ -820,7 +820,7 @@ export class Renderer {
       if (b.phase === 'intro' || (b.phase === 'fight' && b.phaseT < 150)) {
         const tag = f.tag ?? (f.ai ? 'CPU' : f.side === 0 ? '1P' : '2P');
         const bob = Math.sin(b.t / 6) * 1.5;
-        this.txt(`${tag}▼`, f.x, f.y - 56 + bob, 5.5, tag === 'あなた' ? '#fde68a' : f.def.color);
+        this.txt(`${tag}▼`, f.x, f.y - 56 + bob, 5.5, f.you || tag === 'あなた' ? '#fde68a' : f.def.color);
       }
       // チームカラーの足元マーカー（チーム戦のみ）
       if (!b.isDuel && f.hp > 0 && b.phase !== 'matchEnd') {
@@ -900,6 +900,10 @@ export class Renderer {
       const nx = right ? W - 16 : 16;
       this.txt(f.def.name, nx, barY + barH + 6, 7, '#ffffff', right ? 'right' : 'left');
       this.txt(f.def.title, nx, barY + barH + 13, 4.2, f.def.color, right ? 'right' : 'left', '#000', 1);
+      // オンライン対戦ではプレイヤー名（自分は金色）をキャラ名の下に添える
+      if (b.opts.online && f.tag) {
+        this.txt(f.tag, nx, barY + barH + 19.5, 4.2, f.you ? '#fde68a' : '#cbd5e1', right ? 'right' : 'left', '#000', 1);
+      }
       // meter
       const mw = 118;
       const my = 205;
@@ -954,7 +958,8 @@ export class Renderer {
         const bx = right ? W - 8 - w : 8;
         // 名前＋タグ
         const tag = f.tag ? `(${f.tag})` : '';
-        this.txt(`${f.def.name}${tag}`, right ? W - 8 : 8, y, 4.5, f.hp <= 0 ? '#64748b' : '#ffffff', align, '#000', 1);
+        const nameColor = f.hp <= 0 ? '#64748b' : f.you ? '#fde68a' : '#ffffff';
+        this.txt(`${f.def.name}${tag}`, right ? W - 8 : 8, y, 4.5, nameColor, align, '#000', 1);
         // HPバー
         c.fillStyle = '#0f1016';
         c.fillRect(bx - 1, y + 2, w + 2, 4);

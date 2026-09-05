@@ -92,20 +92,27 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
     let cutinTimer = 0;
     let endTimer = 0;
     // チーム戦／1対1 のファイター構成を決める
+    // オンライン対戦ではプレイヤー名を頭上タグに使う（未設定なら従来表示）
+    const tagOf = (side: Side) => {
+      if (online) return setup.onlineNames?.[side] || (mySide === side ? 'あなた' : '相手');
+      if (side === 0) return setup.mode === 'cpu' ? 'CPU' : '1P';
+      return setup.mode === '2p' ? '2P' : 'CPU';
+    };
     const fighters: FighterSetup[] = teamMode
       ? setup.fighters!
       : [
-          { char: setup.p1, team: 0, ai: online ? false : setup.mode === 'cpu', tag: online ? (mySide === 0 ? 'あなた' : '相手') : setup.mode === 'cpu' ? 'CPU' : '1P' },
-          { char: setup.p2, team: 1, ai: online ? false : setup.mode !== '2p', tag: online ? (mySide === 1 ? 'あなた' : '相手') : setup.mode === '2p' ? '2P' : 'CPU' },
+          { char: setup.p1, team: 0, ai: online ? false : setup.mode === 'cpu', tag: tagOf(0), you: online && mySide === 0 },
+          { char: setup.p2, team: 1, ai: online ? false : setup.mode !== '2p', tag: tagOf(1), you: online && mySide === 1 },
         ];
     const battle = new Battle({
       p1: setup.p1,
       p2: setup.p2,
       ai: online ? [false, false] : [setup.mode === 'cpu', setup.mode !== '2p'],
-      fighters: fighters.map((f) => ({ char: f.char, team: f.team, ai: f.ai, aiDifficulty: f.aiDifficulty, tag: f.tag })),
+      fighters: fighters.map((f) => ({ char: f.char, team: f.team, ai: f.ai, aiDifficulty: f.aiDifficulty, tag: f.tag, you: f.you })),
       difficulty: setup.difficulty,
       stage: setup.stage,
       seed: setup.seed,
+      online,
       onCutin: (c) => {
         setCutin({ c, key: Date.now() });
         window.clearTimeout(cutinTimer);

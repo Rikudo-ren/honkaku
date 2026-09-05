@@ -47,8 +47,10 @@ export interface Fighter {
   id: CharId;
   def: CharDef;
   look: Look;
-  /** 頭上タグ（'1P' / 'あなた' / 'CPU' など。未指定なら自動） */
+  /** 頭上タグ（'1P' / 'あなた' / 'CPU' / プレイヤー名 など。未指定なら自動） */
   tag?: string;
+  /** 自分が操作するファイターか（表示用。オンライン対戦で自分を見分けるのに使う） */
+  you?: boolean;
   /** このファイター専用のAI強度（未指定なら BattleOptions.difficulty） */
   aiDifficulty?: Difficulty;
   x: number;
@@ -175,6 +177,8 @@ export interface BattleFighterSetup {
   ai: boolean;
   aiDifficulty?: Difficulty;
   tag?: string;
+  /** 自分が操作するファイターか（表示用） */
+  you?: boolean;
 }
 
 export interface BattleOptions {
@@ -185,6 +189,8 @@ export interface BattleOptions {
   stage: StageId;
   /** 決定論的な再現のためのシード（オンライン対戦で使用）。未指定ならランダム。 */
   seed?: number;
+  /** オンライン対戦かどうか（HUDにプレイヤー名を出すかの判定に使う） */
+  online?: boolean;
   /**
    * チーム戦（同時乱戦）用ファイター一覧。指定された場合は p1/p2/ai の代わりに
    * こちらを使う（2人以上の任意人数・任意チーム分け）。
@@ -240,7 +246,7 @@ const EVENT_NAMES = ['window', 'feikatsu', 'soupBack', 'soupGone', 'matome', 'ku
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const overlap = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficulty?: Difficulty, tag?: string): Fighter {
+function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficulty?: Difficulty, tag?: string, you?: boolean): Fighter {
   const def = CHARS[id];
   return {
     idx,
@@ -250,6 +256,7 @@ function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficu
     def,
     look: def.look,
     tag,
+    you,
     aiDifficulty,
     x: team === 0 ? 110 : 274,
     y: GROUND,
@@ -321,7 +328,7 @@ export class Battle {
     this.stage = opts.stage;
     this.rngState = (opts.seed ?? (Math.random() * 0xffffffff)) >>> 0;
     if (opts.fighters && opts.fighters.length >= 2) {
-      this.f = opts.fighters.map((s, i) => makeFighter(i, s.team, s.char, s.ai, s.aiDifficulty, s.tag));
+      this.f = opts.fighters.map((s, i) => makeFighter(i, s.team, s.char, s.ai, s.aiDifficulty, s.tag, s.you));
     } else {
       this.f = [makeFighter(0, 0, opts.p1, opts.ai[0]), makeFighter(1, 1, opts.p2, opts.ai[1])];
     }

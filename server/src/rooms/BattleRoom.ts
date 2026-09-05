@@ -13,11 +13,28 @@ const MAX_HUMANS = 8;
 const BASE_INPUT_DELAY = 5;
 const MAX_INPUT_DELAY = 10;
 
+/** プレイヤー名の最大文字数（HUDやロビーの表示崩れ防止） */
+const MAX_NAME = 12;
+/** 名前を設定していない人の表示名 */
+const DEFAULT_NAME = "名無しの本質";
+
+/** 表示に使えない制御文字を落とし、長さを制限する */
+function sanitizeName(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_NAME);
+}
+
 interface PlayerInfo {
   team: 0 | 1;
   char: string | null;
   ready: boolean;
   host: boolean;
+  /** プレイヤーが自分で決めた表示名 */
+  name: string;
 }
 
 interface AiSlot {
@@ -51,6 +68,7 @@ function calcInputDelay(humanCount: number): number {
  *
  * メッセージ:
  *  - "hello"            クライアント → 接続後の挨拶。welcome / lobby を返す
+ *  - "name"   (string)  プレイヤー名の変更（試合中は不可・同名なら連番を付与）
  *  - "chara"  (id)      キャラクター選択
  *  - "ready"  (bool)    準備完了トグル
  *  - "team"   [id,team] [ホスト専用] プレイヤーのチーム変更
@@ -91,6 +109,16 @@ export class BattleRoom extends Room {
       const p = this.players.get(client.sessionId);
       if (!p) return;
       client.send("welcome", { side: p.team, code: this.roomId, private: this.isPrivate });
+      this.broadcastLobby();
+    });
+
+    // プレイヤー名の変更（ロビーにいる間はいつでもOK。試合中は不可）
+    this.onMessage("name", (client, raw: string) => {
+      const p = this.players.get(client.sessionId);
+      if (!p || this.started) return;
+      const next = sanitizeName(raw);
+      if (!next) return;
+      p.name = this.uniqueName(next, client.sessionId);
       this.broadcastLobby();
     });
 
@@ -194,15 +222,29 @@ export class BattleRoom extends Room {
     });
   }
 
-  onJoin(client: Client) {
+  onJoin(client: Client, options: { name?: unknown } = {}) {
     // チームは人数の少ない方へ自動配属（ホストが後から変更可）
     let count0 = 0;
     let count1 = 0;
     for (const p of this.players.values()) (p.team === 0 ? count0++ : count1++);
     const team: 0 | 1 = count0 <= count1 ? 0 : 1;
     const host = this.players.size === 0;
-    this.players.set(client.sessionId, { team, char: null, ready: false, host });
+    // 参加オプションで名前が渡されたら採用（未設定/不正ならデフォルト名）
+    const requested = sanitizeName((options as { name?: unknown } | undefined)?.name) || DEFAULT_NAME;
+    this.players.set(client.sessionId, { team, char: null, ready: false, host, name: this.uniqueName(requested, client.sessionId) });
     if (!this.teamMode && this.clients.length >= 2) this.lock();
+  }
+
+  /** 同名プレイヤーがいたら末尾に連番を付けて被りを避ける */
+  private uniqueName(desired: string, selfId: string): string {
+    const taken = (n: string) => [...this.players.entries()].some(([id, p]) => id !== selfId && p.name === n);
+    if (!taken(desired)) return desired;
+    for (let i = 2; i < 100; i++) {
+      const suffix = String(i);
+      const candidate = `${desired.slice(0, Math.max(1, MAX_NAME - suffix.length))}${suffix}`;
+      if (!taken(candidate)) return candidate;
+    }
+    return desired;
   }
 
   onLeave(client: Client) {
@@ -239,7 +281,7 @@ export class BattleRoom extends Room {
       private: this.isPrivate,
       teamMode: this.teamMode,
       maxHumans: this.teamMode ? MAX_HUMANS : 2,
-      players: [...this.players.entries()].map(([id, p]) => ({ id, team: p.team, char: p.char, ready: p.ready, host: p.host })),
+      players: [...this.players.entries()].map(([id, p]) => ({ id, team: p.team, char: p.char, ready: p.ready, host: p.host, name: p.name })),
       ai: this.aiSlots.map((a) => ({ team: a.team, char: a.char, difficulty: a.difficulty })),
     });
   }
@@ -259,6 +301,7 @@ export class BattleRoom extends Room {
       team: p.team,
       sessionId,
       aiDifficulty: "normal",
+      name: p.name,
     }));
     this.lastFighters = fighters;
     this.lock();
@@ -294,8 +337,8 @@ export class BattleRoom extends Room {
     // スロット順：人間（入室順）→ AI（追加順）。チームでソートはしない
     // （mySlot は sessionId 照合で各クライアントが求める）
     const fighters = [
-      ...humans.map(([sessionId, p]) => ({ char: p.char, team: p.team, sessionId, aiDifficulty: "normal" })),
-      ...this.aiSlots.map((a) => ({ char: a.char, team: a.team, sessionId: null, aiDifficulty: a.difficulty })),
+      ...humans.map(([sessionId, p]) => ({ char: p.char, team: p.team, sessionId, aiDifficulty: "normal", name: p.name })),
+      ...this.aiSlots.map((a) => ({ char: a.char, team: a.team, sessionId: null, aiDifficulty: a.difficulty, name: null })),
     ];
     this.lastFighters = fighters;
     this.lock();

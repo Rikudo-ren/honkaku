@@ -134,6 +134,7 @@ export default function App() {
         onlineMatchId: data.matchId,
         netInputDelay: data.inputDelay,
         onlineSide: mySide,
+        onlineNames: data.fighters.map((f) => f.name ?? null),
       }));
     } else {
       // チーム戦：全ファイター設定＋自分のスロット
@@ -142,7 +143,9 @@ export default function App() {
         team: f.team,
         ai: f.sessionId === null,
         aiDifficulty: f.aiDifficulty,
-        tag: f.sessionId === null ? 'CPU' : i === mySlot ? 'あなた' : 'NET',
+        // オンラインの人間枠はプレイヤー名をタグに使う（未設定なら従来表示）
+        tag: f.sessionId === null ? 'CPU' : f.name || (i === mySlot ? 'あなた' : 'NET'),
+        you: i === mySlot,
       }));
       const rep0 = fighters.find((f) => f.team === 0)?.char ?? 'mie';
       const rep1 = fighters.find((f) => f.team === 1)?.char ?? 'ryoma';
@@ -159,6 +162,7 @@ export default function App() {
         onlineMatchId: data.matchId,
         netInputDelay: data.inputDelay,
         onlineSide: (fighters[mySlot]?.team ?? 0) as Side,
+        onlineNames: data.fighters.map((f) => f.name ?? null),
       }));
     }
     setScreen('versus');
