@@ -101,7 +101,16 @@ export default function App() {
   }, [screen]);
 
   const start = useCallback((mode: Mode, difficulty: Difficulty) => {
-    setSetup((s) => ({ ...s, mode, difficulty, teamMode: false, fighters: undefined, mySlot: undefined }));
+    setSetup((s) => ({
+      ...s,
+      mode,
+      difficulty,
+      teamMode: false,
+      fighters: undefined,
+      mySlot: undefined,
+      onlineMatchId: undefined,
+      netInputDelay: undefined,
+    }));
     setScreen(mode === 'online' ? 'online' : mode === 'team' ? 'teamsetup' : 'select');
   }, []);
 
@@ -112,7 +121,20 @@ export default function App() {
     if (data.fighters.length === 2) {
       // 1対1クイック：従来通りのセットアップ
       const mySide = (mySlot === 1 ? 1 : 0) as Side;
-      setSetup((s) => ({ ...s, mode: 'online', teamMode: false, fighters: undefined, mySlot: undefined, p1: data.fighters[0].char, p2: data.fighters[1].char, stage: data.stage, seed: data.seed, onlineSide: mySide }));
+      setSetup((s) => ({
+        ...s,
+        mode: 'online',
+        teamMode: false,
+        fighters: undefined,
+        mySlot: undefined,
+        p1: data.fighters[0].char,
+        p2: data.fighters[1].char,
+        stage: data.stage,
+        seed: data.seed,
+        onlineMatchId: data.matchId,
+        netInputDelay: data.inputDelay,
+        onlineSide: mySide,
+      }));
     } else {
       // チーム戦：全ファイター設定＋自分のスロット
       const fighters: FighterSetup[] = data.fighters.map((f, i) => ({
@@ -124,20 +146,54 @@ export default function App() {
       }));
       const rep0 = fighters.find((f) => f.team === 0)?.char ?? 'mie';
       const rep1 = fighters.find((f) => f.team === 1)?.char ?? 'ryoma';
-      setSetup((s) => ({ ...s, mode: 'online', teamMode: true, fighters, mySlot, p1: rep0, p2: rep1, stage: data.stage, seed: data.seed, onlineSide: (fighters[mySlot]?.team ?? 0) as Side }));
+      setSetup((s) => ({
+        ...s,
+        mode: 'online',
+        teamMode: true,
+        fighters,
+        mySlot,
+        p1: rep0,
+        p2: rep1,
+        stage: data.stage,
+        seed: data.seed,
+        onlineMatchId: data.matchId,
+        netInputDelay: data.inputDelay,
+        onlineSide: (fighters[mySlot]?.team ?? 0) as Side,
+      }));
     }
     setScreen('versus');
   }, []);
 
   const chosen = useCallback((p1: CharId, p2: CharId) => {
-    setSetup((s) => ({ ...s, p1, p2, stage: randomStage(), teamMode: false, fighters: undefined, mySlot: undefined }));
+    setSetup((s) => ({
+      ...s,
+      p1,
+      p2,
+      stage: randomStage(),
+      teamMode: false,
+      fighters: undefined,
+      mySlot: undefined,
+      onlineMatchId: undefined,
+      netInputDelay: undefined,
+    }));
     setScreen('versus');
   }, []);
 
   const teamChosen = useCallback((fighters: FighterSetup[]) => {
     const rep0 = fighters.find((f) => f.team === 0)?.char ?? 'mie';
     const rep1 = fighters.find((f) => f.team === 1)?.char ?? 'ryoma';
-    setSetup((s) => ({ ...s, mode: 'team', teamMode: true, fighters, mySlot: undefined, p1: rep0, p2: rep1, stage: randomStage() }));
+    setSetup((s) => ({
+      ...s,
+      mode: 'team',
+      teamMode: true,
+      fighters,
+      mySlot: undefined,
+      p1: rep0,
+      p2: rep1,
+      stage: randomStage(),
+      onlineMatchId: undefined,
+      netInputDelay: undefined,
+    }));
     setScreen('versus');
   }, []);
 
@@ -157,7 +213,7 @@ export default function App() {
       setScreen(net.connected ? 'online' : 'title');
       return;
     }
-    setSetup((s) => ({ ...s, stage: randomStage() }));
+    setSetup((s) => ({ ...s, stage: randomStage(), onlineMatchId: undefined, netInputDelay: undefined }));
     setBattleKey((k) => k + 1);
     setScreen('versus');
   }, [setup.mode]);

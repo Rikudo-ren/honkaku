@@ -1,15 +1,17 @@
-import { Room, Client } from "@colyseus/core";
+import { Client, Room } from "@colyseus/core";
 
 /** 合言葉コードに使う文字（紛らわしい 0/O/1/I は除外） */
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const STAGES = ["classroom", "lake", "sakura", "hawaii"] as const;
-const CHAR_IDS = ["mie", "ryoma", "naito", "mitsumine", "terachi", "rei"];
-const DIFFICULTIES = ["easy", "normal", "hard", "extreme"];
+const CHAR_IDS = ["mie", "ryoma", "naito", "mitsumine", "terachi", "rei"] as const;
+const DIFFICULTIES = ["easy", "normal", "hard", "extreme"] as const;
 
 /** チーム戦ルームの上限（人間＋AIの合計ファイター数） */
 const MAX_FIGHTERS = 8;
 /** 1部屋に入れる最大人数 */
 const MAX_HUMANS = 8;
+const BASE_INPUT_DELAY = 5;
+const MAX_INPUT_DELAY = 10;
 
 interface PlayerInfo {
   team: 0 | 1;
@@ -22,6 +24,18 @@ interface AiSlot {
   team: 0 | 1;
   char: string;
   difficulty: string;
+}
+
+interface FighterSlot {
+  char: string | null;
+  team: 0 | 1;
+  sessionId: string | null;
+  aiDifficulty: string;
+}
+
+function calcInputDelay(humanCount: number): number {
+  const extra = Math.max(0, humanCount - 2) + (humanCount >= 4 ? 1 : 0);
+  return Math.min(MAX_INPUT_DELAY, BASE_INPUT_DELAY + extra);
 }
 
 /**
@@ -44,10 +58,10 @@ interface AiSlot {
  *  - "ai-set" ({index,..}) [ホスト専用] AI設定変更
  *  - "ai-del" (index)   [ホスト専用] AI削除
  *  - "start-game"       [ホスト専用] 試合開始（チーム戦ルーム）
- *  - "i"      [f,s,mask] フレーム入力。全員へリレー
- *  - "h"      [f, hash] 同期チェック用ハッシュ。全員へリレー
+ *  - "i"      [matchId,f,s,mask] 入力リレー
+ *  - "h"      [matchId,f,hash]   同期チェック用ハッシュ
  *  - "ping"   (t)       レイテンシ計測。"pong" で返す
- *  - "end"              試合終了通知（再戦を可能にする）
+ *  - "end"    (matchId) 試合終了通知（再戦を可能にする）
  */
 export class BattleRoom extends Room {
   maxClients = 8;
@@ -58,7 +72,8 @@ export class BattleRoom extends Room {
   private teamMode = false;
   private started = false;
   /** 試合中の入力スロット所有者。クライアント入力のなりすまし防止に使う。 */
-  private lastFighters: Array<{ sessionId: string | null }> = [];
+  private lastFighters: FighterSlot[] = [];
+  private currentMatchId = 0;
 
   onCreate(options: { private?: boolean } = {}) {
     this.isPrivate = !!options?.private;
@@ -82,7 +97,7 @@ export class BattleRoom extends Room {
     this.onMessage("chara", (client, id: string) => {
       const p = this.players.get(client.sessionId);
       if (!p || this.started) return;
-      if (!CHAR_IDS.includes(id)) return;
+      if (!CHAR_IDS.includes(id as (typeof CHAR_IDS)[number])) return;
       if (p.ready) return; // ready 後は変更不可
       p.char = id;
       this.broadcastLobby();
@@ -90,9 +105,8 @@ export class BattleRoom extends Room {
 
     this.onMessage("ready", (client, ready: boolean) => {
       const p = this.players.get(client.sessionId);
-      if (!p) return;
+      if (!p || this.started) return;
       p.ready = !!ready && !!p.char;
-      if (!ready) this.started = false; // 再戦のためのリセット
       this.broadcastLobby();
       if (!this.teamMode) this.tryStartQuick();
     });
@@ -116,8 +130,8 @@ export class BattleRoom extends Room {
       if (!me?.host) return;
       if (this.players.size + this.aiSlots.length >= MAX_FIGHTERS) return;
       const team = data?.team === 1 ? 1 : 0;
-      const char = CHAR_IDS.includes(data?.char) ? data.char : "mie";
-      const difficulty = DIFFICULTIES.includes(data?.difficulty) ? data.difficulty : "normal";
+      const char = CHAR_IDS.includes(data?.char as (typeof CHAR_IDS)[number]) ? data.char : "mie";
+      const difficulty = DIFFICULTIES.includes(data?.difficulty as (typeof DIFFICULTIES)[number]) ? data.difficulty : "normal";
       this.aiSlots.push({ team, char, difficulty });
       this.broadcastLobby();
     });
@@ -129,8 +143,8 @@ export class BattleRoom extends Room {
       const slot = this.aiSlots[data?.index];
       if (!slot) return;
       if (data.team === 0 || data.team === 1) slot.team = data.team;
-      if (data.char && CHAR_IDS.includes(data.char)) slot.char = data.char;
-      if (data.difficulty && DIFFICULTIES.includes(data.difficulty)) slot.difficulty = data.difficulty;
+      if (data.char && CHAR_IDS.includes(data.char as (typeof CHAR_IDS)[number])) slot.char = data.char;
+      if (data.difficulty && DIFFICULTIES.includes(data.difficulty as (typeof DIFFICULTIES)[number])) slot.difficulty = data.difficulty;
       this.broadcastLobby();
     });
 
@@ -150,25 +164,33 @@ export class BattleRoom extends Room {
       this.tryStartTeam();
     });
 
-    // ロックステップ入力（[frame, slot, bitmask]）を他の全員へリレー
+    // ロックステップ入力（[matchId, frame, slot, bitmask]）を他の全員へリレー
     this.onMessage("i", (client, data) => {
-      if (!this.started || !Array.isArray(data) || data.length !== 3) return;
-      const [frame, slot, mask] = data;
+      if (!this.started || !Array.isArray(data) || data.length !== 4) return;
+      const [matchId, frame, slot, mask] = data;
+      if (matchId !== this.currentMatchId) return;
       if (!Number.isInteger(frame) || frame < 0 || !Number.isInteger(slot) || slot < 0 || slot >= this.lastFighters.length || !Number.isInteger(mask) || mask < 0 || mask > 0xff) return;
       if (this.lastFighters[slot]?.sessionId !== client.sessionId) return;
-      this.relay(client, "i", [frame, slot, mask]);
+      this.relay(client, "i", [matchId, frame, slot, mask]);
     });
-    // 同期チェック用ハッシュ（[frame, hash]）を他の全員へリレー
+
+    // 同期チェック用ハッシュ（[matchId, frame, hash]）を他の全員へリレー
     this.onMessage("h", (client, data) => {
-      if (!this.started || !Array.isArray(data) || data.length !== 2) return;
-      const [frame, hash] = data;
+      if (!this.started || !Array.isArray(data) || data.length !== 3) return;
+      const [matchId, frame, hash] = data;
+      if (matchId !== this.currentMatchId) return;
       if (!Number.isInteger(frame) || frame < 0 || !Number.isInteger(hash)) return;
-      this.relay(client, "h", [frame, hash]);
+      if (!this.isActiveParticipant(client.sessionId)) return;
+      this.relay(client, "h", [matchId, frame, hash]);
     });
 
     this.onMessage("ping", (client, t) => client.send("pong", t));
-    this.onMessage("end", () => {
-      this.started = false;
+
+    this.onMessage("end", (client, matchId: number) => {
+      if (!this.started) return;
+      if (matchId !== this.currentMatchId) return;
+      if (!this.isActiveParticipant(client.sessionId)) return;
+      this.finishMatch();
     });
   }
 
@@ -185,8 +207,13 @@ export class BattleRoom extends Room {
 
   onLeave(client: Client) {
     const wasHost = this.players.get(client.sessionId)?.host;
+    const wasActiveParticipant = this.isActiveParticipant(client.sessionId);
     this.players.delete(client.sessionId);
-    this.started = false;
+    if (wasActiveParticipant) {
+      this.started = false;
+      this.lastFighters = [];
+      if (this.teamMode) this.unlock();
+    }
     // ホストが抜けたら次に入った人にホスト権を移譲
     if (wasHost) {
       const next = this.players.values().next().value as PlayerInfo | undefined;
@@ -223,6 +250,7 @@ export class BattleRoom extends Room {
     const list = [...this.players.entries()];
     if (!list.every(([, p]) => p.ready && p.char)) return;
     this.started = true;
+    this.currentMatchId += 1;
     for (const [, p] of list) p.ready = false;
     // team 順に並べてスロット0=青、スロット1=赤に
     list.sort((a, b) => a[1].team - b[1].team);
@@ -232,8 +260,11 @@ export class BattleRoom extends Room {
       sessionId,
       aiDifficulty: "normal",
     }));
-    this.lastFighters = fighters.map(({ sessionId }) => ({ sessionId }));
+    this.lastFighters = fighters;
+    this.lock();
     this.broadcast("start", {
+      matchId: this.currentMatchId,
+      inputDelay: BASE_INPUT_DELAY,
       seed: Math.floor(Math.random() * 0xffffffff) >>> 0,
       stage: STAGES[Math.floor(Math.random() * STAGES.length)],
       fighters,
@@ -258,6 +289,7 @@ export class BattleRoom extends Room {
     if (teams.size < 2) return;
 
     this.started = true;
+    this.currentMatchId += 1;
     for (const [, p] of humans) p.ready = false;
     // スロット順：人間（入室順）→ AI（追加順）。チームでソートはしない
     // （mySlot は sessionId 照合で各クライアントが求める）
@@ -265,11 +297,25 @@ export class BattleRoom extends Room {
       ...humans.map(([sessionId, p]) => ({ char: p.char, team: p.team, sessionId, aiDifficulty: "normal" })),
       ...this.aiSlots.map((a) => ({ char: a.char, team: a.team, sessionId: null, aiDifficulty: a.difficulty })),
     ];
-    this.lastFighters = fighters.map(({ sessionId }) => ({ sessionId }));
+    this.lastFighters = fighters;
+    this.lock();
     this.broadcast("start", {
+      matchId: this.currentMatchId,
+      inputDelay: calcInputDelay(humans.length),
       seed: Math.floor(Math.random() * 0xffffffff) >>> 0,
       stage: STAGES[Math.floor(Math.random() * STAGES.length)],
       fighters,
     });
+  }
+
+  private isActiveParticipant(sessionId: string): boolean {
+    return this.lastFighters.some((fighter) => fighter.sessionId === sessionId);
+  }
+
+  private finishMatch() {
+    this.started = false;
+    this.lastFighters = [];
+    if (this.teamMode) this.unlock();
+    this.broadcastLobby();
   }
 }
