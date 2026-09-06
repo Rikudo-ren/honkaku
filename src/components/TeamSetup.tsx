@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CHARS, DIFFICULTY_SHORT, rosterFor } from '@/game/characters';
+import { CHARS, DEFAULT_TEAM_SLOTS, DIFFICULTY_SHORT, rosterFor } from '@/game/characters';
 import type { HiddenUnlocks } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
@@ -29,12 +29,8 @@ const CTRL_LABEL: Record<Ctrl, string> = { p1: '1P操作', p2: '2P操作', cpu: 
 
 export default function TeamSetup({ defaultDifficulty, hiddenUnlocked = {}, onDone, onBack }: Props) {
   const roster = rosterFor(hiddenUnlocked);
-  const [rows, setRows] = useState<Row[]>([
-    { char: 'mie', team: 0, ctrl: 'p1', aiDifficulty: defaultDifficulty },
-    { char: 'ryoma', team: 0, ctrl: 'cpu', aiDifficulty: defaultDifficulty },
-    { char: 'naito', team: 1, ctrl: 'p2', aiDifficulty: defaultDifficulty },
-    { char: 'mitsumine', team: 1, ctrl: 'cpu', aiDifficulty: defaultDifficulty },
-  ]);
+  // 初期編成は DEFAULT_TEAM_SLOTS（1P＋CPU多数）。デフォで 2P は立てない。
+  const [rows, setRows] = useState<Row[]>(() => DEFAULT_TEAM_SLOTS.map((s) => ({ ...s, aiDifficulty: defaultDifficulty })));
 
   const patch = (i: number, p: Partial<Row>) => {
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...p } : r)));
