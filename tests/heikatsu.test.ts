@@ -35,8 +35,8 @@ test('塀勝也の解禁条件：1P対CPU・自分と同じキャラ（鏡像）
   assert.ok(!isHeikatsu({ ...base, teamMode: true }, 0), 'チーム戦では解禁されない');
 });
 
-test('塀勝也は櫻と覚醒三重の間の隠しキャラ（並び順が sakura→heikatsu→kakusei）', () => {
-  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'heikatsu', 'kakusei']);
+test('塀勝也は櫻の次、応援三峰の前の隠しキャラ', () => {
+  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'heikatsu', 'mitsumine_cheer', 'kakusei']);
   assert.deepEqual(rosterFor({ sakura: true, heikatsu: true, kakusei: true }), [...CHAR_ORDER, 'sakura', 'heikatsu', 'kakusei']);
   assert.equal(HIDDEN_META.find((m) => m.id === 'heikatsu')?.key, 'honkaku_heikatsu_unlocked');
 });

@@ -24,11 +24,12 @@ const run = (opts: Partial<BattleOpts>, frames: number, inputs?: (t: number, b: 
   return b;
 };
 
-test('隠しキャラ①櫻優・②塀勝也・③覚醒三重：通常ロスターには出ず、解禁すると末尾に追加される', () => {
+test('隠しキャラ①櫻優・②塀勝也・③三峰瑠衣(応援)・④覚醒三重：通常ロスターには出ず、解禁すると末尾に追加される', () => {
   assert.ok(!CHAR_ORDER.includes('sakura'));
   assert.ok(!CHAR_ORDER.includes('heikatsu'));
+  assert.ok(!CHAR_ORDER.includes('mitsumine_cheer'));
   assert.ok(!CHAR_ORDER.includes('kakusei'));
-  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'heikatsu', 'kakusei']);
+  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'heikatsu', 'mitsumine_cheer', 'kakusei']);
   assert.deepEqual(rosterFor({}), CHAR_ORDER);
   assert.deepEqual(rosterFor({ sakura: true }), [...CHAR_ORDER, 'sakura']);
   assert.deepEqual(rosterFor({ heikatsu: true }), [...CHAR_ORDER, 'heikatsu']);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CHARS, DIFFICULTY_LABELS, hiddenMeta } from '@/game/characters';
+import { CHARS, DIFFICULTY_LABELS, hiddenMeta, winQuotesFor } from '@/game/characters';
 import { HONSHITSU_QUOTES } from '@/game/quotes';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
@@ -46,7 +46,7 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
   const lId = w === 0 ? setup.p2 : setup.p1;
   const wd = CHARS[wId];
   const ld = CHARS[lId];
-  const [quote] = useState(() => pick(wd.wins));
+  const [quote] = useState(() => pick(winQuotesFor(wId, lId)));
   const [hq] = useState(() => pick(HONSHITSU_QUOTES));
   const [postNo] = useState(() => 200 + Math.floor(Math.random() * 700));
   const winnerLabel =
@@ -78,23 +78,27 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
   }, [onRematch, onSelect]);
 
   const post =
-    wd.id === 'ryoma'
-      ? `${wd.name}が${ld.name}に勝った。これまじ✝本質✝。✝`
-      : wd.id === 'mie'
-        ? `${wd.name}が勝った。本人は「まあ」と言った。認めないけど否定もしないらしい。`
-        : wd.id === 'terachi'
-          ? `本質配信の巫女が${ld.name}を倒した。本人は「俺はペットボトル」と主張。`
-          : wd.id === 'rei'
-            ? `全科目学年首席、格闘でも首席。本人談「面白かった」。`
-            : wd.id === 'naito'
-              ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
-              : wd.id === 'sakura'
-                ? `紺のネクタイの恋愛学者が${ld.name}を観測して勝った。本人談「研究です」。ノートには✝本質✝と書いてあった。`
-                : wd.id === 'heikatsu'
-                  ? `地理教師・塀先生が${ld.name}の足元を防災マップに記録して発災させた。本人談「同じ地図でも、見え方が変わったな」。`
-                  : wd.id === 'kakusei'
-                  ? `元・否定の守護者が${ld.name}を解体した。本人談「通夜は終わった」。現場は、まだ終わらないらしい。`
-                  : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
+    wd.id === 'mitsumine_cheer'
+      ? ld.id === 'kakusei'
+        ? '二階席の声は、もう聞こえない。三峰は何も言わなかった。'
+        : `内進の三峰が体育着で理数科側を応援。${ld.name}に勝っても「応援に来ただけ！」。三重の名前を呼んだ回数は、記録しないでほしいらしい。`
+      : wd.id === 'ryoma'
+        ? `${wd.name}が${ld.name}に勝った。これまじ✝本質✝。✝`
+        : wd.id === 'mie'
+          ? `${wd.name}が勝った。本人は「まあ」と言った。認めないけど否定もしないらしい。`
+          : wd.id === 'terachi'
+            ? `本質配信の巫女が${ld.name}を倒した。本人は「俺はペットボトル」と主張。`
+            : wd.id === 'rei'
+              ? `全科目学年首席、格闘でも首席。本人談「面白かった」。`
+              : wd.id === 'naito'
+                ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
+                : wd.id === 'sakura'
+                  ? `紺のネクタイの恋愛学者が${ld.name}を観測して勝った。本人談「研究です」。ノートには✝本質✝と書いてあった。`
+                  : wd.id === 'heikatsu'
+                    ? `地理教師・塀先生が${ld.name}の足元を防災マップに記録して発災させた。本人談「同じ地図でも、見え方が変わったな」。`
+                    : wd.id === 'kakusei'
+                    ? `元・否定の守護者が${ld.name}を解体した。本人談「通夜は終わった」。現場は、まだ終わらないらしい。`
+                    : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#0b0b18] px-4 py-8 text-slate-100">
@@ -196,7 +200,7 @@ function TeamResult({
   const winners = fighters.filter((f) => f.team === w);
   const losers = fighters.filter((f) => f.team !== w);
   const rep = CHARS[winners[0]?.char ?? 'mie'];
-  const [quote] = useState(() => pick(rep.wins));
+  const [quote] = useState(() => pick(winQuotesFor(rep.id, losers[0]?.char ?? 'mie')));
   const [hq] = useState(() => pick(HONSHITSU_QUOTES));
   const [postNo] = useState(() => 200 + Math.floor(Math.random() * 700));
   const teamColor = w === 0 ? '#38bdf8' : '#fb7185';

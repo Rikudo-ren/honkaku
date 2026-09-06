@@ -1,4 +1,5 @@
-import { CHARS, INTRO_PAIRS, LOVE_LAWS, LOVE_NOTE_PAGES, MIRROR_INTROS, SAKURA_LOVE_LOOK, pairKey } from './characters';
+import { CHARS, INTRO_PAIRS, LOVE_LAWS, LOVE_NOTE_PAGES, MIRROR_INTROS, SAKURA_LOVE_LOOK, pairKey, winQuotesFor } from './characters';
+import { CHEER } from './cheer';
 import { COMBO_COMMENTS, HIT_TEXTS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
 import { EMPTY_INPUT } from './types';
 import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId, Team } from './types';
@@ -69,6 +70,12 @@ export interface Fighter {
   movePhase: 0 | 1 | 2;
   moveFrame: number;
   airAttack: boolean;
+  /** 三峰瑠衣(応援)：空中弱=1／空中強=2。反動や跳ね返りではリセットしない。 */
+  airUsed: number;
+  /** 上入力で浮き直せる残りフレーム。地面への着地時だけ補充。 */
+  airLift: number;
+  /** 大声援「もう一本！」による移動速度アップの残りフレーム。 */
+  rallyT: number;
   hitstop: number;
   invuln: number;
   silence: number;
@@ -123,10 +130,12 @@ export interface Projectile {
   seed: number;
   /** 塀勝也「防災マップ」：図の上に立っている蓄積フレーム（発災ゲージ） */
   charge?: number;
+  /** 二階席エコー：往路→低い復路の切替済みフラグ（反射時もtrue）。 */
+  echoReturned?: boolean;
 }
 
 export interface PixelFx {
-  kind: 'spark' | 'ring' | 'dust' | 'crossburst' | 'heart' | 'afterimage' | 'sparkle' | 'guard' | 'soil' | 'geyser' | 'crack';
+  kind: 'spark' | 'ring' | 'dust' | 'crossburst' | 'heart' | 'afterimage' | 'sparkle' | 'guard' | 'soil' | 'geyser' | 'crack' | 'sound';
   x: number;
   y: number;
   vx: number;
@@ -284,6 +293,9 @@ function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficu
     movePhase: 0,
     moveFrame: 0,
     airAttack: false,
+    airUsed: 0,
+    airLift: def.airControl?.liftFrames ?? 0,
+    rallyT: 0,
     hitstop: 0,
     invuln: 0,
     silence: 0,
@@ -420,6 +432,28 @@ export class Battle {
       mix(f.hp);
       mix(f.meter);
       mix(f.stateT);
+      mix(f.vx);
+      mix(f.vy);
+      mix(f.airUsed);
+      mix(f.airLift);
+      mix(f.rallyT);
+      mix(f.airAttack ? 1 : 0);
+      mix(f.moveFrame);
+      mix(f.movePhase);
+    }
+    for (const p of this.projectiles) {
+      if (p.kind !== 'cheerEcho' && p.kind !== 'cheerNote' && p.kind !== 'cheerWave') continue;
+      mix(p.kind === 'cheerWave' ? 1 : p.kind === 'cheerEcho' ? 2 : 3);
+      mix(p.owner);
+      mix(p.x);
+      mix(p.y);
+      mix(p.vx);
+      mix(p.vy);
+      mix(p.life);
+      mix(p.dmg);
+      mix(p.t);
+      mix(p.hitMask);
+      mix(p.echoReturned ? 1 : 0);
     }
     mix(this.timer);
     mix(this.wins[0] * 7 + this.wins[1]);
@@ -565,12 +599,13 @@ export class Battle {
       case 'walk':
         return 'walk';
       case 'jump':
-        return 'jump';
+        return f.def.airControl ? 'airStep' : 'jump';
       case 'crouch':
         return 'crouch';
       case 'block':
         return 'block';
       case 'attack':
+        if (f.move?.pose === 'airDive' && !f.airAttack && f.movePhase === 2) return 'getup';
         return f.move?.pose ?? 'jab';
       case 'hurt':
         return 'hurt';
@@ -605,6 +640,8 @@ export class Battle {
         return 'win';
       case 'mitsumine':
         return (f.superData as { grabbed?: boolean })?.grabbed ? 'grab' : 'walk';
+      case 'mitsumine_cheer':
+        return 'cheerCall';
       case 'terachi':
         return 'paper';
       case 'rei':
@@ -625,7 +662,7 @@ export class Battle {
 
   /** 実効移動速度（塀勝也の地形図に読まれている間は鈍る） */
   private speedOf(f: Fighter): number {
-    return f.def.speed * (f.loveT > 0 ? 1.25 : 1) * (f.readT > 0 ? 0.55 : 1);
+    return f.def.speed * (f.loveT > 0 ? 1.25 : 1) * (f.readT > 0 ? 0.55 : 1) * (f.rallyT > 0 ? CHEER.rallySpeed : 1);
   }
 
   /** 櫻優が設置中の「シュレディンガーの好意」 */
@@ -644,7 +681,11 @@ export class Battle {
 
   /** 描画用フェーズ */
   phaseOf(f: Fighter): 0 | 1 | 2 {
-    if (f.state === 'attack') return f.movePhase;
+    if (f.state === 'attack') {
+      if (f.move?.pose === 'cheerTurn' && f.moveFrame >= CHEER.turnPivot) return 2;
+      if (f.move?.pose === 'cheerClap' && f.moveFrame > 6 && f.moveFrame < CHEER.secondClap) return 0;
+      return f.movePhase;
+    }
     if (f.state === 'super') {
       // 覚醒三重は超必殺中も「振りかぶり→振り下ろし→構え戻し」とアニメを進める
       if (f.id === 'kakusei') {
@@ -687,6 +728,9 @@ export class Battle {
       f.research = 0;
       f.loveT = 0;
       f.readT = 0;
+      f.airUsed = 0;
+      f.airLift = f.def.airControl?.liftFrames ?? 0;
+      f.rallyT = 0;
       f.look = f.def.look;
       if (f.ai) f.ai = { plan: 'wait', planT: 0, nextDecision: 20, held: null };
     }
@@ -810,7 +854,7 @@ export class Battle {
             this.setState(f, 'lose');
           }
         }
-        this.bubble(w.idx, this.pick(w.def.wins), 150);
+        this.bubble(w.idx, this.pick(winQuotesFor(w.id, this.teamRep(kw === 0 ? 1 : 0).id)), 150);
         this.sparkles(w.x, w.y - 30, w.def.color);
       } else {
         for (const f of this.f) if (f.state !== 'down' && f.state !== 'launch') this.setState(f, 'lose');
@@ -960,6 +1004,7 @@ export class Battle {
     if (f.invuln > 0) f.invuln--;
     if (f.silence > 0) f.silence--;
     if (f.cooldown > 0) f.cooldown--;
+    if (f.rallyT > 0) f.rallyT--;
     if (f.readT > 0) {
       f.readT--;
       if (f.readT === 0) this.text('地図から、外れた', f.x, f.y - 56, { size: 6, color: '#d6d3bc', life: 30, vy: -0.3 });
@@ -986,6 +1031,7 @@ export class Battle {
     const free = f.state === 'idle' || f.state === 'walk' || f.state === 'crouch' || f.state === 'jump';
     if (free && f.grabbedBy < 0 && this.phase !== 'roundEnd' && this.phase !== 'matchEnd') f.facing = o.x >= f.x ? 1 : -1;
     f.blocking = false;
+    if (!grounded && this.phase === 'fight' && f.hp > 0 && (free || f.state === 'attack')) this.updateAirControl(f, inp);
 
     switch (f.state) {
       case 'hurt':
@@ -1037,6 +1083,8 @@ export class Battle {
     }
     if (f.y >= GROUND) {
       f.y = GROUND;
+      f.airUsed = 0;
+      f.airLift = f.def.airControl?.liftFrames ?? 0;
       if (wasAir) {
         f.vy = 0;
         if (f.state === 'launch') {
@@ -1045,6 +1093,13 @@ export class Battle {
           this.shake = Math.max(this.shake, 3);
           this.sfx('land');
           f.vx = 0;
+        } else if (f.state === 'attack' && f.move?.pose === 'airDive' && f.airAttack) {
+          // 急降下を外す／ガードされると着地硬直。反動で跳ねた時はここを通らない。
+          f.moveFrame = f.move.startup + f.move.active;
+          f.movePhase = 2;
+          f.vx = 0;
+          this.dust(f.x);
+          this.sfx('squeak');
         } else if (f.state === 'jump' || (f.state === 'attack' && f.airAttack)) {
           this.setState(f, 'idle');
           this.dust(f.x);
@@ -1057,7 +1112,28 @@ export class Battle {
         if (Math.abs(f.vx) < 0.05) f.vx = 0;
       }
     }
+    if (f.def.airControl && (f.state === 'jump' || f.state === 'attack') && f.y < CHEER.airCeiling) {
+      f.y = CHEER.airCeiling;
+      f.vy = Math.max(0, f.vy);
+    }
     f.x = clamp(f.x, 10, W - 10);
+  }
+
+  /** 離陸後に軌道を変えられるのは三峰瑠衣(応援)だけ。被弾・ダウン・超必殺中は使えない。 */
+  private updateAirControl(f: Fighter, inp: InputState) {
+    const air = f.def.airControl;
+    if (!air) return;
+    // 急降下の踏み込みだけは技の軌道に従う（浮き直しで硬直を消さない）。
+    if (f.move?.pose === 'airDive' && f.movePhase !== 2) return;
+    const dx = Number(inp.right) - Number(inp.left);
+    const speed = air.speed * (f.readT > 0 ? 0.55 : 1) * (f.rallyT > 0 ? CHEER.rallySpeed : 1);
+    f.vx = dx ? clamp(f.vx + dx * air.acceleration, -speed, speed) : f.vx * 0.65;
+    if (inp.down && !inp.up) f.vy = Math.min(7.5, f.vy + 0.7);
+    else if (inp.up && !inp.down && f.airLift > 0 && f.vy > -2.2) {
+      f.vy = Math.max(-2.2, f.vy - 0.54);
+      f.airLift--;
+      if (f.airLift % 5 === 0) this.afterimage(f);
+    }
   }
 
   private updateFree(f: Fighter, o: Fighter, inp: InputState, grounded: boolean) {
@@ -1105,6 +1181,14 @@ export class Battle {
         f.state = 'idle';
         f.vx = 0;
       }
+    } else if (f.def.airMoves) {
+      // 専用空中技は各1回。別の技へ繋いでも、空中弱の浮力を連打しても再補充されない。
+      const key = inp.heavy && !(f.airUsed & 2) ? 'heavy' : inp.light && !(f.airUsed & 1) ? 'light' : null;
+      if (key) {
+        this.startMove(f, f.def.airMoves[key]);
+        f.airUsed |= key === 'heavy' ? 2 : 1;
+        f.airAttack = true;
+      }
     } else if ((inp.light || inp.heavy) && !f.airAttack) {
       this.startMove(f, inp.heavy ? AIR_HEAVY : AIR_LIGHT);
       f.airAttack = true;
@@ -1114,8 +1198,8 @@ export class Battle {
   private canSpecial(f: Fighter) {
     const m = f.def.moves.special;
     if (m.kind === 'projectile') {
-      const max = m.projectile!.kind === 'chisen' ? 1 : 2;
-      return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind).length < max;
+      const max = m.projectile!.kind === 'chisen' || m.projectile!.kind === 'cheerEcho' ? 1 : 2;
+      return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind && p.life > 0).length < max;
     }
     // trap（櫻）：未設置なら設置、設置済みなら「観測」なので常に出せる
     return true;
@@ -1144,6 +1228,7 @@ export class Battle {
     f.moveFrame++;
     const total = m.startup + m.active + m.recovery;
     f.movePhase = f.moveFrame <= m.startup ? 0 : f.moveFrame <= m.startup + m.active ? 1 : 2;
+    if (f.id === 'mitsumine_cheer') this.updateCheerMove(f, o, m);
     if (f.moveFrame === m.startup + 1) {
       if (m.kind === 'projectile' && m.projectile) this.spawnMoveProjectile(f, o, m);
       if (m.kind === 'trap') this.placeOrObserveKoi(f, m);
@@ -1158,7 +1243,7 @@ export class Battle {
     }
     if (m.kind === 'teleport' && f.movePhase === 0) f.invuln = Math.max(f.invuln, 2);
     f.countering = m.kind === 'counter' && f.movePhase === 1;
-    if (f.movePhase === 1 && m.moveX) {
+    if (f.movePhase === 1 && m.moveX && m.pose !== 'cheerTurn') {
       f.x += f.facing * m.moveX;
       if (f.moveFrame % 2 === 0) this.afterimage(f);
     }
@@ -1172,6 +1257,52 @@ export class Battle {
     if (f.moveFrame >= total) {
       if (m.cooldown) f.cooldown = m.cooldown;
       this.setState(f, f.y < GROUND ? 'jump' : 'idle');
+    }
+  }
+
+  private soundArc(f: Fighter, size = 24) {
+    this.fx.push({ kind: 'sound', x: f.x + f.facing * 12, y: f.y - 30, vx: 0, vy: 0, t: 0, life: 14, color: f.def.color, size, facing: f.facing });
+  }
+
+  private cheerDashing(f: Fighter): boolean {
+    return f.state === 'attack' && f.move?.pose === 'cheerTurn' && f.movePhase === 1 && f.moveFrame < CHEER.turnPivot;
+  }
+
+  /** 体育着の各技は拍手／足運び／反動で個別に動かす。通常の拳・猫・飛び蹴りは使わない。 */
+  private updateCheerMove(f: Fighter, o: Fighter, m: MoveDef) {
+    const frame = f.moveFrame;
+    if (m.pose === 'cheerClap' && (frame === m.startup + 1 || frame === CHEER.secondClap)) {
+      f.moveHit = false;
+      this.soundArc(f, frame === CHEER.secondClap ? 28 : 22);
+      this.sfx('clap');
+    }
+    if (m.pose === 'cheerTurn') {
+      if (frame <= 3) f.x -= f.facing * 1.2;
+      if (this.cheerDashing(f)) {
+        f.x = clamp(f.x + f.facing * (m.moveX ?? 0), 10, W - 10);
+        if (frame % 2 === 0) this.afterimage(f);
+      }
+      if (frame === CHEER.turnPivot) {
+        f.facing = o.x >= f.x ? 1 : -1;
+        this.dust(f.x);
+        this.soundArc(f, 30);
+        this.sfx('squeak');
+      }
+    }
+    if (m.pose === 'airClap' && frame === m.startup + 1) {
+      f.vy = Math.min(f.vy, -2.4);
+      f.vx -= f.facing * 0.8;
+      this.soundArc(f, 24);
+      this.sfx('clap');
+    }
+    if (m.pose === 'airDive' && f.movePhase === 1 && !f.moveHit) {
+      f.vy = 5.7;
+      f.vx = f.facing * 1.7;
+      if (frame % 3 === 0) this.afterimage(f);
+    }
+    if (m.pose === 'cheerCall' && frame === m.startup + 1) {
+      this.soundArc(f, 32);
+      this.sfx('cheer');
     }
   }
 
@@ -1203,6 +1334,7 @@ export class Battle {
         life: spec.life,
         ground,
         grav: spec.grav,
+        pierce: spec.kind === 'cheerEcho',
       });
     }
     if (spec.kind === 'cross') this.crossBurst(f.x + f.facing * 12, f.y - 30, 3);
@@ -1289,6 +1421,7 @@ export class Battle {
         const a = this.f[i];
         const b = this.f[j];
         if (a.state === 'grabbed' || b.state === 'grabbed') continue;
+        if (a.team !== b.team && (this.cheerDashing(a) || this.cheerDashing(b))) continue;
         if (a.state === 'down' || b.state === 'down') continue;
         if (Math.abs(a.y - b.y) > 34) continue;
         const dx = b.x - a.x;
@@ -1321,6 +1454,7 @@ export class Battle {
       if (f.state !== 'attack' || !f.move || !f.move.box) continue;
       if (f.movePhase !== 1 || f.moveHit || f.hitstop > 0) continue;
       const m = f.move;
+      if (m.pose === 'cheerTurn' && f.moveFrame < CHEER.turnPivot) continue;
       const box = m.box;
       if (!box) continue;
       const atk = this.worldBox(f, box);
@@ -1337,6 +1471,15 @@ export class Battle {
         if (this.isBlocking(o)) this.applyBlock(f, o, m.dmg, m.hitstun);
         else {
           this.applyHit(f, o, m.dmg * this.dmgMulOf(f), m, f.facing, m.sfx);
+          if (m.pose === 'airDive') {
+            // 直撃時だけリバウンド。AIR・空中技回数はそのまま、もう一度潜ることはできない。
+            f.vy = -4.6;
+            f.vx = -f.facing * 1.4;
+            f.moveFrame = m.startup + m.active;
+            f.movePhase = 2;
+            this.soundArc(f, 32);
+            this.text('もう一歩！', f.x, f.y - 52, { size: 8, color: '#fda4af', life: 32 });
+          }
           if (f.id === 'sakura') {
             if (m.key === 'light') this.addResearch(f, 'メモ');
             if (m.key === 'heavy') {
@@ -1446,6 +1589,12 @@ export class Battle {
   private updateProjectiles() {
     const keep: Projectile[] = [];
     for (const p of this.projectiles) {
+      if (p.life <= 0) continue;
+      if (p.kind === 'cheerWave') {
+        this.updateCheerWave(p);
+        if (p.life > 0) keep.push(p);
+        continue;
+      }
       if (p.kind === 'koi') {
         // 未観測の好意：その場に留まり、敵が触れたら観測されて崩壊する
         p.t++;
@@ -1526,6 +1675,15 @@ export class Battle {
       }
       p.t++;
       p.life--;
+      if (p.kind === 'cheerEcho' && !p.echoReturned && (p.t >= CHEER.echoTurn || p.x + p.vx < 10 || p.x + p.vx > W - 10)) {
+        p.echoReturned = true;
+        p.vx = -Math.sign(p.vx) * CHEER.echoReturnSpeed;
+        p.y = Math.min(GROUND - 7, p.y + CHEER.echoDrop);
+        p.hitMask = 0;
+        this.ring(p.x, p.y, '#bae6fd', 20);
+        this.text('反響', p.x, p.y - 16, { size: 6, color: '#bae6fd', life: 25 });
+        this.sfx('clap');
+      }
       if (p.homing !== undefined) {
         const tg = this.f[p.homing];
         // NOTE: atan2/cos/sin はブラウザ間で結果が一致する保証がないため、
@@ -1609,6 +1767,11 @@ export class Battle {
             f.meter = Math.min(100, f.meter + 10);
             this.sfx('ha');
             p.hitMask |= 1 << f.idx;
+            if (p.kind === 'cheerEcho' || p.kind === 'cheerNote') {
+              // 反射した声は次フレームから新しいチームで判定。エコーも再反転しない。
+              if (p.kind === 'cheerEcho') p.echoReturned = true;
+              break;
+            }
             continue;
           }
           const owner = p.owner;
@@ -1630,7 +1793,48 @@ export class Battle {
       }
       if (!dead) keep.push(p);
     }
-    this.projectiles = keep;
+    this.projectiles = keep.filter((p) => p.life > 0);
+  }
+
+  /** 伸びる音の輪の「先端」だけに判定。すでに通り過ぎた内側には当てない。 */
+  private cheerWaveTouches(p: Projectile, box: Box): boolean {
+    const radius = p.t * CHEER.waveSpeed;
+    const inner = Math.max(0, radius - CHEER.waveSpeed - 3);
+    const minX = Math.max(box.x - p.x, p.x - box.x - box.w, 0);
+    const minY = Math.max(box.y - p.y, p.y - box.y - box.h, 0);
+    const maxX = Math.max(Math.abs(box.x - p.x), Math.abs(box.x + box.w - p.x));
+    const maxY = Math.max(Math.abs(box.y - p.y), Math.abs(box.y + box.h - p.y));
+    return minX * minX + minY * minY <= radius * radius && maxX * maxX + maxY * maxY >= inner * inner;
+  }
+
+  private updateCheerWave(p: Projectile) {
+    p.t++;
+    p.life--;
+    const owner = this.f[p.owner];
+    if (!owner || p.life <= 0 || this.phase !== 'fight') return;
+    // 全消去ではなく、声が通った場所の敵弾だけをかき消す。味方の弾と回復アイテムは残る。
+    for (const other of this.projectiles) {
+      if (other === p || other.life <= 0 || other.item || other.kind === 'cheerWave') continue;
+      if (other.owner >= 0 && this.f[other.owner]?.team === owner.team) continue;
+      if (!this.cheerWaveTouches(p, this.projBox(other))) continue;
+      other.life = 0;
+      this.ring(other.x, other.y, '#fecdd3', 12);
+    }
+    for (const e of this.aliveEnemies(owner)) {
+      if ((p.hitMask & (1 << e.idx)) || !this.hittable(e) || !this.cheerWaveTouches(p, this.hurtbox(e))) continue;
+      p.hitMask |= 1 << e.idx;
+      // 三重の当身は声も否定するが、音の輪全体を他の人へ反射はしない。
+      if (this.armorActive(e)) {
+        // ハンマーの対飛び道具アーマーを尊重。他の敵への波まで消しはしない。
+        e.meter = Math.min(100, e.meter + 6);
+        this.text('声まで、砕いた', e.x, e.y - 58, { size: 7, color: '#fdba74', life: 26 });
+        this.sfx('heavy');
+      } else if (e.countering) {
+        this.text('は？（聞こえてる）', e.x, e.y - 60, { size: 8, color: '#7dd3fc', life: 32 });
+        e.meter = Math.min(100, e.meter + 5);
+      } else if (this.isBlocking(e)) this.applyBlock(owner, e, p.dmg, p.hitstun);
+      else this.applyHit(owner, e, p.dmg * this.dmgMulOf(owner), p, e.x >= p.x ? 1 : -1, 'cheer');
+    }
   }
 
   // ───────────────────────── supers ─────────────────────────
@@ -1802,6 +2006,35 @@ export class Battle {
             this.setState(f, 'idle');
           }
         }
+        break;
+      }
+      case 'mitsumine_cheer': {
+        if (T === 1) this.setBanner('残り三十秒・声が枯れるまで', '二階の理数科応援席から', c, 105);
+        const beats: [number, string, number][] = [
+          [10, 'まだ、終わってない！', 6],
+          [28, '最後まで、走って！', 6],
+          [46, '三重、いっけぇーーっ！！', 18],
+        ];
+        for (const [at, words, dmg] of beats) {
+          if (T !== at) continue;
+          this.spawnProj({ kind: 'cheerWave', owner: f.idx, x: f.x, y: f.y - 30, vx: 0, vy: 0, w: 2, h: 2, dmg, hitstun: 25, kbx: dmg > 10 ? 3.8 : 0.8, kby: dmg > 10 ? 4.5 : 0, knockdown: dmg > 10, life: CHEER.waveLife, pierce: true });
+          this.text(words, W / 2, 92, { size: dmg > 10 ? 16 : 11, color: dmg > 10 ? '#fff1f2' : '#fda4af', life: 34, vy: -0.12, shake: true });
+          this.soundArc(f, dmg > 10 ? 60 : 40);
+          this.shake = Math.max(this.shake, dmg > 10 ? 9 : 4);
+          this.sfx('cheer');
+        }
+        if (T === 46) {
+          for (const ally of this.f) {
+            if (ally.team !== f.team || ally.hp <= 0) continue;
+            ally.rallyT = Math.max(ally.rallyT, CHEER.rallyFrames);
+            this.sparkles(ally.x, ally.y - 24, '#bae6fd');
+            this.text('もう一本！ SPEED↑', ally.x, ally.y - 66, { size: 6, color: '#bae6fd', life: 45 });
+          }
+          const mie = this.f.find((e) => e.id === 'mie' && e.team === f.team && e.hp > 0);
+          if (mie) this.bubble(mie.idx, '……聞こえてる。最後まで走る', 95);
+        }
+        if (T === 78) this.bubble(f.idx, '今の声……忘れて！', 65);
+        if (T >= 90) this.setState(f, 'idle');
         break;
       }
       case 'terachi': {
@@ -2231,6 +2464,7 @@ export class Battle {
       f.state === 'super' ||
       f.state === 'win' ||
       f.state === 'lose';
+    if (f.def.airControl && f.y < GROUND && (!busy || f.state === 'attack')) return this.cheerAirBrain(f, o);
     if (busy) return inp;
 
     const grounded = f.y >= GROUND;
@@ -2396,6 +2630,13 @@ export class Battle {
       return inp;
     }
 
+    // 体育着の三峰は、走るだけでなく空中ルートで二階席の高さを取りに行く。
+    if (f.def.airControl && grounded && dist > 36 && dist < 140 && this.rng() < (d === 'easy' ? 0.04 : 0.13)) {
+      inp.up = true;
+      inp[fwd] = true;
+      return inp;
+    }
+
     // ── 8. 遠距離：接近 or 飛び道具・必殺 ──
     if (dist > 100) {
       if (
@@ -2463,6 +2704,23 @@ export class Battle {
     } else {
       inp[fwd] = true;
     }
+    return inp;
+  }
+
+  /** 三峰瑠衣(応援)専用の空中判断。攻撃中も横移動できるが、被弾中は呼ばない。 */
+  private cheerAirBrain(f: Fighter, o: Fighter): InputState {
+    const inp = { ...EMPTY_INPUT };
+    const dist = Math.abs(o.x - f.x);
+    const fwd = o.x > f.x ? 'right' : 'left';
+    if (dist > 17) inp[fwd] = true;
+    const high = o.y - f.y;
+    if (f.state !== 'attack') {
+      if (!(f.airUsed & 2) && dist < 29 && high > 14 && o.state !== 'down' && o.state !== 'getup') inp.heavy = true;
+      else if (!(f.airUsed & 1) && dist < 100 && high > 22) inp.light = true;
+    }
+    const d = this.aiDifficultyOf(f);
+    if ((d === 'hard' || d === 'extreme') && f.airLift > 0 && dist > 44 && f.vy > -1) inp.up = true;
+    if (f.airUsed === 3 || (dist < 20 && high > 20 && o.state === 'down')) inp.down = true;
     return inp;
   }
 
@@ -2632,6 +2890,8 @@ export class Battle {
         if (trap) return false;
         return dist > 52 && dist < 150;
       }
+      case 'mitsumine_cheer':
+        return dist > 35 && dist < 130 && this.canSpecial(f);
       case 'heikatsu':
         // 地形図：相手が歩いてくる経路（30px先）に広げる。相手との距離が近すぎず遠すぎずのとき
         return dist > 40 && dist < 170;

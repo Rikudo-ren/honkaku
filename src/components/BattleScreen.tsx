@@ -444,6 +444,11 @@ export default function BattleScreen({ setup, onEnd, onQuit }: Props) {
         {showTouchControls && input && !paused && <TouchControls input={input} side={touchPad} />}
       </div>
 
+      {myChar.airControl && (
+        <div className="w-full border-t border-sky-400/25 bg-sky-950/40 px-3 py-1 text-center text-[10px] text-sky-200 md:text-xs">
+          三峰瑠衣(応援)専用：空中も左右移動 ／ 上で浮き直し（AIR消費）・下で急降下 ／ 空中弱＝音＋浮力、空中強＝直撃で跳ね返り（各1回・着地で回復）
+        </div>
+      )}
       <div className="mt-2 hidden w-full max-w-5xl items-center justify-between px-3 text-[11px] text-slate-400 md:flex">
         {teamMode && teamCounts ? (
           <>
@@ -509,6 +514,13 @@ function CutInOverlay({ c }: { c: CutIn }) {
         <div className="pixel-text-shadow text-2xl leading-tight text-white md:text-5xl lg:text-6xl">{c.name}</div>
         <div className="mt-1 inline-block bg-slate-900/90 px-2 py-0.5 text-sm text-amber-100 md:text-2xl">「{c.quote}」</div>
       </div>
+      {c.char === 'mitsumine_cheer' && (
+        <div className={`absolute bottom-[10%] border-y-2 border-rose-300 bg-slate-950/95 px-4 py-2 text-center shadow-[4px_4px_0_#000] md:px-8 md:py-4 ${left ? 'right-[5%]' : 'left-[5%]'}`}>
+          <div className="text-[9px] tracking-widest text-rose-200 md:text-sm">桐葉高校 球技大会 ／ 理数科側</div>
+          <div className="my-1 font-mono text-3xl tabular-nums text-white md:text-5xl">LAST 00:30</div>
+          <div className="text-[10px] text-slate-300 md:text-base">「こっちの方が面白いから」</div>
+        </div>
+      )}
       {c.paper && (
         <div
           className={`absolute bottom-[8%] w-[46%] max-w-md border-2 border-slate-300 bg-white p-2 text-slate-900 shadow-[6px_6px_0_rgba(0,0,0,0.6)] md:p-3 ${left ? 'right-[5%] -rotate-3 animate-cutin-text-l' : 'left-[5%] rotate-2 animate-cutin-text-r'}`}
@@ -524,7 +536,7 @@ function CutInOverlay({ c }: { c: CutIn }) {
 /** タッチ・タブレット操作用コントローラー（D-pad ＋ アクションボタン） */
 function TouchControls({ input, side }: { input: InputManager; side: Side }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-1 z-20 flex items-end justify-between px-3 pb-1 touch-none">
+    <div className="pointer-events-none absolute inset-x-0 bottom-1 z-20 flex items-end justify-between px-3 pb-1 touch-none portrait:fixed portrait:bottom-6">
       <VirtualDPad input={input} side={side} />
       <ActionButtons input={input} side={side} />
     </div>

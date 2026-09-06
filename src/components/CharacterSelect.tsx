@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHARS, DIFFICULTY_SHORT, hiddenMeta, lockedHidden, rosterFor } from '@/game/characters';
+import { ALL_CHARS, CHARS, DIFFICULTY_SHORT, hiddenMeta, rosterFor } from '@/game/characters';
 import type { HiddenUnlocks } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
@@ -17,10 +17,9 @@ interface Props {
 const COLS = 3;
 
 export default function CharacterSelect({ mode, difficulty, hiddenUnlocked = {}, onDone, onBack }: Props) {
-  // 解禁済みの隠しキャラをロスターに含め、未解禁の分は「？？？」枠（選べない）を並べる
+  // 表示位置は未解禁の「？？？」も含めて固定。選択できるのは解禁済みロスターだけ。
   const roster = rosterFor(hiddenUnlocked);
-  const hiddenLocked = lockedHidden(hiddenUnlocked);
-  const ROWS = Math.ceil((roster.length + hiddenLocked.length) / COLS);
+  const ROWS = Math.ceil(ALL_CHARS.length / COLS);
   const [cur, setCur] = useState<[number, number]>([0, 1]);
   const [locked, setLocked] = useState<[boolean, boolean]>([false, false]);
   const [turn, setTurn] = useState<0 | 1>(0);
@@ -32,15 +31,15 @@ export default function CharacterSelect({ mode, difficulty, hiddenUnlocked = {},
   const cpuSelectable = mode === '1p';
 
   const move = (side: 0 | 1, dx: number, dy: number) => {
-    const c = ref.current.cur[side];
+    const c = ALL_CHARS.indexOf(roster[ref.current.cur[side]]);
     let col = c % COLS;
     let row = Math.floor(c / COLS);
     // 存在しないマス（最終行の空き・未解禁の？？？枠）は飛ばす
     for (let guard = 0; guard < COLS * ROWS; guard++) {
       col = (col + dx + COLS) % COLS;
       row = (row + dy + ROWS) % ROWS;
-      const idx = row * COLS + col;
-      if (idx < roster.length) {
+      const idx = roster.indexOf(ALL_CHARS[row * COLS + col]);
+      if (idx >= 0) {
         const next: [number, number] = [...ref.current.cur] as [number, number];
         next[side] = idx;
         setCur(next);
@@ -236,13 +235,38 @@ export default function CharacterSelect({ mode, difficulty, hiddenUnlocked = {},
       <div className="relative z-10 mt-4 grid w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_auto_1fr]">
         <DetailPanel def={c1} side={0} label={isAi[0] ? 'CPU' : '1P'} locked={locked[0]} />
         <div className="order-first grid grid-cols-3 gap-2 self-center lg:order-none">
-          {roster.map((id, i) => {
+          {ALL_CHARS.map((id) => {
+            const i = roster.indexOf(id);
+            if (i < 0) {
+              const ht = hiddenMeta(id);
+              if (!ht) return null;
+              return (
+                <div
+                  key={id}
+                  className="group relative aspect-[3/4] w-[26vw] max-w-[150px] overflow-hidden border-4 border-dashed border-slate-700 bg-slate-950/80 text-left lg:w-[150px]"
+                  title={ht.hint}
+                >
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 pb-7 text-center">
+                    <div className="pixel-text-shadow text-3xl text-slate-500">？？？</div>
+                    <div className="text-[10px] leading-tight text-slate-500">{ht.sub}</div>
+                    {/* ヒントは未解禁の「？？？」枠にだけ出す */}
+                    <div className="mt-1 text-[9px] leading-tight text-amber-300/80">{ht.hint}</div>
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-1.5 py-1">
+                    <div className="text-sm leading-tight text-slate-500 md:text-base">{ht.title}</div>
+                    <div className="truncate text-[10px] text-slate-600">LOCKED</div>
+                  </div>
+                  <div className="absolute left-0 top-0 h-full w-1.5 opacity-50" style={{ background: ht.stripe }} />
+                </div>
+              );
+            }
             const d = CHARS[id];
             const s1 = cur[0] === i;
             const s2 = cur[1] === i && (locked[0] || isAi[0] || cpuSelectable);
             return (
               <button
                 key={id}
+                aria-label={`${d.name}を選択`}
                 onClick={() => onCardClick(i)}
                 onMouseEnter={() => {
                   const { locked: lk, rouletting: rl } = ref.current;
@@ -272,29 +296,6 @@ export default function CharacterSelect({ mode, difficulty, hiddenUnlocked = {},
                 {s1 && <Tag text={isAi[0] ? 'CPU' : '1P'} color="bg-sky-400" side="left" locked={locked[0]} />}
                 {s2 && <Tag text={isAi[1] && !cpuSelectable ? 'CPU' : mode === '1p' ? 'CPU' : '2P'} color="bg-rose-400" side="right" locked={locked[1]} />}
               </button>
-            );
-          })}
-          {hiddenLocked.map((h) => {
-            const ht = hiddenMeta(h);
-            if (!ht) return null;
-            return (
-              <div
-                key={h}
-                className="group relative aspect-[3/4] w-[26vw] max-w-[150px] overflow-hidden border-4 border-dashed border-slate-700 bg-slate-950/80 text-left lg:w-[150px]"
-                title={ht.hint}
-              >
-                <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 pb-7 text-center">
-                  <div className="pixel-text-shadow text-3xl text-slate-500">？？？</div>
-                  <div className="text-[10px] leading-tight text-slate-500">{ht.sub}</div>
-                  {/* ヒントは未解禁の「？？？」枠にだけ出す */}
-                  <div className="mt-1 text-[9px] leading-tight text-amber-300/80">{ht.hint}</div>
-                </div>
-                <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-1.5 py-1">
-                  <div className="text-sm leading-tight text-slate-500 md:text-base">{ht.title}</div>
-                  <div className="truncate text-[10px] text-slate-600">LOCKED</div>
-                </div>
-                <div className="absolute left-0 top-0 h-full w-1.5 opacity-50" style={{ background: ht.stripe }} />
-              </div>
             );
           })}
         </div>
@@ -358,7 +359,7 @@ function Stat({ label, v, color }: { label: string; v: number; color: string }) 
       <span className="w-14 text-slate-300">{label}</span>
       <span className="flex gap-0.5">
         {[1, 2, 3, 4, 5].map((i) => (
-          <span key={i} className="inline-block h-3 w-4 border border-slate-700" style={{ background: i <= v ? color : '#1e293b' }} />
+          <span key={i} className="inline-block h-3 w-3 border border-slate-700" style={{ background: i <= v ? color : '#1e293b' }} />
         ))}
       </span>
     </div>
@@ -382,47 +383,59 @@ function DetailPanel({
 }) {
   const right = side === 1;
   return (
-    <div className={`flex gap-3 border-4 bg-slate-950/80 p-3 shadow-[6px_6px_0_#000] transition-opacity ${right ? 'border-rose-400 lg:flex-row-reverse' : 'border-sky-400'} ${dim ? 'opacity-40' : ''}`}>
-      <div
-        className="relative aspect-[3/4] w-28 shrink-0 self-start overflow-hidden border-2 border-slate-700 md:w-36"
-        style={{ background: `linear-gradient(180deg,#fff,${def.light})` }}
-      >
-        <Portrait id={def.id} alt={def.name} className="h-full w-full object-contain object-bottom" />
-        <div className={`absolute top-1 ${right ? 'right-1' : 'left-1'} px-1.5 text-xs text-slate-950 ${right ? 'bg-rose-400' : 'bg-sky-400'}`}>{label}</div>
-        {locked && <div className="absolute inset-x-0 bottom-0 bg-amber-300 py-0.5 text-center text-xs text-slate-950">決定 ✝</div>}
-      </div>
-      <div className={`min-w-0 flex-1 ${right ? 'text-right' : ''}`}>
-        <div className="text-xs text-slate-400">{def.kana}</div>
-        <div className="text-2xl leading-tight" style={{ color: def.color }}>
-          {def.name}
+    <section aria-label={`${label} ${def.name}の詳細`} className={`flex flex-col gap-3 self-start border-4 bg-slate-950/80 p-3 shadow-[6px_6px_0_#000] transition-opacity ${right ? 'border-rose-400' : 'border-sky-400'} ${dim ? 'opacity-40' : ''}`}>
+      <div className={`flex gap-3 ${right ? 'lg:flex-row-reverse' : ''}`}>
+        <div
+          className="relative aspect-[3/4] w-24 shrink-0 self-start overflow-hidden border-2 border-slate-700 md:w-28 lg:w-24"
+          style={{ background: `linear-gradient(180deg,#fff,${def.light})` }}
+        >
+          <Portrait id={def.id} alt={def.name} className="h-full w-full object-contain object-bottom" />
+          <div className={`absolute top-1 ${right ? 'right-1' : 'left-1'} px-1.5 text-xs text-slate-950 ${right ? 'bg-rose-400' : 'bg-sky-400'}`}>{label}</div>
+          {locked && <div className="absolute inset-x-0 bottom-0 bg-amber-300 py-0.5 text-center text-xs text-slate-950">決定 ✝</div>}
         </div>
-        <div className="text-xs text-amber-200">{def.title}</div>
-        {difficulty && (
-          <div className={`mt-1 text-sm font-bold ${difficulty === 'extreme' ? 'text-fuchsia-300' : difficulty === 'hard' ? 'text-rose-300' : 'text-amber-200'}`}>
-            相手の強さ：{DIFFICULTY_SHORT[difficulty]}
+        <div className={`min-w-0 flex-1 ${right ? 'text-right' : ''}`}>
+          <div className="text-xs text-slate-400">{def.kana}</div>
+          <div className="text-2xl leading-tight" style={{ color: def.color }}>{def.name}</div>
+          <div className="mt-1 text-xs text-amber-200">{def.title}</div>
+          {difficulty && (
+            <div className={`mt-1 text-sm font-bold ${difficulty === 'extreme' ? 'text-fuchsia-300' : difficulty === 'hard' ? 'text-rose-300' : 'text-amber-200'}`}>
+              相手の強さ：{DIFFICULTY_SHORT[difficulty]}
+            </div>
+          )}
+          <div className="mt-2 text-[11px] leading-relaxed text-slate-300">
+            <span className="mr-1 inline-block h-2 w-2 border border-white/40" style={{ background: def.tieColor }} />
+            {def.affiliation}
+            <div className="text-slate-400">{def.outfitLabel ?? `ネクタイ：${def.tie}`}</div>
           </div>
-        )}
-        <div className={`mt-1 flex items-center gap-2 text-[11px] ${right ? 'justify-end' : ''}`}>
-          <span className="inline-block h-3 w-3 border border-white/40" style={{ background: def.tieColor }} />
-          <span className="text-slate-300">
-            {def.affiliation}（ネクタイ：{def.tie}）
-          </span>
         </div>
-        <div className={`mt-2 space-y-0.5 ${right ? 'flex flex-col items-end' : ''}`}>
-          <Stat label="パワー" v={def.stats.power} color="#f87171" />
-          <Stat label="スピード" v={def.stats.speed} color="#60a5fa" />
-          <Stat label="✝本質✝" v={def.stats.honshitsu} color="#fbbf24" />
-          <Stat label="常識" v={def.stats.joushiki} color="#4ade80" />
-        </div>
-        <div className="mt-2 space-y-0.5 text-[11px] leading-snug">
-          <MoveRow k="弱" name={def.moves.light.name} />
-          <MoveRow k="強" name={def.moves.heavy.name} />
-          <MoveRow k="必殺" name={def.moves.special.name} desc={def.moves.special.desc} />
-          <MoveRow k="超必殺" name={def.superName} desc={def.superDesc} accent />
-        </div>
-        <p className="mt-2 text-[11px] leading-snug text-slate-400">{def.desc}</p>
       </div>
-    </div>
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+        <Stat label="パワー" v={def.stats.power} color="#f87171" />
+        <Stat label="スピード" v={def.stats.speed} color="#60a5fa" />
+        <Stat label="✝本質✝" v={def.stats.honshitsu} color="#fbbf24" />
+        <Stat label="常識" v={def.stats.joushiki} color="#4ade80" />
+      </div>
+      {def.passive && (
+        <div className="border border-sky-300/40 bg-sky-950/40 p-2 text-[11px] leading-relaxed">
+          <div className="text-sky-200">{def.passive.name}</div>
+          <div className="mt-1 text-slate-300">{def.passive.desc}</div>
+        </div>
+      )}
+      <div className="space-y-2 text-[11px] leading-snug">
+        <MoveRow k="弱" name={def.moves.light.name} desc={def.airMoves ? def.moves.light.desc : undefined} />
+        <MoveRow k="強" name={def.moves.heavy.name} desc={def.airMoves ? def.moves.heavy.desc : undefined} />
+        <MoveRow k="必殺" name={def.moves.special.name} desc={def.moves.special.desc} />
+        {def.airMoves && <>
+          <MoveRow k="空中弱" name={def.airMoves.light.name} desc={def.airMoves.light.desc} />
+          <MoveRow k="空中強" name={def.airMoves.heavy.name} desc={def.airMoves.heavy.desc} />
+        </>}
+        <MoveRow k="超必殺" name={def.superName} desc={def.superDesc} accent />
+      </div>
+      <div className="border-t border-slate-700 pt-2 text-[11px] leading-relaxed">
+        <div className="mb-1 text-slate-200">設定</div>
+        <p className="text-slate-400">{def.desc}</p>
+      </div>
+    </section>
   );
 }
 
@@ -431,7 +444,7 @@ function MoveRow({ k, name, desc, accent }: { k: string; name: string; desc?: st
     <div>
       <span className={`mr-1 inline-block min-w-[3rem] border px-1 text-center ${accent ? 'border-amber-300 text-amber-300' : 'border-slate-600 text-slate-300'}`}>{k}</span>
       <span className={accent ? 'text-amber-100' : 'text-slate-100'}>{name}</span>
-      {desc && <div className="text-[10px] text-slate-500">{desc}</div>}
+      {desc && <div className="mt-0.5 text-[10px] leading-relaxed text-slate-400">{desc}</div>}
     </div>
   );
 }
