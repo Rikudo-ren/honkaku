@@ -9,6 +9,8 @@ interface Props {
   defaultDifficulty: Difficulty;
   /** 隠しキャラ「櫻優」が解禁済みか */
   sakuraUnlocked?: boolean;
+  /** 隠しキャラ「覚醒三重」が解禁済みか */
+  kakuseiUnlocked?: boolean;
   onDone: (fighters: FighterSetup[]) => void;
   onBack: () => void;
 }
@@ -26,8 +28,8 @@ const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
 const CTRL_LABEL: Record<Ctrl, string> = { p1: '1P操作', p2: '2P操作', cpu: 'CPU' };
 
-export default function TeamSetup({ defaultDifficulty, sakuraUnlocked = false, onDone, onBack }: Props) {
-  const roster = rosterFor(sakuraUnlocked);
+export default function TeamSetup({ defaultDifficulty, sakuraUnlocked = false, kakuseiUnlocked = false, onDone, onBack }: Props) {
+  const roster = rosterFor(sakuraUnlocked, kakuseiUnlocked);
   const [rows, setRows] = useState<Row[]>([
     { char: 'mie', team: 0, ctrl: 'p1', aiDifficulty: defaultDifficulty },
     { char: 'ryoma', team: 0, ctrl: 'cpu', aiDifficulty: defaultDifficulty },

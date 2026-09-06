@@ -19,7 +19,7 @@ const run = (opts: Partial<BattleOpts>, frames: number, inputs?: (t: number, b: 
 
 test('櫻優は隠しキャラ：通常ロスターには出ず、解禁すると末尾に追加される', () => {
   assert.ok(!CHAR_ORDER.includes('sakura'));
-  assert.deepEqual(HIDDEN_CHARS, ['sakura']);
+  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'kakusei']);
   assert.deepEqual(rosterFor(false), CHAR_ORDER);
   assert.deepEqual(rosterFor(true), [...CHAR_ORDER, 'sakura']);
   assert.deepEqual(ALL_CHARS, [...CHAR_ORDER, ...HIDDEN_CHARS]);

@@ -9,6 +9,8 @@ import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 interface Props {
   /** 隠しキャラ「櫻優」が解禁済みか（解禁している人だけオンラインでも選べる） */
   sakuraUnlocked?: boolean;
+  /** 隠しキャラ「覚醒三重」が解禁済みか（解禁している人だけオンラインでも選べる） */
+  kakuseiUnlocked?: boolean;
   onStart: (data: StartData) => void;
   onBack: () => void;
 }
@@ -17,8 +19,8 @@ type Stage = 'menu' | 'code-input' | 'connecting' | 'lobby' | 'error';
 
 const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
-export default function OnlineLobby({ sakuraUnlocked = false, onStart, onBack }: Props) {
-  const roster = rosterFor(sakuraUnlocked);
+export default function OnlineLobby({ sakuraUnlocked = false, kakuseiUnlocked = false, onStart, onBack }: Props) {
+  const roster = rosterFor(sakuraUnlocked, kakuseiUnlocked);
   // 再戦時：既に部屋に入っているならロビー画面から始める
   const [stage, setStage] = useState<Stage>(net.connected ? 'lobby' : 'menu');
   const [error, setError] = useState('');

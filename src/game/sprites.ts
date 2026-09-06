@@ -92,6 +92,25 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
         : phase === 1
           ? { ...base, armF: 'punch', weapon: true, face: 'shout', legs: 'wide', lean: 1 }
           : { ...base, armF: 'forward', legs: 'wide' };
+    case 'pound':
+      // 覚醒三重・杭打ち：頭上で構えて、真下に叩き込む
+      return phase === 0
+        ? { ...base, armF: 'raise', armB: 'up', weapon: true, lean: -1, legs: 'wide', face: 'closed' }
+        : phase === 1
+          ? { ...base, armF: 'swingDown', armB: 'flail', weapon: true, face: 'shout', legs: 'wide', lean: 2, dy: 2 }
+          : { ...base, armF: 'forward', weapon: true, legs: 'wide', dy: 2 };
+    case 'hammerSwing':
+      // 覚醒三重・水平振り：腰だめから水平に払う
+      return phase === 0
+        ? { ...base, armF: 'chamber', armB: 'up', weapon: true, lean: -2, legs: 'wide' }
+        : phase === 1
+          ? { ...base, armF: 'punch', armB: 'flail', weapon: true, face: 'shout', legs: 'wide', lean: 2 }
+          : { ...base, armF: 'forward', weapon: true, legs: 'wide' };
+    case 'hoist':
+      // 覚醒三重・土嚢を掲げる／ハンマーを肩に担ぐ（超必殺ポーズ）
+      return phase === 0
+        ? { ...base, armF: 'raise', armB: 'up', weapon: true, legs: 'wide', face: 'closed', lean: -1 }
+        : { ...base, armF: 'raise', armB: 'up', weapon: true, legs: 'wide', face: 'shout', lean: 1 };
     case 'kick':
       return phase === 0
         ? { ...base, lean: -2, armB: 'up' }
@@ -127,6 +146,7 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
       if (wp === 'shy') return { ...base, dy: bob, face: 'smile', armF: 'block', armB: hug ? 'hold' : 'down' };
       if (wp === 'peace') return { ...base, dy: bob, face: 'smile', armF: 'up' };
       if (wp === 'hug') return { ...base, dy: bob, face: 'smile', armF: 'hold', armB: 'hold' };
+      if (wp === 'shoulder') return { ...base, dy: bob, face: 'normal', armF: 'raise', armB: 'down', legs: 'wide', weapon: true };
       return { ...base, dy: bob, face: 'smile', armF: 'up', armB: 'up', legs: bob ? 'wide' : 'stand' };
     }
   }
@@ -156,11 +176,16 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   const outfit = look.outfit;
   const blazer = '#26335f';
   const blazerD = '#1b2547';
-  const sleeve = outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : blazer;
-  const body = outfit === 'vest' ? '#242b4c' : outfit === 'suit' ? '#6e6a5e' : blazer;
-  const pants = outfit === 'suit' ? '#45454a' : '#243059';
-  const shoe = isF ? '#5b3a22' : '#141418';
+  // 作業着（覚醒三重）：紺の作業服＋ Safety Orange のベスト＋反射材
+  const vest = '#e8862e';
+  const vestD = '#b45f14';
+  const sleeve =
+    outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : outfit === 'workgear' ? '#3a4358' : blazer;
+  const body = outfit === 'vest' ? '#242b4c' : outfit === 'suit' ? '#6e6a5e' : outfit === 'workgear' ? '#3a4358' : blazer;
+  const pants = outfit === 'suit' ? '#45454a' : outfit === 'workgear' ? '#2c3448' : '#243059';
+  const shoe = isF ? '#5b3a22' : outfit === 'workgear' ? '#4a3823' : '#141418';
   const sock = '#1c1c28';
+  const handColor = look.glove ?? skin;
   const dy = P.dy;
   const ln = P.lean;
   const hc = look.hairColor;
@@ -247,7 +272,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     const bx = side === 'F' ? 4 : -7;
     const c = sleeve;
     const H = (lx: number, ly: number, w = 3, h = 3) => {
-      R(lx, ly, w, h, skin);
+      R(lx, ly, w, h, handColor);
       if (side === 'F') hand = { x: lx, y: ly };
     };
     switch (p) {
@@ -340,6 +365,23 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   };
 
   const torso = () => {
+    if (outfit === 'workgear') {
+      // 紺の作業服に Safety Orange のベスト、反射材の銀テープ
+      R(-6 + ln, -30 + dy, 12, 16, body);
+      R(-6 + ln, -30 + dy, 12, 1, '#262e40');
+      R(-6 + ln, -15 + dy, 12, 1, '#262e40');
+      // ベスト（脇を開けて上から被せる）
+      R(-6 + ln, -29 + dy, 12, 8, vest);
+      R(-5 + ln, -29 + dy, 2, 8, vestD);
+      R(3 + ln, -29 + dy, 2, 8, vestD);
+      // 反射テープ（銀）×2 + ジッパー
+      R(-6 + ln, -26 + dy, 12, 1, '#d7dde6');
+      R(-6 + ln, -22 + dy, 12, 1, '#d7dde6');
+      R(-1 + ln, -29 + dy, 1, 8, '#20242e');
+      // 胸の社名プレート風ライン
+      R(0 + ln, -28 + dy, 3, 1, '#f8e8c8');
+      return;
+    }
     R(-6 + ln, -30 + dy, 12, 16, body);
     if (outfit !== 'vest') R(-6 + ln, -30 + dy, 12, 1, blazerD);
     R(-2 + ln, -30 + dy, 4, 2, '#f4f4f8');
@@ -549,6 +591,18 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         break;
       }
     }
+    if (look.helmet) {
+      // 安全ヘルメット（覚醒三重）：ドーム＋庇＋帯＋天板の盛り
+      const hb = look.helmet.base;
+      const hbd = look.helmet.band;
+      R(-8 + hx, -49 + hy, 16, 7, hb); // ドーム
+      R(-6 + hx, -50 + hy, 12, 1, hb); // 天板
+      R(-3 + hx, -51 + hy, 6, 1, hb); // 盛り
+      R(-8 + hx, -49 + hy, 1, 7, '#d8d2c2'); // 側面の影
+      R(-7 + hx, -45 + hy, 14, 2, hbd); // 帯
+      R(-9 + hx, -43 + hy, 18, 1, hb); // 庇
+      R(-1 + hx, -47 + hy, 3, 1, '#c8bfa8'); // 側面マーク
+    }
     if (look.accessory === 'headphones') {
       R(-7 + hx, -32 + hy, 14, 2, '#2b2b32');
       R(-9 + hx, -34 + hy, 3, 5, '#1c1c22');
@@ -603,6 +657,41 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(hx + 1, hy - 3, 4, 1, '#a34d6b');
         R(hx + 3, hy - 1, 1, 1, '#e879f9');
         break;
+      case 'hammer': {
+        // 1kgの片手ハンマー（炭素鋼・全長30cm）。腕のポーズで向きが変わる
+        const wood = '#8a6a4a';
+        const woodD = '#6e5238';
+        const steel = '#9aa3ad';
+        const steelHi = '#c8d2dc';
+        const ap = P.armF;
+        if (ap === 'punch' || ap === 'forward') {
+          // 水平：柄を前に伸ばし、頭を前端に
+          R(hx + 2, hy, 11, 2, wood);
+          R(hx + 2, hy, 11, 1, woodD);
+          R(hx + 12, hy - 3, 5, 8, steel);
+          R(hx + 12, hy - 3, 5, 2, steelHi);
+          R(hx + 12, hy + 3, 5, 1, '#6e7780');
+        } else if (ap === 'swingDown') {
+          // 打撃：柄を下ろし、頭を地面側に
+          R(hx, hy + 2, 2, 10, wood);
+          R(hx + 1, hy + 2, 1, 10, woodD);
+          R(hx - 3, hy + 10, 8, 5, steel);
+          R(hx - 3, hy + 10, 8, 2, steelHi);
+        } else if (ap === 'raise' || ap === 'up' || ap === 'chamber') {
+          // 担ぎ／掲げ：柄を立てて頭を上に
+          R(hx, hy - 12, 2, 12, wood);
+          R(hx + 1, hy - 12, 1, 12, woodD);
+          R(hx - 3, hy - 16, 8, 5, steel);
+          R(hx - 3, hy - 16, 8, 2, steelHi);
+          R(hx - 3, hy - 12, 8, 1, '#6e7780');
+        } else {
+          // 待機：頭上で静かに保つ
+          R(hx, hy - 10, 2, 10, wood);
+          R(hx - 3, hy - 14, 8, 5, steel);
+          R(hx - 3, hy - 14, 8, 2, steelHi);
+        }
+        break;
+      }
     }
   };
 

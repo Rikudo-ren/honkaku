@@ -14,11 +14,13 @@ interface Props {
   willUnlockExtreme?: boolean;
   /** この試合で隠しキャラ「櫻優」が解禁された */
   willUnlockSakura?: boolean;
+  /** この試合で隠しキャラ「覚醒三重」が解禁された */
+  willUnlockKakusei?: boolean;
 }
 
 const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
-export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme, willUnlockSakura }: Props) {
+export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme, willUnlockSakura, willUnlockKakusei }: Props) {
   const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
   if (teamMode) return <TeamResult setup={setup} result={result} onRematch={onRematch} onSelect={onSelect} onTitle={onTitle} />;
   const w = result.winner;
@@ -70,7 +72,9 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
               : wd.id === 'sakura'
                 ? `紺のネクタイの恋愛学者が${ld.name}を観測して勝った。本人談「研究です」。ノートには✝本質✝と書いてあった。`
-                : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
+                : wd.id === 'kakusei'
+                  ? `ヘルメットの土木作業員が${ld.name}を転圧した。本人談「完工」。#${ld.id === 'rei' ? '終幕' : '残土処分'}`
+                  : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#0b0b18] px-4 py-8 text-slate-100">
@@ -126,6 +130,13 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               <div className="text-xs tracking-widest text-pink-300">SECRET CHARACTER</div>
               <div className="text-xl font-bold text-pink-100">紺のネクタイが、もう一人来た。</div>
               <div className="mt-1 text-xs text-slate-300">微笑む観測者を最高偏差値で観測した ── タイトルに戻ると報告があります</div>
+            </div>
+          )}
+          {willUnlockKakusei && (
+            <div className="mt-4 animate-pop border-2 border-orange-400 bg-orange-950/80 p-3 text-center">
+              <div className="text-xs tracking-widest text-orange-300">SECRET CHARACTER</div>
+              <div className="text-xl font-bold text-orange-100">式場の外から、鉄を曳く足音が聞こえる。</div>
+              <div className="mt-1 text-xs text-slate-300">一人で七人の最高偏差値を超えた ── タイトルに戻ると完工報告があります</div>
             </div>
           )}
           <div className="mt-5 border-2 border-slate-700 bg-slate-950/80 p-3 text-sm">
