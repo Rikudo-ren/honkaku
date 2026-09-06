@@ -1,4 +1,4 @@
-export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura' | 'heikatsu' | 'kakusei';
+export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura' | 'heikatsu' | 'kakusei' | 'mitsumine_cheer';
 export type Side = 0 | 1;
 /** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
 export type Team = 0 | 1;
@@ -64,7 +64,13 @@ export type PoseId =
   | 'grabbed'
   | 'paper'
   | 'penJab'
-  | 'confess';
+  | 'confess'
+  | 'cheerClap'
+  | 'cheerTurn'
+  | 'cheerCall'
+  | 'airClap'
+  | 'airDive'
+  | 'airStep';
 
 export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult' | 'fluffy';
 
@@ -77,10 +83,10 @@ export interface Look {
   eyeColor: string;
   glasses?: boolean;
   gender: 'm' | 'f';
-  outfit: 'blazer' | 'vest' | 'suit' | 'kensetsu';
+  outfit: 'blazer' | 'vest' | 'suit' | 'kensetsu' | 'gym';
   accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map' | 'loveNote';
   weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'hammer' | 'map' | 'none';
-  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug';
+  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug' | 'tsundere';
   /** 男子ネクタイの色（未指定なら理数科のえんじ）。内進は紺。 */
   tieColor?: string;
   /** ネクタイに斜めストライプ風の明るいドットを入れる */
@@ -112,7 +118,10 @@ export type ProjKind =
   | 'qed'
   | 'koi'
   | 'shock'
-  | 'chisen';
+  | 'chisen'
+  | 'cheerEcho'
+  | 'cheerNote'
+  | 'cheerWave';
 
 export interface ProjectileSpec {
   kind: ProjKind;
@@ -145,7 +154,10 @@ export type SfxName =
   | 'round'
   | 'cross'
   | 'heal'
-  | 'land';
+  | 'land'
+  | 'clap'
+  | 'squeak'
+  | 'cheer';
 
 export interface MoveDef {
   key: 'light' | 'heavy' | 'special';
@@ -181,6 +193,8 @@ export interface CharDef {
   affiliation: string;
   tie: string;
   tieColor: string;
+  /** 制服以外の衣装表記（ネクタイ表記の代わりに使う） */
+  outfitLabel?: string;
   color: string;
   light: string;
   hp: number;
@@ -189,11 +203,17 @@ export interface CharDef {
   dmgMul: number;
   look: Look;
   moves: { light: MoveDef; heavy: MoveDef; special: MoveDef };
+  /** 未指定のキャラは共通の空中弱・強を使う。 */
+  airMoves?: { light: MoveDef; heavy: MoveDef };
+  /** 三峰瑠衣(応援)だけが持つ能動的な空中方向制御。未指定なら離陸時の慣性のみ。 */
+  airControl?: { speed: number; acceleration: number; liftFrames: number };
+  passive?: { name: string; desc: string };
   superName: string;
   superQuote: string;
   superDesc: string;
   intro: string;
   wins: string[];
+  matchupWins?: Partial<Record<CharId, string[]>>;
   blockText: string;
   koText: string;
   stats: { power: number; speed: number; honshitsu: number; joushiki: number };
