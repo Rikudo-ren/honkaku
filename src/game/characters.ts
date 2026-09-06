@@ -1,4 +1,4 @@
-import type { CharDef, CharId, Difficulty, Look, Setup, Side, StageDef } from './types';
+import type { CharDef, CharId, Difficulty, Look, Setup, Side, StageDef, Team } from './types';
 
 /** 通常ロスター（最初から選べる6人） */
 export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei'];
@@ -32,6 +32,17 @@ export function rosterFor(u: HiddenUnlocks = {}): CharId[] {
 export function lockedHidden(u: HiddenUnlocks = {}): CharId[] {
   return HIDDEN_CHARS.filter((h) => !u[h]);
 }
+
+/** 乱戦（チーム戦）の初期編成スロット。操作は 1P だけ（2P は画面のボタンで割り当てる）。 */
+export type TeamSlotCtrl = 'p1' | 'cpu';
+
+/** 乱戦のはじめの編成：1P 1人 vs CPU 多数。このゲームの基本形は「1人と大勢のAI」。 */
+export const DEFAULT_TEAM_SLOTS: { char: CharId; team: Team; ctrl: TeamSlotCtrl }[] = [
+  { char: 'mie', team: 0, ctrl: 'p1' },
+  { char: 'ryoma', team: 1, ctrl: 'cpu' },
+  { char: 'naito', team: 1, ctrl: 'cpu' },
+  { char: 'mitsumine', team: 1, ctrl: 'cpu' },
+];
 
 /** 1キャラ分の「隠しキャラ」メタ情報。解禁条件と、解禁演出・??????の枠・バナーで使う文言をここに集約する。 */
 export interface HiddenMeta {
@@ -87,7 +98,7 @@ export const HIDDEN_META: HiddenMeta[] = [
     key: 'honkaku_kakusei_unlocked',
     accent: '#fb923c',
     title: '？？？',
-    sub: '通夜が終わらない。だから、現場へ。',
+    sub: '道具を持って、葬式へ。',
     hint: 'ヒント：青の一人で、赤の七人を同時に鎮圧せよ（偏差値100）。',
     condition: 'チーム戦で青1人（自分）だけを率い、赤7体（偏差値100のCPU）に勝利すると解禁',
     stripe: '#b45309',
@@ -761,7 +772,7 @@ export const CHARS: Record<CharId, CharDef> = {
     hidden: true,
     name: '覚醒三重',
     kana: 'みえ・けんしん（かくせい）',
-    title: '葬式から殴り込む土木作業員',
+    title: '葬式に殴り込む土木作業員',
     affiliation: '元・理数科B組（現在：現場）',
     tie: 'えんじ（＝理数科）',
     tieColor: '#a8262e',
@@ -842,7 +853,7 @@ export const CHARS: Record<CharId, CharDef> = {
     superName: '葬式は終わった',
     superQuote: '何も解決しなかった。だから、こわす。',
     superDesc: '前へ進みながら大ハンマーで3連の解体（解体・排除・更地）を叩き込む。各撃は近接を直撃しつつ、砕けた地盤が画面の端まで走る貫通震撃になる。着地している相手は逃げ場がない。ジャンプで震撃は飛び越えられる。',
-    intro: '……通夜は終わった。俺は、現場から来た。',
+    intro: '……悪い。今日は、急いでる',
     wins: [
       '……まあ（これで、多少は直ったか）',
       '何も解決しなかった。だから、こわした',
@@ -853,7 +864,7 @@ export const CHARS: Record<CharId, CharDef> = {
     blockText: '……来た',
     koText: '解体完了',
     stats: { power: 5, speed: 3, honshitsu: 2, joushiki: 1 },
-    desc: '何も解決せずに終わった通夜の夜、三重県臣が現場のヘルメットと大ハンマーを掴んで帰ってきた姿。「は？」で守るのをやめ、自らこわして直すことを選んだ。高HPを活かしてアーマーで殴り合い、地を走る震撃で距離を支配する解体屋。弱点は「空中」。飛び越えられると崩れやすい。',
+    desc: '三峰瑠衣の葬儀に、現場のヘルメットと一キロのハンマーをカバンの底に沈めて現れた三重県臣の姿。「は？」で守るのをやめ、自らの手で元凶を叩き潰すことを選んだ。高HPを活かしてアーマーで殴り合い、地を走る震撃で距離を支配する解体屋。弱点は「空中」。飛び越えられると崩れやすい。',
   },
 };
 
@@ -1000,46 +1011,55 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
   ],
 
   // ───── 覚醒三重（隠しキャラ②）との掛け合い ─────
+  // 覚醒三重＝三峰瑠衣の葬儀に、土木現場のハンマーをカバンの底に沈めて出席した三重県臣。
+  // 「通夜を終えて現場へ戻る男」ではなく「数理零を殺す覚悟で式場に来た男」。
+  // 三峰はこの時点で死んでいるので、覚醒三重が三峰と対峙しても三峰は何も返さない。
   'kakusei|mie': [
-    { first: 'kakusei', a: '……は？　俺だ', b: '（自分の顔に「は？」と言う日が来るとは）' },
-    { first: 'mie', a: 'お前、そんな恰好で葬式から来たのか', b: '葬式は終わった。俺はこれから、現場に出る' },
-    { first: 'kakusei', a: 'お前はまだ否定で守ってるのか', b: '……否定してる場合じゃなかったのか？' },
-    { first: 'mie', a: '俺を俺で殴るな', b: 'お前も俺も、同じ構造だ。それを直す' },
-  ],
-  'kakusei|ryoma': [
-    { first: 'ryoma', a: '……三重？　その恰好まじ✝本質✝', b: 'は？（本気で）' },
-    { first: 'kakusei', a: '✝本質✝を追ってる場合か。地面を直してる', b: '俺は追う。お前は壊す。それでいいんじゃない？' },
-    { first: 'ryoma', a: '葬式、俺も行きたかった', b: '来るな。本質配信の現場がまた増える' },
-  ],
-  'kakusei|naito': [
-    { first: 'kakusei', a: '……蘭。何か、解決したか', b: '面白い考え方だね。何も解決してないよ' },
-    { first: 'naito', a: '三重くん、壊したら直せるの？', b: 'わかんない。直るまで、こわし続ける' },
-    { first: 'kakusei', a: '理論で何か直ったことはあるか？', b: '……ないね。でも、それでも面白い' },
-  ],
-  'kakusei|sakura': [
-    { first: 'kakusei', a: '……お前も、現場から来たのか', b: '私は、理論の続きです。三重先輩は……現場ですか' },
-    { first: 'sakura', a: '三重先輩。何か、解決しましたか', b: '何も。だから、こわしてる', note: '（否定の守護者は、壊す側になった）' },
-    { first: 'kakusei', a: '恋は、観測して済むものなのか？', b: '……してないから、崩れてるんです。要検証' },
-    { first: 'sakura', a: '壊した先に、何がありますか', b: '直すための地面が、そこにあるはずだ' },
+    { first: 'kakusei', a: '……お前の〈は？〉は、まだ間に合う', b: '間に合うって、何にだ' },
+    { first: 'kakusei', a: '否定はやめた。次は、直す', b: 'は？　直すって、何を' },
+    { first: 'mie', a: '俺を俺で殴るな', b: '殴らない。殴る相手は、決めてある' },
+    { first: 'mie', a: 'なあ。俺とお前、同じ人間だよな', b: '……は？' },
   ],
   'kakusei|mitsumine': [
-    { first: 'mitsumine', a: '三重？　そのヘルメット、似合ってる……', b: '（素直に言うな）' },
-    { first: 'kakusei', a: '理論も、迷いも、一括で解体する', b: '理論はいい！！　……え、解体はやめて' },
-  ],
-  'kakusei|terachi': [
-    { first: 'terachi', a: 'え、三重……配信、見てた？', b: '配信より先に、地面を直せ' },
-    { first: 'kakusei', a: 'お前、本質配信のことを考えるのはやめろ', b: '……それを言うなら、俺はペットボトルです' },
+    // 三峰は死んでいる。だから彼女は一言も返さない。
+    { first: 'kakusei', a: '……ごめん', b: '……' },
+    { first: 'kakusei', a: '線香、上げた。……それでいいか', b: '……' },
+    { first: 'kakusei', a: '……〈は？〉でいい。一言、言ってくれ', b: '……' },
   ],
   'kakusei|rei': [
-    { first: 'kakusei', a: '……零。面白いか、これ', b: '面白い。今のが一番面白い' },
-    { first: 'rei', a: '壊すことは、面白いデータだよ', b: '直すところまで見て、面白いって言え' },
+    { first: 'kakusei', a: 'お前が、三峰を殺したんだろ', b: '……何のことかな？' },
+    { first: 'rei', a: '来てくれたんだね。三峰さんも喜んでるよ', b: '……喜ぶわけがない' },
+    { first: 'kakusei', a: 'カバンの底に、一キロの鉄がある', b: '面白い。君が物理を選ぶなんて' },
+    { first: 'rei', a: '壊すことは、面白いデータだよ', b: '直すところまで見てから言え' },
+  ],
+  'kakusei|ryoma': [
+    { first: 'ryoma', a: '三重……そのカバン、中身は', b: '道具だ。一キロの' },
+    { first: 'kakusei', a: 'お前のメッセージで、俺は起きた', b: '……俺が、✝本質✝なんて撒くから' },
+    { first: 'ryoma', a: '俺も行く。三峰さんの葬式', b: '来るな。お前は、歩けないだろ' },
+    { first: 'ryoma', a: '✝本質✝なんて、ただの幻だった', b: '幻でも、地面に落ちれば重い' },
+  ],
+  'kakusei|naito': [
+    { first: 'kakusei', a: '蘭。三峰の葬式、来なかったな', b: '行く必要、ないでしょ' },
+    { first: 'naito', a: '三重くん、壊したら直せるの？', b: 'わかんない。直るまで、こわし続ける' },
+    { first: 'kakusei', a: 'あいつは、最後までお前の心配をしてた', b: '面白い考え方だね。……関係ないよ' },
+  ],
+  'kakusei|sakura': [
+    { first: 'kakusei', a: 'お前の目、あの日のままだ', b: '爬虫類、でしたか。記録します' },
+    { first: 'sakura', a: '好意の観測が、波動関数を——', b: '理論はいい' },
+    { first: 'sakura', a: '三重先輩。退学は、私の証言のせいです', b: '知ってる。……それで、楽になったか' },
+    { first: 'kakusei', a: '恋は、観測して済むものか', b: '……済まないから、崩れてます。要検証' },
+  ],
+  'kakusei|terachi': [
+    { first: 'terachi', a: 'え、三重……そのハンマー、何', b: 'お前を殴った拳より、重い' },
+    { first: 'kakusei', a: '式場、見渡した。お前はいなかった', b: '……蘭が、行かないって言うから' },
+    { first: 'terachi', a: '俺、ペットボトルです。何でも入ります', b: '器は割れる。……お前は、もう割れてる' },
   ],
 };
 
 /** 同キャラ対戦（自己対話）の専用掛け合い。未定義なら「自演じゃなくて自己対話だよ」 */
 export const MIRROR_INTROS: Partial<Record<CharId, { a: string; b: string }>> = {
   sakura: { a: '同一個体を二つ観測した場合、n=2になりますか', b: 'なりません。自己対話はn=1のままです' },
-  kakusei: { a: '……通夜の続きだ', b: 'ああ。……現場は、終わらない' },
+  kakusei: { a: '……お前も、葬式か', b: 'ああ。……鉄は、一本しかない' },
 };
 
 /** 櫻優の恋愛発生法則（超必殺で画面に散る） */
