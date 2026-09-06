@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHAR_ORDER, DIFFICULTY_HINT, DIFFICULTY_LABELS } from '@/game/characters';
+import { CHARS, DIFFICULTY_HINT, DIFFICULTY_LABELS, SAKURA_UNLOCK_HINT, rosterFor } from '@/game/characters';
+import { Portrait } from '@/components/Portrait';
 import { drawTitleScene } from '@/game/render';
 import { H, W } from '@/game/engine';
 import { HONSHITSU_QUOTES } from '@/game/quotes';
@@ -11,6 +12,11 @@ interface Props {
   extremeUnlocked: boolean;
   justUnlocked?: boolean;
   onUnlockSeen?: () => void;
+  /** 隠しキャラ「櫻優」が解禁済みか */
+  sakuraUnlocked?: boolean;
+  /** 直前の試合で櫻優が解禁された（演出を流す） */
+  sakuraJustUnlocked?: boolean;
+  onSakuraUnlockSeen?: () => void;
 }
 
 const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[] = [
@@ -24,15 +30,27 @@ const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[
   { id: 'what', label: '✝本質✝とは', sub: '説明できたら✝本質✝じゃない' },
 ];
 
-export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, onUnlockSeen }: Props) {
+export default function TitleScreen({
+  onStart,
+  extremeUnlocked,
+  justUnlocked,
+  onUnlockSeen,
+  sakuraUnlocked = false,
+  sakuraJustUnlocked,
+  onSakuraUnlockSeen,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cursor, setCursor] = useState(0);
   const [diff, setDiff] = useState<Difficulty>('normal');
   const [modal, setModal] = useState<'help' | 'what' | null>(null);
   const [quoteIdx, setQuoteIdx] = useState(0);
   const [showUnlock, setShowUnlock] = useState(!!justUnlocked);
+  // 偏差値100と櫻優が同時に解禁されることはない（櫻優は偏差値100が必要）が、念のため偏差値100→櫻優の順に見せる
+  const [showSakuraUnlock, setShowSakuraUnlock] = useState(!!sakuraJustUnlocked);
   const stateRef = useRef({ cursor, diff, modal, extremeUnlocked });
   stateRef.current = { cursor, diff, modal, extremeUnlocked };
+  const sakuraRef = useRef(sakuraUnlocked);
+  sakuraRef.current = sakuraUnlocked;
 
   useEffect(() => {
     if (justUnlocked) {
@@ -41,6 +59,19 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
       audio.sfx('super');
     }
   }, [justUnlocked]);
+
+  useEffect(() => {
+    if (sakuraJustUnlocked) {
+      setShowSakuraUnlock(true);
+      audio.init();
+      audio.sfx('super');
+    }
+  }, [sakuraJustUnlocked]);
+
+  const closeSakuraUnlock = () => {
+    setShowSakuraUnlock(false);
+    onSakuraUnlockSeen?.();
+  };
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -52,7 +83,7 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
     let t = 0;
     const loop = () => {
       t++;
-      drawTitleScene(g, t, CHAR_ORDER);
+      drawTitleScene(g, t, rosterFor(sakuraRef.current));
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -92,6 +123,14 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
         }
         return;
       }
+      if (showSakuraUnlock) {
+        if (['Enter', 'Space', 'Escape', 'KeyF', 'KeyG'].includes(e.code)) {
+          e.preventDefault();
+          closeSakuraUnlock();
+          audio.sfx('confirm');
+        }
+        return;
+      }
       const { cursor: c, diff: d, modal: m, extremeUnlocked: un } = stateRef.current;
       const list = un ? (['easy', 'normal', 'hard', 'extreme'] as Difficulty[]) : (['easy', 'normal', 'hard'] as Difficulty[]);
       if (m) {
@@ -124,7 +163,7 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showUnlock]);
+  }, [showUnlock, showSakuraUnlock]);
 
   return (
     <div className="relative flex h-full min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#07070f]">
@@ -157,6 +196,8 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
           <div className="pixel-text-shadow text-2xl font-bold md:text-3xl">{DIFFICULTY_LABELS[diff]}</div>
           <div className="mt-0.5 text-xs opacity-90">{DIFFICULTY_HINT[diff]}</div>
           {!extremeUnlocked && <div className="mt-1 text-[10px] text-slate-400">※偏差値85に勝つと偏差値100が解禁</div>}
+          {extremeUnlocked && !sakuraUnlocked && <div className="mt-1 text-[10px] text-fuchsia-300/80">※{SAKURA_UNLOCK_HINT.hint}</div>}
+          {sakuraUnlocked && <div className="mt-1 text-[10px] text-pink-300/90">※隠しキャラ「櫻優」解禁済み（全モードで選択可）</div>}
         </div>
 
         <div className="mt-6 w-full max-w-md rounded border-4 border-slate-200/80 bg-slate-950/85 p-3 shadow-[6px_6px_0_#000] md:p-4">
@@ -203,10 +244,43 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
       {modal && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4" onClick={() => setModal(null)}>
           <div className="animate-pop max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded border-4 border-slate-100 bg-slate-950 p-5 text-slate-100 shadow-[8px_8px_0_#000]" onClick={(e) => e.stopPropagation()}>
-            {modal === 'help' ? <HelpContent /> : <WhatContent />}
+            {modal === 'help' ? <HelpContent sakuraUnlocked={sakuraUnlocked} /> : <WhatContent />}
             <button className="mt-4 w-full border-2 border-amber-300 bg-amber-300 py-2 text-slate-950 hover:bg-amber-200" onClick={() => setModal(null)}>
               閉じる（Esc）
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 櫻優解禁演出 */}
+      {showSakuraUnlock && !showUnlock && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={closeSakuraUnlock}>
+          <div className="animate-pop relative w-full max-w-2xl overflow-hidden border-4 border-pink-400 bg-gradient-to-b from-pink-950 via-slate-950 to-black p-6 text-center shadow-[0_0_40px_#f472b6,12px_12px_0_#000] md:p-8">
+            <div className="grid items-center gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]">
+              <div className="relative mx-auto aspect-[3/4] w-40 overflow-hidden border-4 border-[#2f4f8f] md:w-52" style={{ background: `linear-gradient(180deg,#fff,${CHARS.sakura.light})` }}>
+                <Portrait id="sakura" alt={CHARS.sakura.name} className="h-full w-full object-contain object-bottom p-1" />
+                <div className="absolute left-0 top-0 h-full w-1.5 bg-[#2f4f8f]" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs tracking-[0.5em] text-pink-300">SECRET CHARACTER UNLOCKED</div>
+                <div className="mt-1 text-xs text-slate-400">{CHARS.sakura.kana}</div>
+                <div className="pixel-text-shadow text-5xl text-pink-200 md:text-6xl">{CHARS.sakura.name}</div>
+                <div className="mt-1 text-amber-200">{CHARS.sakura.title}</div>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-300">
+                  <span className="inline-block h-3 w-3 border border-white/40" style={{ background: CHARS.sakura.tieColor }} />
+                  {CHARS.sakura.affiliation}（ネクタイ：{CHARS.sakura.tie}）
+                </div>
+                <div className="mt-3 border-l-4 border-pink-400 bg-black/40 p-2 text-sm text-slate-100">
+                  「両馬先輩。報告があります。私は恋をしました」
+                  <div className="mt-1 text-xs text-slate-400">── 微笑む観測者を最高偏差値で観測した者の前に、紺のネクタイがもう一人現れた。</div>
+                </div>
+                <p className="mt-3 text-xs text-slate-300">
+                  必殺「シュレディンガーの好意」で未観測の♡？を置き、超必殺「実存的崩壊」で告白＝観測。被弾・ガードで研究データ n が溜まるほど重くなる。
+                </p>
+                <p className="mt-1 text-[11px] text-slate-400">1P・2P・自己対話・チーム戦・オンライン、全モードで選択可能になりました。</p>
+              </div>
+            </div>
+            <div className="mt-5 animate-blink text-sm text-pink-200">Enter / クリックで閉じる（……観察のために、また来ます）</div>
           </div>
         </div>
       )}
@@ -234,7 +308,7 @@ export default function TitleScreen({ onStart, extremeUnlocked, justUnlocked, on
   );
 }
 
-function HelpContent() {
+function HelpContent({ sakuraUnlocked = false }: { sakuraUnlocked?: boolean }) {
   return (
     <div className="space-y-4 text-sm md:text-base">
       <h2 className="text-2xl text-amber-300">操作説明</h2>
@@ -267,6 +341,9 @@ function HelpContent() {
         <li>空中でも弱・強攻撃が出せる。三重の「は？」は当身。飛び道具も跳ね返す。</li>
         <li>試合中はランダムで✝本質✝イベントが発生する。ヘイカツが窓の外を見たら全員止まる。</li>
         <li>CPU偏差値はタイトルで変更。偏差値85に勝つと偏差値100が解禁。</li>
+        <li>
+          隠しキャラ：{sakuraUnlocked ? `櫻優 ── 解禁済み。${SAKURA_UNLOCK_HINT.condition}（達成）。` : `${SAKURA_UNLOCK_HINT.sub} ${SAKURA_UNLOCK_HINT.hint}`}
+        </li>
         <li>Esc / P でポーズ。M でミュート。スマホはタッチボタン対応（1Pのみ）。</li>
       </ul>
     </div>

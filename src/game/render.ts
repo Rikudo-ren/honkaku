@@ -284,6 +284,44 @@ export class Renderer {
         drawCross(g, x + 10, y - 30 + bob, '#f8fafc', '#e2e8f0');
         break;
       }
+      case 'koi': {
+        // シュレディンガーの好意：観測されるまで「ある」と「ない」が重なっている
+        const ph = Math.floor(t / 5) % 4;
+        const alive = ph !== 3; // 4フレームに1回だけ消える（重ね合わせ）
+        const bob = Math.floor(t / 12) % 2;
+        const yy = y - 2 - bob;
+        const dying = p.life < 90 && Math.floor(t / 3) % 2 === 0; // 減衰間近は点滅
+        g.globalAlpha = dying ? 0.35 : alive ? 0.9 : 0.25;
+        const c1 = ph === 1 ? '#fbcfe8' : '#f472b6';
+        const c2 = '#be185d';
+        // heart (7x6)
+        g.fillStyle = c1;
+        g.fillRect(x - 3, yy - 3, 2, 1);
+        g.fillRect(x + 1, yy - 3, 2, 1);
+        g.fillRect(x - 4, yy - 2, 8, 2);
+        g.fillRect(x - 3, yy, 6, 1);
+        g.fillRect(x - 2, yy + 1, 4, 1);
+        g.fillRect(x - 1, yy + 2, 2, 1);
+        g.fillStyle = c2;
+        g.fillRect(x, yy + 3, 1, 1);
+        g.fillStyle = '#ffffff';
+        g.fillRect(x - 3, yy - 2, 1, 1);
+        // 「？」（観測前）
+        g.fillStyle = alive ? '#ffffff' : '#f9a8d4';
+        g.fillRect(x - 1, yy - 10, 3, 1);
+        g.fillRect(x + 2, yy - 9, 1, 2);
+        g.fillRect(x + 1, yy - 7, 1, 1);
+        g.fillRect(x, yy - 6, 1, 1);
+        g.fillRect(x, yy - 4, 1, 1);
+        g.globalAlpha = 1;
+        // 判定の気配（薄い枠）
+        if (ph === 2) {
+          g.fillStyle = 'rgba(249,168,212,0.25)';
+          g.fillRect(x - 7, yy - 12, 14, 1);
+          g.fillRect(x - 7, yy + 5, 14, 1);
+        }
+        break;
+      }
       case 'formula':
       case 'qed':
       case 'kusa':
@@ -817,6 +855,11 @@ export class Renderer {
     // fighter status labels
     for (const f of b.f) {
       if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - 52, 5, '#e2e8f0');
+      if (f.id === 'sakura' && f.hp > 0 && b.phase === 'fight') {
+        // 研究データ n（超必殺の威力に反映）／理論のない状態の恋の残り時間
+        if (f.loveT > 0) this.txt(`恋 ${Math.ceil(f.loveT / 60)}`, f.x, f.y - 50, 5, '#f9a8d4');
+        else if (f.research > 0) this.txt(`n=${f.research}`, f.x, f.y - 50, 4.5, f.research >= 15 ? '#f0abfc' : '#e9d5ff');
+      }
       if (b.phase === 'intro' || (b.phase === 'fight' && b.phaseT < 150)) {
         const tag = f.tag ?? (f.ai ? 'CPU' : f.side === 0 ? '1P' : '2P');
         const bob = Math.sin(b.t / 6) * 1.5;

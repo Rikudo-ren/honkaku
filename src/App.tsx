@@ -12,31 +12,14 @@ import { STAGES } from '@/game/characters';
 import { audio } from '@/game/audio';
 import { net, type StartData } from '@/game/net';
 import { makeOnlineSetup } from '@/game/onlineSetup';
+import { EXTREME_UNLOCK_KEY, SAKURA_UNLOCK_KEY, isExtremeUnlockMatch, isSakuraUnlockMatch, loadUnlocked, saveUnlocked } from '@/game/unlock';
 import type { CharId, Difficulty, FighterSetup, Mode, Setup, Side, StageId } from '@/game/types';
 
 type Screen = 'loading' | 'title' | 'select' | 'teamsetup' | 'online' | 'versus' | 'battle' | 'result';
 
 const randomStage = (): StageId => STAGES[Math.floor(Math.random() * STAGES.length)].id;
 
-const UNLOCK_KEY = 'honkaku_extreme_unlocked';
-
 const MIN_LOADING_MS = 500;
-
-function loadUnlocked(): boolean {
-  try {
-    return localStorage.getItem(UNLOCK_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function saveUnlocked() {
-  try {
-    localStorage.setItem(UNLOCK_KEY, '1');
-  } catch {
-    /* ignore */
-  }
-}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
@@ -47,10 +30,15 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [extremeUnlocked, setExtremeUnlocked] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
+  const [sakuraUnlocked, setSakuraUnlocked] = useState(false);
+  const [sakuraJustUnlocked, setSakuraJustUnlocked] = useState(false);
+  /** 直前の試合で解禁が発生したか（リザルト画面の予告バナー用） */
+  const [unlockedThisMatch, setUnlockedThisMatch] = useState<{ extreme: boolean; sakura: boolean }>({ extreme: false, sakura: false });
   const bgmRef = useRef<'title' | 'battle'>('title');
 
   useEffect(() => {
-    setExtremeUnlocked(loadUnlocked());
+    setExtremeUnlocked(loadUnlocked(EXTREME_UNLOCK_KEY));
+    setSakuraUnlocked(loadUnlocked(SAKURA_UNLOCK_KEY));
   }, []);
 
   useEffect(() => {
@@ -158,10 +146,29 @@ export default function App() {
     setScreen('battle');
   }, []);
 
-  const onEnd = useCallback((winner: Side, wins: [number, number]) => {
-    setResult({ winner, wins });
-    setScreen('result');
-  }, []);
+  const onEnd = useCallback(
+    (winner: Side, wins: [number, number]) => {
+      setResult({ winner, wins });
+      // 解禁判定は試合終了の時点で確定して保存する（再戦で負けても解禁が消えないように）。
+      // 演出はタイトルに戻ったときに流す。
+      const got = { extreme: false, sakura: false };
+      if (isExtremeUnlockMatch(setup, winner) && !extremeUnlocked) {
+        saveUnlocked(EXTREME_UNLOCK_KEY);
+        setExtremeUnlocked(true);
+        setJustUnlocked(true);
+        got.extreme = true;
+      }
+      if (isSakuraUnlockMatch(setup, winner) && !sakuraUnlocked) {
+        saveUnlocked(SAKURA_UNLOCK_KEY);
+        setSakuraUnlocked(true);
+        setSakuraJustUnlocked(true);
+        got.sakura = true;
+      }
+      setUnlockedThisMatch(got);
+      setScreen('result');
+    },
+    [setup, extremeUnlocked, sakuraUnlocked]
+  );
 
   const rematch = useCallback(() => {
     if (setup.mode === 'online') {
@@ -174,21 +181,10 @@ export default function App() {
     setScreen('versus');
   }, [setup.mode]);
 
-  const tryUnlock = useCallback(() => {
-    if (result && result.winner === 0 && setup.mode === '1p' && setup.difficulty === 'hard' && !extremeUnlocked) {
-      saveUnlocked();
-      setExtremeUnlocked(true);
-      setJustUnlocked(true);
-      return true;
-    }
-    return false;
-  }, [result, setup, extremeUnlocked]);
-
   const handleResultToTitle = useCallback(() => {
-    tryUnlock();
     if (setup.mode === 'online') net.leave();
     setScreen('title');
-  }, [tryUnlock, setup.mode]);
+  }, [setup.mode]);
 
   const handleResultToSelect = useCallback(() => {
     if (setup.mode === 'online') {
@@ -199,12 +195,14 @@ export default function App() {
       setScreen('teamsetup');
       return;
     }
-    if (tryUnlock()) {
+    // 解禁が発生した試合の直後は、演出を見せるためにタイトルへ
+    if (unlockedThisMatch.extreme || unlockedThisMatch.sakura) {
+      setUnlockedThisMatch({ extreme: false, sakura: false });
       setScreen('title');
       return;
     }
     setScreen('select');
-  }, [tryUnlock, setup.mode]);
+  }, [setup.mode, unlockedThisMatch]);
 
   return (
     <div className="min-h-screen w-full bg-[#05050c] text-slate-100">
@@ -215,13 +213,18 @@ export default function App() {
           extremeUnlocked={extremeUnlocked}
           justUnlocked={justUnlocked}
           onUnlockSeen={() => setJustUnlocked(false)}
+          sakuraUnlocked={sakuraUnlocked}
+          sakuraJustUnlocked={sakuraJustUnlocked}
+          onSakuraUnlockSeen={() => setSakuraJustUnlocked(false)}
         />
       )}
       {screen === 'select' && (
-        <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} onDone={chosen} onBack={() => setScreen('title')} />
+        <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} sakuraUnlocked={sakuraUnlocked} onDone={chosen} onBack={() => setScreen('title')} />
       )}
-      {screen === 'teamsetup' && <TeamSetup defaultDifficulty={setup.difficulty} onDone={teamChosen} onBack={() => setScreen('title')} />}
-      {screen === 'online' && <OnlineLobby onStart={onlineStart} onBack={() => setScreen('title')} />}
+      {screen === 'teamsetup' && (
+        <TeamSetup defaultDifficulty={setup.difficulty} sakuraUnlocked={sakuraUnlocked} onDone={teamChosen} onBack={() => setScreen('title')} />
+      )}
+      {screen === 'online' && <OnlineLobby sakuraUnlocked={sakuraUnlocked} onStart={onlineStart} onBack={() => setScreen('title')} />}
       {screen === 'versus' && <VersusScreen setup={setup} onDone={toBattle} />}
       {screen === 'battle' && (
         <BattleScreen
@@ -238,7 +241,8 @@ export default function App() {
           onRematch={rematch}
           onSelect={handleResultToSelect}
           onTitle={handleResultToTitle}
-          willUnlockExtreme={result.winner === 0 && setup.mode === '1p' && setup.difficulty === 'hard' && !extremeUnlocked}
+          willUnlockExtreme={unlockedThisMatch.extreme}
+          willUnlockSakura={unlockedThisMatch.sakura}
         />
       )}
       {screen !== 'loading' && (

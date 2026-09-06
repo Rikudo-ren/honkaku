@@ -1,6 +1,23 @@
 import type { CharDef, CharId, Difficulty, Look, StageDef } from './types';
 
+/** 通常ロスター（最初から選べる6人） */
 export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei'];
+/** 隠しキャラクター（解禁で選択可能になる） */
+export const HIDDEN_CHARS: CharId[] = ['sakura'];
+/** 隠しキャラ込みの全ロスター */
+export const ALL_CHARS: CharId[] = [...CHAR_ORDER, ...HIDDEN_CHARS];
+/** 解禁状況に応じたロスター */
+export function rosterFor(sakuraUnlocked: boolean): CharId[] {
+  return sakuraUnlocked ? ALL_CHARS : CHAR_ORDER;
+}
+/** 隠しキャラ解禁のヒント（キャラ選択画面の「？？？」枠に表示） */
+export const SAKURA_UNLOCK_HINT = {
+  title: '？？？',
+  sub: '紺のネクタイが、もう一人。',
+  hint: 'ヒント：微笑む観測者を、最高偏差値で観測せよ。',
+  /** 操作説明などで出す、はっきりした条件 */
+  condition: '1P対CPU・偏差値100の内藤蘭に勝利すると解禁',
+};
 
 const JAB_BOX = { x: 5, y: -32, w: 14, h: 9 };
 const SWING_BOX = { x: 3, y: -38, w: 17, h: 18 };
@@ -538,6 +555,115 @@ export const CHARS: Record<CharId, CharDef> = {
     stats: { power: 4, speed: 4, honshitsu: 3, joushiki: 3 },
     desc: '偏差値八十五。理数科にいる理由は「家が近いから」。評価軸は「面白い」だけ。',
   },
+  sakura: {
+    id: 'sakura',
+    hidden: true,
+    name: '櫻優',
+    kana: 'さくら・ゆう',
+    title: '恋愛学の研究者（理論崩壊中）',
+    affiliation: '内進コース',
+    tie: '紺',
+    tieColor: '#2f4f8f',
+    color: '#e879f9',
+    light: '#fae8ff',
+    hp: 100,
+    speed: 1.6,
+    jump: 6.2,
+    dmgMul: 1,
+    look: {
+      hair: 'fluffy',
+      hairColor: '#6b4a2e',
+      hairDark: '#4a3120',
+      eyeColor: '#4a3626',
+      glasses: true,
+      gender: 'm',
+      outfit: 'blazer',
+      accessory: 'loveNote',
+      weapon: 'lovenote',
+      winPose: 'shy',
+      tieColor: '#2f4f8f',
+      tieStripe: true,
+      sweat: true,
+    },
+    moves: {
+      light: {
+        key: 'light',
+        name: '要検証',
+        desc: 'シャーペンで突いてノートに書く。当たっても外れても「要検証」。',
+        callout: ['要検証', 'メモします', 'サンプルG-07', '有用なデータです'],
+        startup: 4,
+        active: 4,
+        recovery: 8,
+        dmg: 5,
+        hitstun: 14,
+        kbx: 1.6,
+        kby: 0,
+        box: JAB_BOX,
+        kind: 'melee',
+        pose: 'penJab',
+        sfx: 'hit',
+      },
+      heavy: {
+        key: 'heavy',
+        name: '第一法則：近接性',
+        desc: '研究ノートで払う。当たった相手はこちらへ引き寄せられる。近接性と反復接触が好意を生む。',
+        callout: ['近接性', '反復接触', '第一法則', '引き寄せ'],
+        startup: 10,
+        active: 5,
+        recovery: 14,
+        dmg: 12,
+        hitstun: 24,
+        kbx: -2.6,
+        kby: 0,
+        box: SWING_BOX,
+        kind: 'melee',
+        pose: 'swing',
+        sfx: 'heavy',
+      },
+      special: {
+        key: 'special',
+        name: 'シュレディンガーの好意',
+        desc: '未観測の好意（♡？）を前方に置く。相手が触れるか、もう一度必殺で「観測」すると波動関数が崩壊して爆発。画面に1つまで。',
+        callout: ['シュレディンガーの好意', '観測前です', '重ね合わせ', '第三法則'],
+        startup: 12,
+        active: 1,
+        recovery: 14,
+        dmg: 10,
+        hitstun: 22,
+        kbx: 2.5,
+        kby: 4,
+        knockdown: true,
+        kind: 'trap',
+        pose: 'point',
+        sfx: 'special',
+        cooldown: 18,
+      },
+    },
+    superName: '実存的崩壊',
+    superQuote: '報告があります。私は恋をしました',
+    superDesc:
+      '最も近い相手に恋を告白（＝観測）。ダメージは溜めた研究データ n で増える（n=0で14、n=15で51）。その後10秒間「理論のない状態の恋」：ノートを手放し、第七法則・不理解の引力で相手を引き寄せ続け、速度と攻撃力アップ。',
+    intro: '観察のために来ました',
+    wins: [
+      'n=1で統計的処理は不可能です',
+      '……研究です',
+      '観察のために、また来ます',
+      '恋愛発生の第十五法則（暫定）：〈面白い〉は理論を超える。要検証',
+      '理論が壊れても、恋は壊れてない。……たぶん',
+    ],
+    blockText: '要検証',
+    koText: '観測完了',
+    stats: { power: 2, speed: 3, honshitsu: 4, joushiki: 2 },
+    desc: '内進コース二年。紺のネクタイで北棟に通う恋愛学の研究者。彼女はいません。いたこともありません。ノートは✝本質✝だらけになり、理論は崩壊中（実存的）。被弾・ガードで研究データnが溜まる。',
+  },
+};
+
+/** 櫻優「理論のない状態の恋」中の見た目：ノートを手放し、汗も引いた */
+export const SAKURA_LOVE_LOOK: Look = {
+  ...CHARS.sakura.look,
+  accessory: undefined,
+  weapon: 'none',
+  sweat: false,
 };
 
 export const EXTRA_LOOKS: Record<'kuraishi' | 'heikatsu', Look> = {
@@ -591,19 +717,124 @@ export const DIFFICULTY_HINT: Record<Difficulty, string> = {
   extreme: '数理零カンスト相当・ほぼ完璧',
 };
 
-// 特殊な試合前の掛け合い（idの辞書順ペア → [先に言う側のid, セリフ, 返す側のセリフ]）
-export const INTRO_PAIRS: Record<string, { first: CharId; a: string; b: string; note?: string }> = {
-  'mie|mitsumine': { first: 'mie', a: 'は？', b: 'は？', note: '（ハモリ）' },
-  'mie|ryoma': { first: 'ryoma', a: 'これまじ✝本質✝', b: 'は？' },
-  'mie|terachi': { first: 'terachi', a: '三重について考えよ', b: '書くな！！' },
-  'ryoma|terachi': { first: 'terachi', a: '本質配信やります', b: 'なんで俺に先に言わないんだよ' },
-  'mitsumine|naito': { first: 'mitsumine', a: '好きなら好きって言いなよ', b: '面白い考え方だね' },
-  'naito|terachi': { first: 'naito', a: '配信、見てます', b: '……え、マジ？' },
-  'rei|ryoma': { first: 'ryoma', a: '零まじ✝本質✝', b: 'そう思っただけだけど' },
-  'mie|rei': { first: 'rei', a: 'セット✝', b: '零、✝つけるな' },
-  'mitsumine|ryoma': { first: 'ryoma', a: 'もう巻き込まれてるよ', b: 'は？' },
-  'naito|ryoma': { first: 'ryoma', a: '✝本質✝は恋愛に適用可能', b: '面白い考え方だね' },
+// 特殊な試合前の掛け合い（idの辞書順ペア → 候補リスト。試合ごとに1つ選ばれる）
+// first: 先に言う側のid / a: 先に言う側のセリフ / b: 返す側のセリフ / note: 画面中央に出る補足
+export interface IntroLine {
+  first: CharId;
+  a: string;
+  b: string;
+  note?: string;
+}
+
+export const INTRO_PAIRS: Record<string, IntroLine[]> = {
+  'mie|mitsumine': [
+    { first: 'mie', a: 'は？', b: 'は？', note: '（ハモリ）' },
+    { first: 'mitsumine', a: 'あんたも〈は？〉って思ってるでしょ', b: '思ってる' },
+  ],
+  'mie|ryoma': [
+    { first: 'ryoma', a: 'これまじ✝本質✝', b: 'は？' },
+    { first: 'mie', a: '俺に✝本質✝をつけるな', b: 'もうついてるよ' },
+  ],
+  'mie|terachi': [{ first: 'terachi', a: '三重について考えよ', b: '書くな！！' }],
+  'ryoma|terachi': [{ first: 'terachi', a: '本質配信やります', b: 'なんで俺に先に言わないんだよ' }],
+  'mitsumine|naito': [
+    { first: 'mitsumine', a: '好きなら好きって言いなよ', b: '面白い考え方だね' },
+    { first: 'naito', a: '三峰さん、作戦ノートって何？', b: '……なんでもない！' },
+  ],
+  'naito|terachi': [{ first: 'naito', a: '配信、見てます', b: '……え、マジ？' }],
+  'rei|ryoma': [{ first: 'ryoma', a: '零まじ✝本質✝', b: 'そう思っただけだけど' }],
+  'mie|rei': [{ first: 'rei', a: 'セット✝', b: '零、✝つけるな' }],
+  'mitsumine|ryoma': [{ first: 'ryoma', a: 'もう巻き込まれてるよ', b: 'は？' }],
+  'naito|ryoma': [{ first: 'ryoma', a: '✝本質✝は恋愛に適用可能', b: '面白い考え方だね' }],
+
+  // ───── 櫻優（隠しキャラ）との掛け合い ─────
+  'mie|sakura': [
+    { first: 'mie', a: '……また来たのか', b: '観察のために来ました。今日で四十二回目です' },
+    { first: 'sakura', a: '三重先輩、今の〈は？〉は何回目ですか', b: '数えるな。……四百二十回目', note: '（数えている）' },
+    { first: 'mie', a: 'お前のノート、✝本質✝だらけだぞ', b: '研究メモです。手遅れではありません' },
+    { first: 'sakura', a: '両馬先輩の発言は十回に一回意味があると聞きました。今日は？', b: '……わからない' },
+    { first: 'mie', a: '俺たちの会話を研究データにするな', b: '非常に有用なデータです' },
+    { first: 'sakura', a: '三重先輩と三峰さんの〈は？〉、周波数が一致しています', b: 'ハモリじゃない', note: '（ハモリ）' },
+  ],
+  'ryoma|sakura': [
+    { first: 'sakura', a: '両馬先輩。✝本質✝は恋愛に適用可能ですか', b: '全部に適用可能だよ。恋愛にもラーメンにも' },
+    { first: 'ryoma', a: '恋愛の✝本質✝？ わかんない。でも、あるんじゃない？', b: '〈わからないが、ある〉……恋愛の定義に近い。要検証' },
+    { first: 'sakura', a: '✝本質✝は、私の理論を壊しに来たんですか', b: '壊れたんじゃなくて、広がったんだよ', note: '（十回に一回のやつ）' },
+    { first: 'sakura', a: '両馬先輩。報告があります。私は恋をしました', b: 'おお。それまじ✝本質✝' },
+    { first: 'ryoma', a: '母親の卵焼きまじ✝本質✝', b: '今のは一回ですか、九回ですか' },
+    { first: 'ryoma', a: '恋愛とは✝本質✝であり、✝本質✝とは恋愛である', b: 'それ、私のノートの第十三法則です。助けて。' },
+  ],
+  'naito|sakura': [
+    { first: 'naito', a: 'あ、消しゴム落ちてます', b: '……ありがとうございます。ありがとうございます', note: '（心拍数、上昇）' },
+    { first: 'naito', a: '櫻くんって、理数科によく行ってるよね', b: 'は、はい。研究で。……恋愛学の' },
+    { first: 'sakura', a: '内藤さん。好意の観測について、一つ確認したいことが——', b: '面白い考え方だね', note: '（理論に核爆弾）' },
+    { first: 'naito', a: 'なんで二回お礼言うの？', b: '分類できない……この笑いは、分類できない' },
+    { first: 'sakura', a: '（n=1。統計的処理は不可能。でも——）', b: '……なに？' },
+    { first: 'naito', a: '人がどんなこと考えてるか知るの、好きだから', b: '好き……（文脈とは無関係に刺さった）' },
+    { first: 'naito', a: '寺地くんの配信、見てるんだ、あたし', b: '知ってます。……いえ、今知りました' },
+  ],
+  'mitsumine|sakura': [
+    { first: 'mitsumine', a: 'あんた、好きな子いるでしょ', b: '……いません', note: '（視線が左に動いた）' },
+    { first: 'sakura', a: '好意の観測が波動関数を崩壊させる問題への対策は——', b: '理論はいい！！' },
+    { first: 'mitsumine', a: '好きなら好きって言いなよ', b: 'それは波動関数の——' },
+    { first: 'mitsumine', a: 'アイコン、猫にした？', b: 'しました。n=1では結論は出せませんが', note: '（n=1じゃなくて、一日目だから）' },
+    { first: 'sakura', a: '三峰さん、作戦ノートと研究ノート、どちらが科学的か——', b: '科学の話はいい。作戦の話をして' },
+    { first: 'mitsumine', a: 'もっと誘えよ', b: '適切な頻度を理論的に——', note: '（五回目のやりとり）' },
+    { first: 'sakura', a: '恋愛は作戦だと言いましたね。作戦は理論の一種では——', b: 'は？' },
+  ],
+  'sakura|terachi': [
+    { first: 'sakura', a: '寺地先輩。内藤さんが、本質配信を見ていると言っていました', b: '……マジ？' },
+    { first: 'terachi', a: '理論が壊れても、恋は壊れてないから。たぶん', b: '（匿名で送ったのに、バレている……）', note: '（本質配信 #7）' },
+    { first: 'sakura', a: '配信、見てました', b: '身内率、上がった' },
+    { first: 'terachi', a: 'えー……恋愛学の研究者が恋をした場合の✝本質✝。これ、重いやつですね', b: '重いです。研究対象に自分が含まれています' },
+    { first: 'sakura', a: '〈意味わかんないけど安心する〉……寺地先輩、あれは何なんですか', b: '俺が聞きたい' },
+    { first: 'terachi', a: '俺はペットボトルです', b: 'ペットボトルは恋をしますか。要検証' },
+  ],
+  'rei|sakura': [
+    { first: 'rei', a: '告白が崩壊なら、告白の後って何になるの？', b: '……第四法則がそこを扱ってます' },
+    { first: 'rei', a: '理論で処理しようとすること自体をやめたら？', b: 'やめたら、何を頼りにすればいいんですか' },
+    { first: 'sakura', a: '枠の外に出た理論はどこへ行くんですか', b: 'わかんない。でも、消えるわけじゃない' },
+    { first: 'rei', a: '〈半減〉は文献値？', b: '文献によって違うので〈だいたい〉です' },
+    { first: 'sakura', a: '数理先輩は、✝本質✝に近い人種ですか', b: '面白いかどうかしか考えてないよ' },
+    { first: 'rei', a: '面白いな', b: '面白いと言われても、私は今つらいんですが' },
+    { first: 'rei', a: 'それ、データあるの？', b: '文献調査です。自分のデータはないので' },
+  ],
 };
+
+/** 同キャラ対戦（自己対話）の専用掛け合い。未定義なら「自演じゃなくて自己対話だよ」 */
+export const MIRROR_INTROS: Partial<Record<CharId, { a: string; b: string }>> = {
+  sakura: { a: '同一個体を二つ観測した場合、n=2になりますか', b: 'なりません。自己対話はn=1のままです' },
+};
+
+/** 櫻優の恋愛発生法則（超必殺で画面に散る） */
+export const LOVE_LAWS = [
+  '第一法則：近接性と反復接触',
+  '第二法則：類似性の引力',
+  '第三法則：シュレディンガーの好意',
+  '第四法則：古典的恋愛の減衰（半減期三〜六ヶ月）',
+  '第五法則：視線の三秒則',
+  '第六法則：消しゴム事象',
+  '第七法則：不理解の引力',
+  '第八法則：作戦は理論に優先しない（三峰、反証）',
+  '第九法則：昼食の適切な頻度（要検証）',
+  '第十法則：アイコン変更の信号性（猫）',
+  '第十一法則：笑いの分類不能性',
+  '第十二法則：n=1で統計的処理は不可能',
+  '第十三法則（暫定）：恋愛とは✝本質✝である',
+  '第十四法則（暫定）：当事者になると理論は機能しない',
+  '第十五法則（暫定）：〈面白い〉は理論を超える',
+];
+
+/** 超必殺カットインで映る研究ノートの1ページ */
+export const LOVE_NOTE_PAGES = [
+  '恋愛発生の第三法則：好意は観測されていない状態で重ね合わさっている。告白は波動関数の崩壊である。',
+  '恋愛発生の第十三法則（暫定）：恋愛とは✝本質✝であり、✝本質✝とは恋愛である。……何を言っているかわからない。助けて。',
+  '恋愛発生の第十四法則（暫定）：当事者になると理論は機能しない。',
+  '消しゴム事象：軽微な接触が好意の種子になりうるか？ 要検証（二十七回目の再分析。結論、また変わる）',
+  '数理零。〈理論がない状態の恋〉。怖い。でも、✝本質✝的にはそちらが正しい気がする。',
+  '内藤蘭が少し笑った。好意か、社交か、知的反応か。……分類できない。分類できない。',
+  '分析不能。サンプル数1。n=1で統計的処理は不可能。（ノートを閉じても感情は閉じなかった）',
+];
 
 export function pairKey(a: CharId, b: CharId): string {
   return [a, b].sort().join('|');

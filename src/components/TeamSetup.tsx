@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CHARS, CHAR_ORDER, DIFFICULTY_SHORT } from '@/game/characters';
+import { CHARS, DIFFICULTY_SHORT, rosterFor } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import type { CharId, Difficulty, FighterSetup, Team } from '@/game/types';
@@ -7,6 +7,8 @@ import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
 interface Props {
   defaultDifficulty: Difficulty;
+  /** 隠しキャラ「櫻優」が解禁済みか */
+  sakuraUnlocked?: boolean;
   onDone: (fighters: FighterSetup[]) => void;
   onBack: () => void;
 }
@@ -24,7 +26,8 @@ const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
 const CTRL_LABEL: Record<Ctrl, string> = { p1: '1P操作', p2: '2P操作', cpu: 'CPU' };
 
-export default function TeamSetup({ defaultDifficulty, onDone, onBack }: Props) {
+export default function TeamSetup({ defaultDifficulty, sakuraUnlocked = false, onDone, onBack }: Props) {
+  const roster = rosterFor(sakuraUnlocked);
   const [rows, setRows] = useState<Row[]>([
     { char: 'mie', team: 0, ctrl: 'p1', aiDifficulty: defaultDifficulty },
     { char: 'ryoma', team: 0, ctrl: 'cpu', aiDifficulty: defaultDifficulty },
@@ -38,8 +41,8 @@ export default function TeamSetup({ defaultDifficulty, onDone, onBack }: Props) 
   };
 
   const cycleChar = (i: number, dir: 1 | -1) => {
-    const cur = CHAR_ORDER.indexOf(rows[i].char);
-    patch(i, { char: CHAR_ORDER[(cur + dir + CHAR_ORDER.length) % CHAR_ORDER.length] });
+    const cur = roster.indexOf(rows[i].char);
+    patch(i, { char: roster[(cur + dir + roster.length) % roster.length] });
   };
 
   const cycleCtrl = (i: number) => {
@@ -63,7 +66,7 @@ export default function TeamSetup({ defaultDifficulty, onDone, onBack }: Props) 
   const addRow = () => {
     if (rows.length >= MAX_FIGHTERS) return;
     const c0 = rows.filter((r) => r.team === 0).length;
-    setRows((rs) => [...rs, { char: CHAR_ORDER[rs.length % CHAR_ORDER.length], team: c0 <= rs.length / 2 ? 0 : 1, ctrl: 'cpu', aiDifficulty: defaultDifficulty }]);
+    setRows((rs) => [...rs, { char: roster[rs.length % roster.length], team: c0 <= rs.length / 2 ? 0 : 1, ctrl: 'cpu', aiDifficulty: defaultDifficulty }]);
     audio.sfx('confirm');
   };
 

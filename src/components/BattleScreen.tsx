@@ -513,7 +513,7 @@ function CutInOverlay({ c }: { c: CutIn }) {
         <div
           className={`absolute bottom-[8%] w-[46%] max-w-md border-2 border-slate-300 bg-white p-2 text-slate-900 shadow-[6px_6px_0_rgba(0,0,0,0.6)] md:p-3 ${left ? 'right-[5%] -rotate-3 animate-cutin-text-l' : 'left-[5%] rotate-2 animate-cutin-text-r'}`}
         >
-          <div className="text-[9px] text-slate-500 md:text-[11px]">LINEオープンチャット「✝本質✝募集所」より ── 紙に書いて読みます</div>
+          <div className="text-[9px] text-slate-500 md:text-[11px]">{c.paperLabel ?? 'LINEオープンチャット「✝本質✝募集所」より ── 紙に書いて読みます'}</div>
           <div className="mt-1 text-sm leading-snug md:text-2xl">{c.paper}</div>
         </div>
       )}
