@@ -1,4 +1,4 @@
-import { CHARS, INTRO_PAIRS, pairKey } from './characters';
+import { CHARS, INTRO_PAIRS, LOVE_LAWS, LOVE_NOTE_PAGES, MIRROR_INTROS, SAKURA_LOVE_LOOK, pairKey } from './characters';
 import { COMBO_COMMENTS, HIT_TEXTS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
 import { EMPTY_INPUT } from './types';
 import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId, Team } from './types';
@@ -85,6 +85,10 @@ export interface Fighter {
   grabbedBy: number;
   superT: number;
   superData: Record<string, unknown> | TerachiOutcome | null;
+  /** 櫻優：研究データ n（被弾・ガード・「要検証」ヒットで蓄積。超必殺の威力に反映） */
+  research: number;
+  /** 櫻優：「理論のない状態の恋」バフの残りフレーム */
+  loveT: number;
 }
 
 export interface Projectile {
@@ -169,6 +173,8 @@ export interface CutIn {
   name: string;
   quote: string;
   paper?: string;
+  /** paper の見出し（未指定なら寺地の本質配信用の文言） */
+  paperLabel?: string;
 }
 
 export interface BattleFighterSetup {
@@ -289,6 +295,8 @@ function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficu
     grabbedBy: -1,
     superT: 0,
     superData: null,
+    research: 0,
+    loveT: 0,
   };
 }
 
@@ -556,7 +564,33 @@ export class Battle {
         return 'paper';
       case 'rei':
         return 'point';
+      case 'sakura':
+        return (f.superData as { confessed?: boolean })?.confessed ? 'spread' : 'confess';
     }
+  }
+
+  /** 実効ダメージ倍率（櫻優の「理論のない状態の恋」中は上昇） */
+  private dmgMulOf(f: Fighter): number {
+    return f.def.dmgMul * (f.loveT > 0 ? 1.3 : 1);
+  }
+
+  /** 実効移動速度 */
+  private speedOf(f: Fighter): number {
+    return f.def.speed * (f.loveT > 0 ? 1.25 : 1);
+  }
+
+  /** 櫻優が設置中の「シュレディンガーの好意」 */
+  private koiOf(f: Fighter): Projectile | undefined {
+    return this.projectiles.find((p) => p.kind === 'koi' && p.owner === f.idx && p.life > 0);
+  }
+
+  /** 櫻優：研究データを1つ増やす（上限15＝第十五法則まで） */
+  private addResearch(f: Fighter, why: string) {
+    if (f.id !== 'sakura' || f.hp <= 0 || f.research >= 15) return;
+    f.research++;
+    this.text(`n=${f.research} ${why}`, f.x, f.y - 66, { size: 6, color: '#f5d0fe', life: 30, vy: -0.5 });
+    if (f.research === 1) this.text('（n=1で統計的処理は不可能）', f.x, f.y - 74, { size: 5, color: '#e9d5ff', life: 34, vy: -0.4 });
+    if (f.research === 15) this.text('第十五法則、到達', f.x, f.y - 74, { size: 7, color: '#f9a8d4', life: 40, vy: -0.3, shake: true });
   }
 
   /** 描画用フェーズ */
@@ -592,6 +626,9 @@ export class Battle {
       f.grabbedBy = -1;
       f.flash = 0;
       f.superData = null;
+      f.research = 0;
+      f.loveT = 0;
+      f.look = f.def.look;
       if (f.ai) f.ai = { plan: 'wait', planT: 0, nextDecision: 20, held: null };
     }
     this.projectiles = [];
@@ -619,10 +656,13 @@ export class Battle {
     }
     if (this.phaseT === 6) {
       const key = pairKey(a.id, b.id);
-      const pair = INTRO_PAIRS[key];
+      const list = INTRO_PAIRS[key];
+      // ラウンドごとに候補から1つ選ぶ（決定論rngなのでオンラインでも一致する）
+      const pair = list && list.length ? this.pick(list) : undefined;
       if (a.id === b.id && this.isDuel) {
-        this.bubble(a.idx, a.def.intro);
-        this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, '自演じゃなくて自己対話だよ') });
+        const mirror = MIRROR_INTROS[a.id];
+        this.bubble(a.idx, mirror ? mirror.a : a.def.intro);
+        this.queue.push({ at: this.t + 30, fn: () => this.bubble(b.idx, mirror ? mirror.b : '自演じゃなくて自己対話だよ') });
       } else if (pair) {
         const first = a.id === pair.first ? a : b;
         const other = first === a ? b : a;
@@ -670,7 +710,7 @@ export class Battle {
     if (winner === -1) this.setBanner('DOUBLE K.O.', '自演？', '#fca5a5', 130, true);
     else {
       const w = this.teamRep(winner);
-      this.setBanner(w.def.koText, w.id === 'mie' ? '四百二十一回目' : w.id === 'rei' ? '面白かった' : undefined, w.def.color, 130, true);
+      this.setBanner(w.def.koText, w.id === 'mie' ? '四百二十一回目' : w.id === 'rei' ? '面白かった' : w.id === 'sakura' ? '波動関数、崩壊' : undefined, w.def.color, 130, true);
     }
     this.sfx('ko');
   }
@@ -787,6 +827,7 @@ export class Battle {
       const inp = f.ai ? this.aiInput(s) : (inputs[s] ?? EMPTY_INPUT);
       this.updateFighter(s, inp);
     }
+    this.updateLoveGravity();
     this.resolvePush();
     this.resolveHits();
     this.updateProjectiles();
@@ -860,6 +901,15 @@ export class Battle {
     if (f.invuln > 0) f.invuln--;
     if (f.silence > 0) f.silence--;
     if (f.cooldown > 0) f.cooldown--;
+    if (f.loveT > 0) {
+      f.loveT--;
+      if (f.loveT === 0) {
+        f.look = f.def.look;
+        this.text('理論、再構築中……', f.x, f.y - 58, { size: 7, color: '#e9d5ff', life: 40, vy: -0.3 });
+      } else if (this.t % 18 === 0 && f.hp > 0) {
+        this.fx.push({ kind: 'heart', x: f.x + (this.rng() - 0.5) * 14, y: f.y - 48, vx: (this.rng() - 0.5) * 0.4, vy: -0.5, t: 0, life: 26, color: '#f9a8d4', size: 3 });
+      }
+    }
     if (f.comboTimer > 0) {
       f.comboTimer--;
       if (f.comboTimer === 0) f.combo = 0;
@@ -967,7 +1017,7 @@ export class Battle {
       }
       if (inp.up) {
         f.vy = -f.def.jump;
-        f.vx = (inp.left ? -1 : inp.right ? 1 : 0) * f.def.speed * 0.95;
+        f.vx = (inp.left ? -1 : inp.right ? 1 : 0) * this.speedOf(f) * 0.95;
         f.y -= 1;
         this.setState(f, 'jump');
         this.sfx('jump');
@@ -983,11 +1033,11 @@ export class Battle {
       }
       if (back) {
         f.state = 'walk';
-        f.vx = -f.facing * f.def.speed * 0.8;
+        f.vx = -f.facing * this.speedOf(f) * 0.8;
         f.blocking = true;
       } else if (fwd) {
         f.state = 'walk';
-        f.vx = f.facing * f.def.speed;
+        f.vx = f.facing * this.speedOf(f);
       } else {
         f.state = 'idle';
         f.vx = 0;
@@ -1001,6 +1051,7 @@ export class Battle {
   private canSpecial(f: Fighter) {
     const m = f.def.moves.special;
     if (m.kind === 'projectile') return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind).length < 2;
+    // trap（櫻）：未設置なら設置、設置済みなら「観測」なので常に出せる
     return true;
   }
 
@@ -1012,7 +1063,9 @@ export class Battle {
     f.moveHit = false;
     f.movePhase = 0;
     if (!air) f.vx = 0;
-    if (m.callout && this.rng() < 0.7) this.text(this.pick(m.callout), f.x, f.y - 52, { size: 7, color: '#ffffff', life: 34, vy: -0.5 });
+    const observing = m.kind === 'trap' && !!this.koiOf(f);
+    if (observing) this.text('観測します', f.x, f.y - 52, { size: 7, color: '#f5d0fe', life: 34, vy: -0.5 });
+    else if (m.callout && this.rng() < 0.7) this.text(this.pick(m.callout), f.x, f.y - 52, { size: 7, color: '#ffffff', life: 34, vy: -0.5 });
     this.sfx(m.kind === 'melee' ? 'swing' : m.kind === 'counter' ? 'ha' : 'special');
   }
 
@@ -1027,6 +1080,7 @@ export class Battle {
     f.movePhase = f.moveFrame <= m.startup ? 0 : f.moveFrame <= m.startup + m.active ? 1 : 2;
     if (f.moveFrame === m.startup + 1) {
       if (m.kind === 'projectile' && m.projectile) this.spawnMoveProjectile(f, o, m);
+      if (m.kind === 'trap') this.placeOrObserveKoi(f, m);
       if (m.kind === 'teleport') {
         this.afterimage(f);
         f.x = clamp(o.x - o.facing * 26, 12, W - 12);
@@ -1053,7 +1107,7 @@ export class Battle {
     const w = spec.w ?? 8;
     const h = spec.h ?? 8;
     if (spec.fromTop) {
-      this.spawnProj({ kind: spec.kind, owner: f.idx, x: o.x + o.vx * 6, y: -10, vx: 0, vy: spec.vy ?? 3, w, h, dmg: m.dmg * f.def.dmgMul, hitstun: m.hitstun, kbx: m.kbx, kby: m.kby, knockdown: m.knockdown, life: spec.life });
+      this.spawnProj({ kind: spec.kind, owner: f.idx, x: o.x + o.vx * 6, y: -10, vx: 0, vy: spec.vy ?? 3, w, h, dmg: m.dmg * this.dmgMulOf(f), hitstun: m.hitstun, kbx: m.kbx, kby: m.kby, knockdown: m.knockdown, life: spec.life });
       this.text('★', o.x, 12, { size: 8, color: '#fde68a', life: 20, vy: 0 });
     } else {
       const ground = !!spec.ground;
@@ -1066,7 +1120,7 @@ export class Battle {
         vy: spec.vy ?? 0,
         w,
         h,
-        dmg: m.dmg * f.def.dmgMul,
+        dmg: m.dmg * this.dmgMulOf(f),
         hitstun: m.hitstun,
         kbx: m.kbx,
         kby: m.kby,
@@ -1077,6 +1131,79 @@ export class Battle {
       });
     }
     if (spec.kind === 'cross') this.crossBurst(f.x + f.facing * 12, f.y - 30, 3);
+  }
+
+  // ───────────────────────── 櫻優：シュレディンガーの好意 ─────────────────────────
+  /** 未設置なら足元前方に「未観測の好意」を置く。設置済みなら自分で観測して崩壊させる。 */
+  private placeOrObserveKoi(f: Fighter, m: MoveDef) {
+    const trap = this.koiOf(f);
+    if (trap) {
+      this.text('観測', trap.x, trap.y - 22, { size: 10, color: '#f5d0fe', life: 34, vy: -0.4 });
+      this.collapseKoi(trap, f, 38);
+      trap.life = 0;
+      return;
+    }
+    const x = clamp(f.x + f.facing * 46, 16, W - 16);
+    this.spawnProj({
+      kind: 'koi',
+      owner: f.idx,
+      x,
+      y: GROUND - 9,
+      vx: 0,
+      vy: 0,
+      w: 14,
+      h: 16,
+      dmg: m.dmg * this.dmgMulOf(f),
+      hitstun: m.hitstun,
+      kbx: m.kbx,
+      kby: m.kby,
+      knockdown: true,
+      life: 600,
+      pierce: true,
+    });
+    this.hearts(x, GROUND - 14);
+    this.text('♡？', x, GROUND - 28, { size: 9, color: '#f9a8d4', life: 34, vy: -0.4 });
+  }
+
+  /** 波動関数の崩壊：周囲の敵にヒット。三重の「は？」構え中は否定されて不発 */
+  private collapseKoi(p: Projectile, owner: Fighter | null, radius: number) {
+    this.ring(p.x, p.y - 2, '#f9a8d4', radius + 12);
+    this.hearts(p.x, p.y - 8);
+    this.spark(p.x, p.y - 4, '#fbcfe8', 12, 2);
+    this.text('波動関数、崩壊', p.x, p.y - 34, { size: 8, color: '#f5d0fe', life: 42, vy: -0.4, shake: true });
+    this.flash = Math.max(this.flash, 4);
+    this.shake = Math.max(this.shake, 5);
+    this.sfx('special');
+    const ownerTeam = owner?.team ?? -1;
+    for (const e of this.f) {
+      if (e.team === ownerTeam || e.hp <= 0) continue;
+      if (Math.abs(e.x - p.x) > radius || e.y < GROUND - 40) continue;
+      if (!this.hittable(e)) continue;
+      const dir: Facing = e.x >= p.x ? 1 : -1;
+      if (e.countering) {
+        this.text('は？（否定）', e.x, e.y - 60, { size: 12, color: '#7dd3fc', life: 40, vy: -0.4, shake: true });
+        e.meter = Math.min(100, e.meter + 8);
+        continue;
+      }
+      if (this.isBlocking(e)) this.applyBlock(owner, e, p.dmg, p.hitstun);
+      else this.applyHit(owner, e, p.dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: p.kby, knockdown: true }, dir, 'heavy');
+    }
+  }
+
+  /** 「理論のない状態の恋」：第七法則・不理解の引力で最寄りの敵をじわじわ引き寄せる */
+  private updateLoveGravity() {
+    for (const f of this.f) {
+      if (f.loveT <= 0 || f.hp <= 0) continue;
+      const e = this.nearestEnemy(f);
+      if (!e) continue;
+      const dx = e.x - f.x;
+      const adx = Math.abs(dx);
+      if (adx > 150 || adx < 24) continue;
+      if (!this.canBeAffected(e) || e.y < GROUND || e.state === 'attack') continue;
+      const dir = dx > 0 ? 1 : -1;
+      e.x = clamp(e.x - dir * 0.32, 10, W - 10);
+      if (this.t % 14 === 0) this.fx.push({ kind: 'heart', x: e.x - dir * 6, y: e.y - 30, vx: -dir * 0.8, vy: -0.2, t: 0, life: 24, color: '#f9a8d4', size: 3 });
+    }
   }
 
   // ───────────────────────── hits ─────────────────────────
@@ -1128,7 +1255,17 @@ export class Battle {
           break;
         }
         if (this.isBlocking(o)) this.applyBlock(f, o, m.dmg, m.hitstun);
-        else this.applyHit(f, o, m.dmg * f.def.dmgMul, m, f.facing, m.sfx);
+        else {
+          this.applyHit(f, o, m.dmg * this.dmgMulOf(f), m, f.facing, m.sfx);
+          if (f.id === 'sakura') {
+            if (m.key === 'light') this.addResearch(f, 'メモ');
+            if (m.key === 'heavy') {
+              // 第一法則：近接性——引き寄せた証にハートが飛ぶ
+              this.fx.push({ kind: 'heart', x: o.x, y: o.y - 36, vx: -f.facing * 0.6, vy: -0.4, t: 0, life: 22, color: '#f9a8d4', size: 3 });
+              this.text('近接性', o.x, o.y - 62, { size: 7, color: '#f5d0fe', life: 30, vy: -0.4 });
+            }
+          }
+        }
         break; // 1振り1ヒット（多人数でも1人だけ）
       }
     }
@@ -1173,6 +1310,7 @@ export class Battle {
     }
     vic.meter = Math.min(100, vic.meter + 3 + dmg * 0.2);
     vic.hitstop = dmg >= 10 ? 7 : 4;
+    if (vic.id === 'sakura' && att && att.idx !== vic.idx) this.addResearch(vic, '実測');
     this.shake = Math.max(this.shake, dmg >= 10 ? 5 : 2);
     const hx = vic.x - dir * 4;
     const hy = vic.y - 28;
@@ -1199,6 +1337,7 @@ export class Battle {
       if (vic.x <= 10 || vic.x >= W - 10) att.vx = -att.facing * 2;
     }
     vic.meter = Math.min(100, vic.meter + 3);
+    if (vic.id === 'sakura') this.addResearch(vic, '観察');
     this.fx.push({ kind: 'guard', x: vic.x + vic.facing * 8, y: vic.y - 28, vx: 0, vy: 0, t: 0, life: 12, color: '#93c5fd', size: 10 });
     this.text(vic.def.blockText, vic.x, vic.y - 52, { size: 8, color: '#bfdbfe', life: 26, vy: -0.5 });
     this.sfx('guard');
@@ -1208,6 +1347,27 @@ export class Battle {
   private updateProjectiles() {
     const keep: Projectile[] = [];
     for (const p of this.projectiles) {
+      if (p.kind === 'koi') {
+        // 未観測の好意：その場に留まり、敵が触れたら観測されて崩壊する
+        p.t++;
+        p.life--;
+        if (p.life <= 0) {
+          this.text('減衰（第四法則）', p.x, p.y - 20, { size: 6, color: '#cbd5e1', life: 36, vy: -0.3 });
+          continue;
+        }
+        if (this.phase === 'fight') {
+          const owner = p.owner >= 0 ? this.f[p.owner] : null;
+          const ownerTeam = owner?.team ?? -1;
+          const box = this.projBox(p);
+          const toucher = this.f.find((e) => e.team !== ownerTeam && e.hp > 0 && this.hittable(e) && overlap(box, this.hurtbox(e)));
+          if (toucher) {
+            this.collapseKoi(p, owner, 30);
+            continue;
+          }
+        }
+        keep.push(p);
+        continue;
+      }
       p.t++;
       p.life--;
       if (p.homing !== undefined) {
@@ -1316,6 +1476,11 @@ export class Battle {
       const oc = this.pick(TERACHI_OUTCOMES);
       cut.paper = oc.text;
       f.superData = oc;
+    } else if (f.id === 'sakura') {
+      // 研究ノートの1ページがカットインに映る
+      cut.paper = this.pick(LOVE_NOTE_PAGES);
+      cut.paperLabel = `恋愛学 研究ノート ── 研究データ n=${f.research}`;
+      f.superData = {};
     } else f.superData = {};
     this.cutin = cut;
     this.opts.onCutin?.(cut);
@@ -1495,6 +1660,63 @@ export class Battle {
         if (T >= 64) this.setState(f, 'idle');
         break;
       }
+      case 'sakura': {
+        const d = f.superData as { confessed?: boolean; hit?: boolean; n?: number };
+        if (T === 1) {
+          d.n = f.research;
+          this.setBanner('実存的崩壊', `報告があります。私は恋をしました（研究データ n=${d.n}）`, c, 120);
+          // 研究ノートが開き、恋愛発生の法則が画面に散る
+          LOVE_LAWS.forEach((law, i) => {
+            this.queue.push({
+              at: this.t + 2 + i * 2,
+              fn: () =>
+                this.text(law, clamp(f.x + (this.rng() - 0.5) * 170, 44, W - 44), 36 + this.rng() * 120, {
+                  size: 5.5 + this.rng() * 4,
+                  color: this.rng() < 0.5 ? '#fbcfe8' : '#ffffff',
+                  life: 50 + this.rng() * 30,
+                  vy: -0.4 - this.rng() * 0.4,
+                  vx: (this.rng() - 0.5) * 1.2,
+                }),
+            });
+          });
+          this.hearts(f.x, f.y - 40);
+          this.sfx('special');
+        }
+        if (T === 22) {
+          // 告白＝観測。研究データが多いほど重い
+          d.confessed = true;
+          const tgt = this.nearestEnemy(f);
+          const n = d.n ?? 0;
+          const dmg = (14 + 2.5 * n) * f.def.dmgMul;
+          if (tgt && Math.abs(tgt.x - f.x) < 130 && this.hittable(tgt)) {
+            d.hit = true;
+            const dir: Facing = tgt.x >= f.x ? 1 : -1;
+            this.ring(tgt.x, tgt.y - 24, '#f9a8d4', 52);
+            this.applyHit(f, tgt, dmg, { hitstun: 30, kbx: 4.2, kby: 5.2, knockdown: true }, dir, 'heavy');
+            this.text('観測', tgt.x, tgt.y - 66, { size: 18, color: '#f5d0fe', life: 50, vy: -0.3, shake: true });
+            this.text(`n=${n} → 波動関数、崩壊`, tgt.x, tgt.y - 82, { size: 8, color: '#fbcfe8', life: 50, vy: -0.2 });
+            this.hearts(tgt.x, tgt.y - 40);
+            this.flash = 10;
+            this.shake = 10;
+          } else {
+            this.text('……観測、失敗', f.x, f.y - 60, { size: 9, color: '#e2e8f0', life: 50, vy: -0.2 });
+            this.text('（波動関数は崩壊しなかった。でも恋はした）', f.x, f.y - 70, { size: 6, color: '#cbd5e1', life: 50, vy: -0.2 });
+          }
+          f.research = 0;
+          this.sfx('heavy');
+        }
+        if (T === 40) {
+          // 理論のない状態の恋：ノートを手放す。速度・攻撃力アップ＋不理解の引力
+          f.loveT = 600;
+          f.look = SAKURA_LOVE_LOOK;
+          this.setBanner('理論のない状態の恋', '第七法則：不理解の引力 ── 相手を引き寄せ続ける（10秒・攻撃力↑）', '#f9a8d4', 110);
+          this.sparkles(f.x, f.y - 26, '#f9a8d4');
+          this.text('ノートを手放した', f.x, f.y - 58, { size: 7, color: '#fbcfe8', life: 46, vy: -0.3 });
+          this.sfx('heal');
+        }
+        if (T >= 54) this.setState(f, 'idle');
+        break;
+      }
     }
   }
 
@@ -1625,7 +1847,7 @@ export class Battle {
         break;
       }
       case 'observe': {
-        this.setBanner('櫻：好意の観測', '波動関数が崩壊した（位置が入れ替わる）', '#c4b5fd');
+        this.setBanner('櫻：好意の観測', this.f.some((e) => e.id === 'sakura') ? '波動関数が崩壊した（位置が入れ替わる）※本人がいる。気まずい' : '波動関数が崩壊した（位置が入れ替わる）', '#c4b5fd');
         this.flash = 8;
         // 生存者から2人を選んで位置を入れ替える
         const cand = alive.filter((e) => e.state !== 'grabbed');
@@ -1742,12 +1964,14 @@ export class Battle {
     const inHeavy = dist <= heavyR + 2;
 
     // ── 1. 超必殺（ダウン中は撃たない）──
+    // 櫻の告白（観測）は射程130なので、届く距離でだけ撃つ
+    const superRange = f.id === 'sakura' ? 115 : 160;
     if (
       f.meter >= 100 &&
       f.silence <= 0 &&
       o.state !== 'down' &&
       o.state !== 'getup' &&
-      dist < 160 &&
+      dist < superRange &&
       this.rng() < superP
     ) {
       inp.super = true;
@@ -1777,6 +2001,28 @@ export class Battle {
         if (this.rng() < 0.5) inp[fwd] = true;
       }
       return inp;
+    }
+
+    // ── 2.5 櫻優：シュレディンガーの好意の「観測」／相手の好意を飛び越える ──
+    if (f.id === 'sakura' && grounded && f.cooldown <= 0 && f.silence <= 0) {
+      const trap = this.koiOf(f);
+      if (trap && Math.abs(o.x - trap.x) < 30 && o.y >= GROUND - 20 && o.state !== 'down' && o.state !== 'getup' && this.rng() < (d === 'extreme' ? 0.9 : d === 'hard' ? 0.75 : 0.5)) {
+        inp.special = true;
+        return inp;
+      }
+    }
+    if (grounded) {
+      const koi = this.projectiles.find((p) => p.kind === 'koi' && p.owner !== f.idx && (p.owner < 0 || this.f[p.owner]?.team !== f.team));
+      if (koi) {
+        const dx = koi.x - f.x;
+        const ahead = Math.sign(dx) === (fwd === 'right' ? 1 : -1);
+        // 低偏差値ほど踏みやすい（極端に賢いと罠の意味がなくなるので確率は控えめ）
+        if (ahead && Math.abs(dx) < 24 && this.rng() < projP * 0.12) {
+          inp.up = true;
+          inp[fwd] = true;
+          return inp;
+        }
+      }
     }
 
     // ── 3. ガード（相手の打撃発生・アクティブ中を優先）──
@@ -1998,6 +2244,19 @@ export class Battle {
       }
       return inp;
     }
+    // 櫻の「シュレディンガーの好意」は観測すると崩壊する。零は面白がって飛び越える（たまに踏む）
+    if (grounded) {
+      const koi = this.projectiles.find((p) => p.kind === 'koi' && p.owner !== f.idx && (p.owner < 0 || this.f[p.owner]?.team !== f.team));
+      if (koi) {
+        const dx = koi.x - f.x;
+        const ahead = Math.sign(dx) === (fwd === 'right' ? 1 : -1);
+        if (ahead && Math.abs(dx) < 26 && this.rng() < (d === 'extreme' ? 0.5 : 0.3)) {
+          inp.up = true;
+          inp[fwd] = true;
+          return inp;
+        }
+      }
+    }
     // 防御：相手の打撃発生を読み切ってガード
     const oMelee = o.state === 'attack' && !!o.move && o.move.kind === 'melee';
     const oThreat =
@@ -2074,6 +2333,12 @@ export class Battle {
         return oppAttacking || projIncoming;
       case 'rei':
         return dist > 60;
+      case 'sakura': {
+        // 未設置なら相手との間に置く。設置済みなら（相手が乗ったときだけ観測＝generalBrain側で判断）撃たない
+        const trap = this.koiOf(f);
+        if (trap) return false;
+        return dist > 52 && dist < 150;
+      }
       default:
         return this.canSpecial(f);
     }

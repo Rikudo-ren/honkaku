@@ -28,6 +28,10 @@ interface PoseParams {
   lying?: boolean;
   weapon?: boolean;
   paper?: boolean;
+  /** シャーペンを前手に持つ（櫻の「要検証」） */
+  pen?: boolean;
+  /** ノートを胸の前で開いて見せる（櫻の告白） */
+  openNote?: boolean;
 }
 
 export interface DrawOpts {
@@ -42,7 +46,7 @@ export interface DrawOpts {
 function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): PoseParams {
   const base: PoseParams = { dy: 0, lean: 0, armF: 'down', armB: 'down', legs: 'stand', legFrame: 0, face: 'normal' };
   const bob = Math.floor(t / 24) % 2;
-  const hug = look.accessory === 'bookFront';
+  const hug = look.accessory === 'bookFront' || look.accessory === 'loveNote';
   switch (pose) {
     case 'idle':
       return { ...base, dy: bob, armF: hug ? 'hold' : 'down', armB: hug ? 'hold' : 'down' };
@@ -66,6 +70,16 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
         : phase === 1
           ? { ...base, armF: 'punch', face: 'shout', legs: 'wide', lean: 1 }
           : { ...base, armF: 'forward', legs: 'wide' };
+    case 'penJab':
+      // シャーペンで突いてから、ノートにメモする
+      return phase === 0
+        ? { ...base, armF: 'chamber', armB: hug ? 'hold' : 'down', lean: -1, pen: true }
+        : phase === 1
+          ? { ...base, armF: 'punch', armB: hug ? 'hold' : 'down', face: 'closed', legs: 'wide', lean: 1, pen: true }
+          : { ...base, armF: 'hold', armB: 'hold', legs: 'wide', face: 'normal', pen: true };
+    case 'confess':
+      // 深呼吸して、ノートを胸の前で開く。目は閉じている（緊張）
+      return { ...base, lean: 2, armF: 'hold', armB: 'hold', legs: 'wide', face: 'closed', openNote: true };
     case 'swing':
       return phase === 0
         ? { ...base, armF: 'raise', weapon: true, lean: -1 }
@@ -110,7 +124,7 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
     case 'win': {
       const wp = look.winPose ?? 'cheer';
       if (wp === 'cool') return { ...base, dy: bob, face: 'closed', armF: 'hip', armB: 'hip' };
-      if (wp === 'shy') return { ...base, dy: bob, face: 'smile', armF: 'block' };
+      if (wp === 'shy') return { ...base, dy: bob, face: 'smile', armF: 'block', armB: hug ? 'hold' : 'down' };
       if (wp === 'peace') return { ...base, dy: bob, face: 'smile', armF: 'up' };
       if (wp === 'hug') return { ...base, dy: bob, face: 'smile', armF: 'hold', armB: 'hold' };
       return { ...base, dy: bob, face: 'smile', armF: 'up', armB: 'up', legs: bob ? 'wide' : 'stand' };
@@ -334,7 +348,13 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(-2 + ln, -28 + dy, 4, 2, '#2f4f8f');
       R(0 + ln, -28 + dy, 1, 2, '#c9a56a');
     } else {
-      R(0 + ln, -28 + dy, 1, 8, outfit === 'suit' ? '#7a5230' : '#a8262e');
+      const tie = look.tieColor ?? (outfit === 'suit' ? '#7a5230' : '#a8262e');
+      R(0 + ln, -28 + dy, 1, 8, tie);
+      if (look.tieStripe) {
+        // 斜めストライプ風（1px幅なので明るいドットを等間隔に）
+        R(0 + ln, -26 + dy, 1, 1, '#93b4e6');
+        R(0 + ln, -23 + dy, 1, 1, '#93b4e6');
+      }
     }
     if (outfit === 'blazer') {
       R(-1 + ln, -21 + dy, 1, 1, '#c9a86a');
@@ -348,7 +368,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   const accessory = () => {
     const calm =
-      o.pose === 'idle' || o.pose === 'walk' || o.pose === 'win' || o.pose === 'frozen' || o.pose === 'crouch' || o.pose === 'block' || o.pose === 'stun';
+      o.pose === 'idle' ||
+      o.pose === 'walk' ||
+      o.pose === 'win' ||
+      o.pose === 'frozen' ||
+      o.pose === 'crouch' ||
+      o.pose === 'block' ||
+      o.pose === 'stun' ||
+      (o.pose === 'penJab' && (o.phase ?? 0) === 2); // 突いたあとノートにメモ
     if (!calm) return;
     switch (look.accessory) {
       case 'bookFront':
@@ -365,6 +392,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(3 + ln, -27 + dy, 5, 7, '#f4f4f8');
         R(5 + ln, -26 + dy, 1, 5, '#111111');
         R(4 + ln, -24 + dy, 3, 1, '#111111');
+        break;
+      case 'loveNote':
+        // ピンクの研究ノート「恋愛学ノート」を胸に抱える（少し低めに持って紺のネクタイが見えるように）
+        R(-3 + ln, -25 + dy, 9, 7, '#f3b3c6');
+        R(-3 + ln, -25 + dy, 1, 7, '#c9748f');
+        R(-1 + ln, -24 + dy, 6, 1, '#fde2ea');
+        R(0 + ln, -22 + dy, 4, 1, '#a34d6b');
+        R(0 + ln, -20 + dy, 3, 1, '#a34d6b');
         break;
       case 'map':
         R(4 + ln, -30 + dy, 3, 13, '#e6dcc0');
@@ -428,6 +463,12 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(4 + hx, -34 + hy, 1, 1, '#8a4a4a');
         break;
     }
+    if (look.sweat && P.face !== 'smile' && P.face !== 'shout') {
+      // こめかみの汗（緊張）
+      const drip = Math.floor(o.t / 20) % 3;
+      R(6 + hx, -39 + hy + drip, 1, 2, '#a8dcff');
+      R(6 + hx, -39 + hy + drip, 1, 1, '#e6f6ff');
+    }
     if (look.glasses) {
       const g = '#2a2a30';
       R(-1 + hx, -39 + hy, 7, 1, g);
@@ -488,6 +529,25 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(-7 + hx, -39 + hy, 2, 3, hc);
         if (look.hairDark) R(-7 + hx, -45 + hy, 14, 1, look.hairDark);
         break;
+      case 'fluffy': {
+        // ふわっとした量の多い茶髪（櫻）
+        R(-8 + hx, -44 + hy, 2, 5, hc);
+        R(6 + hx, -44 + hy, 2, 4, hc);
+        R(-6 + hx, -47 + hy, 3, 2, hc);
+        R(-2 + hx, -48 + hy, 3, 3, hc);
+        R(2 + hx, -47 + hy, 3, 2, hc);
+        R(5 + hx, -46 + hy, 2, 1, hc);
+        R(-4 + hx, -46 + hy, 1, 1, hc);
+        R(1 + hx, -46 + hy, 1, 1, hc);
+        R(-1 + hx, -39 + hy, 3, 1, hc);
+        R(3 + hx, -39 + hy, 2, 2, hc);
+        R(-7 + hx, -39 + hy, 2, 6, hc);
+        const hd = look.hairDark ?? hc;
+        R(-3 + hx, -45 + hy, 1, 1, hd);
+        R(1 + hx, -44 + hy, 1, 1, hd);
+        R(4 + hx, -45 + hy, 1, 1, hd);
+        break;
+      }
     }
     if (look.accessory === 'headphones') {
       R(-7 + hx, -32 + hy, 14, 2, '#2b2b32');
@@ -534,7 +594,39 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         }
         R(hx + 25, hy - 1, 3, 3, '#3776ab');
         break;
+      case 'lovenote':
+        // ピンクの研究ノート（振り回す）
+        R(hx - 1, hy - 9, 7, 10, '#f3b3c6');
+        R(hx - 1, hy - 9, 1, 10, '#c9748f');
+        R(hx + 1, hy - 7, 4, 1, '#fde2ea');
+        R(hx + 1, hy - 5, 3, 1, '#a34d6b');
+        R(hx + 1, hy - 3, 4, 1, '#a34d6b');
+        R(hx + 3, hy - 1, 1, 1, '#e879f9');
+        break;
     }
+  };
+
+  const pen = () => {
+    if (!P.pen) return;
+    const hx = hand.x;
+    const hy = hand.y;
+    // シャーペン（前手から前方へ）
+    R(hx + 3, hy + 1, 6, 1, '#1f2937');
+    R(hx + 3, hy + 1, 2, 1, '#e5e7eb');
+    R(hx + 9, hy + 1, 1, 1, '#9ca3af');
+  };
+
+  const openNote = () => {
+    if (!P.openNote) return;
+    // 胸の前で開いた研究ノート（見開き）
+    R(-7 + ln, -30 + dy, 14, 9, '#fde2ea');
+    R(0 + ln, -30 + dy, 1, 9, '#c9748f');
+    R(-5 + ln, -28 + dy, 4, 1, '#a34d6b');
+    R(-5 + ln, -26 + dy, 3, 1, '#a34d6b');
+    R(-5 + ln, -24 + dy, 4, 1, '#a34d6b');
+    R(2 + ln, -28 + dy, 4, 1, '#a34d6b');
+    R(2 + ln, -26 + dy, 4, 1, '#e879f9');
+    R(2 + ln, -24 + dy, 2, 1, '#a34d6b');
   };
 
   const paper = () => {
@@ -557,6 +649,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   arm('F', P.armF);
   weapon();
   paper();
+  pen();
+  openNote();
   ctx.globalAlpha = prevAlpha;
 }
 

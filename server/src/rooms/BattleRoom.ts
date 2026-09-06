@@ -4,7 +4,7 @@ import { InputRelay } from "./InputRelay";
 /** 合言葉コードに使う文字（紛らわしい 0/O/1/I は除外） */
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const STAGES = ["classroom", "lake", "sakura", "hawaii"] as const;
-const CHAR_IDS = ["mie", "ryoma", "naito", "mitsumine", "terachi", "rei"] as const;
+const CHAR_IDS = ["mie", "ryoma", "naito", "mitsumine", "terachi", "rei", "sakura"] as const;
 const DIFFICULTIES = ["easy", "normal", "hard", "extreme"] as const;
 
 /** チーム戦ルームの上限（人間＋AIの合計ファイター数） */

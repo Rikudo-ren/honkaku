@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHARS, CHAR_ORDER, DIFFICULTY_SHORT } from '@/game/characters';
+import { CHARS, DIFFICULTY_SHORT, rosterFor } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import { DEFAULT_NAME, MAX_NAME, net, sanitizeName, type LobbyAi, type LobbyInfo, type StartData } from '@/game/net';
@@ -7,6 +7,8 @@ import type { CharId, Difficulty, Team } from '@/game/types';
 import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
 interface Props {
+  /** 隠しキャラ「櫻優」が解禁済みか（解禁している人だけオンラインでも選べる） */
+  sakuraUnlocked?: boolean;
   onStart: (data: StartData) => void;
   onBack: () => void;
 }
@@ -15,7 +17,8 @@ type Stage = 'menu' | 'code-input' | 'connecting' | 'lobby' | 'error';
 
 const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
-export default function OnlineLobby({ onStart, onBack }: Props) {
+export default function OnlineLobby({ sakuraUnlocked = false, onStart, onBack }: Props) {
+  const roster = rosterFor(sakuraUnlocked);
   // 再戦時：既に部屋に入っているならロビー画面から始める
   const [stage, setStage] = useState<Stage>(net.connected ? 'lobby' : 'menu');
   const [error, setError] = useState('');
@@ -236,11 +239,11 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
         )}
 
         {stage === 'lobby' && lobby && !lobby.teamMode && (
-          <QuickLobbyView lobby={lobby} sel={sel} ready={ready} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
+          <QuickLobbyView lobby={lobby} roster={roster} sel={sel} ready={ready} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
         )}
 
         {stage === 'lobby' && lobby && lobby.teamMode && (
-          <TeamLobbyView lobby={lobby} sel={sel} ready={ready} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
+          <TeamLobbyView lobby={lobby} roster={roster} sel={sel} ready={ready} pickChara={pickChara} toggleReady={toggleReady} leave={leave} />
         )}
       </div>
     </div>
@@ -251,6 +254,7 @@ export default function OnlineLobby({ onStart, onBack }: Props) {
 
 function QuickLobbyView({
   lobby,
+  roster,
   sel,
   ready,
   pickChara,
@@ -258,6 +262,7 @@ function QuickLobbyView({
   leave,
 }: {
   lobby: LobbyInfo;
+  roster: CharId[];
   sel: CharId;
   ready: boolean;
   pickChara: (id: CharId) => void;
@@ -278,7 +283,7 @@ function QuickLobbyView({
           </div>
           <div className="text-[10px] text-slate-400">{CHARS[sel].title}</div>
           <div className="mt-2 grid grid-cols-3 gap-1">
-            {CHAR_ORDER.map((id) => (
+            {roster.map((id) => (
               <button
                 key={id}
                 onClick={() => pickChara(id)}
@@ -341,6 +346,7 @@ function QuickLobbyView({
 
 function TeamLobbyView({
   lobby,
+  roster,
   sel,
   ready,
   pickChara,
@@ -348,6 +354,7 @@ function TeamLobbyView({
   leave,
 }: {
   lobby: LobbyInfo;
+  roster: CharId[];
   sel: CharId;
   ready: boolean;
   pickChara: (id: CharId) => void;
@@ -389,7 +396,7 @@ function TeamLobbyView({
 
   const addAi = (team: Team) => {
     if (full) return;
-    const ai: LobbyAi = { team, char: CHAR_ORDER[Math.floor(Math.random() * CHAR_ORDER.length)], difficulty: 'normal' };
+    const ai: LobbyAi = { team, char: roster[Math.floor(Math.random() * roster.length)], difficulty: 'normal' };
     net.addAi(ai);
     audio.sfx('confirm');
   };
@@ -433,8 +440,8 @@ function TeamLobbyView({
           )}
           {isHost && <div className="text-[10px] text-slate-500">ホストは準備ボタン不要（開始ボタンで開戦）</div>}
         </div>
-        <div className="mt-2 grid grid-cols-6 gap-1">
-          {CHAR_ORDER.map((id) => (
+        <div className={`mt-2 grid gap-1 ${roster.length > 6 ? 'grid-cols-7' : 'grid-cols-6'}`}>
+          {roster.map((id) => (
             <button
               key={id}
               onClick={() => pickChara(id)}
@@ -522,8 +529,8 @@ function TeamLobbyView({
                       <div className="flex shrink-0 items-center gap-1">
                         <button
                           onClick={() => {
-                            const i = CHAR_ORDER.indexOf(a.char);
-                            net.updateAi(a.index, { char: CHAR_ORDER[(i + 1) % CHAR_ORDER.length] });
+                            const i = roster.indexOf(a.char);
+                            net.updateAi(a.index, { char: roster[(i + 1) % roster.length] });
                             audio.sfx('move');
                           }}
                           title="キャラ変更"

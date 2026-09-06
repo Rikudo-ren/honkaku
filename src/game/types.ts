@@ -1,4 +1,4 @@
-export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei';
+export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura';
 export type Side = 0 | 1;
 /** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
 export type Team = 0 | 1;
@@ -62,9 +62,11 @@ export type PoseId =
   | 'spread'
   | 'grab'
   | 'grabbed'
-  | 'paper';
+  | 'paper'
+  | 'penJab'
+  | 'confess';
 
-export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult';
+export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult' | 'fluffy';
 
 export interface Look {
   hair: HairStyle;
@@ -76,9 +78,15 @@ export interface Look {
   glasses?: boolean;
   gender: 'm' | 'f';
   outfit: 'blazer' | 'vest' | 'suit';
-  accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map';
-  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'none';
+  accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map' | 'loveNote';
+  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'none';
   winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug';
+  /** 男子ネクタイの色（未指定なら理数科のえんじ）。内進は紺。 */
+  tieColor?: string;
+  /** ネクタイに斜めストライプ風の明るいドットを入れる */
+  tieStripe?: boolean;
+  /** こめかみに汗マークを描く（緊張しがちな人） */
+  sweat?: boolean;
 }
 
 export interface Box {
@@ -88,7 +96,7 @@ export interface Box {
   h: number;
 }
 
-export type MoveKind = 'melee' | 'projectile' | 'counter' | 'teleport';
+export type MoveKind = 'melee' | 'projectile' | 'counter' | 'teleport' | 'trap';
 export type ProjKind =
   | 'cross'
   | 'eraser'
@@ -101,7 +109,8 @@ export type ProjKind =
   | 'mikan'
   | 'vending'
   | 'kuraishi'
-  | 'qed';
+  | 'qed'
+  | 'koi';
 
 export interface ProjectileSpec {
   kind: ProjKind;
@@ -160,6 +169,8 @@ export interface MoveDef {
 
 export interface CharDef {
   id: CharId;
+  /** 隠しキャラクター（解禁するまでロスターに出ない） */
+  hidden?: boolean;
   name: string;
   kana: string;
   title: string;
