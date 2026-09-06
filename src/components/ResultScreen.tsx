@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { CHARS, DIFFICULTY_LABELS } from '@/game/characters';
+import { CHARS, DIFFICULTY_LABELS, hiddenMeta } from '@/game/characters';
 import { HONSHITSU_QUOTES } from '@/game/quotes';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
-import type { Setup, Side } from '@/game/types';
+import type { CharId, Setup, Side } from '@/game/types';
 
 interface Props {
   setup: Setup;
@@ -12,15 +12,35 @@ interface Props {
   onSelect: () => void;
   onTitle: () => void;
   willUnlockExtreme?: boolean;
-  /** この試合で隠しキャラ「櫻優」が解禁された */
-  willUnlockSakura?: boolean;
+  /** この試合で解禁された隠しキャラ（無ければ null）。予告バナーは HIDDEN_META から生成 */
+  willUnlockHidden?: CharId | null;
+}
+
+/** 隠しキャラ解禁の予告バナー（どの隠しキャラでも共通で使える） */
+function HiddenUnlockBanner({ id }: { id: CharId }) {
+  const m = hiddenMeta(id);
+  if (!m) return null;
+  return (
+    <div className="mt-4 animate-pop border-2 p-3 text-center" style={{ borderColor: m.accent, backgroundColor: `${m.accent}22` }}>
+      <div className="text-xs tracking-widest" style={{ color: m.accent }}>
+        SECRET CHARACTER
+      </div>
+      <div className="text-xl font-bold" style={{ color: '#fde68a' }}>
+        {m.bannerTitle}
+      </div>
+      <div className="mt-1 text-xs text-slate-300">{m.bannerText}</div>
+    </div>
+  );
 }
 
 const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
-export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme, willUnlockSakura }: Props) {
+export default function ResultScreen({ setup, result, onRematch, onSelect, onTitle, willUnlockExtreme, willUnlockHidden = null }: Props) {
   const teamMode = !!setup.teamMode && !!setup.fighters && setup.fighters.length >= 2;
-  if (teamMode) return <TeamResult setup={setup} result={result} onRematch={onRematch} onSelect={onSelect} onTitle={onTitle} />;
+  if (teamMode)
+    return (
+      <TeamResult setup={setup} result={result} onRematch={onRematch} onSelect={onSelect} onTitle={onTitle} willUnlockHidden={willUnlockHidden} />
+    );
   const w = result.winner;
   const wId = w === 0 ? setup.p1 : setup.p2;
   const lId = w === 0 ? setup.p2 : setup.p1;
@@ -70,7 +90,9 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
               : wd.id === 'sakura'
                 ? `紺のネクタイの恋愛学者が${ld.name}を観測して勝った。本人談「研究です」。ノートには✝本質✝と書いてあった。`
-                : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
+                : wd.id === 'kakusei'
+                  ? `元・否定の守護者が${ld.name}を解体した。本人談「通夜は終わった」。現場は、まだ終わらないらしい。`
+                  : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#0b0b18] px-4 py-8 text-slate-100">
@@ -121,13 +143,7 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               <div className="mt-1 text-xs text-slate-300">タイトルに戻ると豪華演出が流れます</div>
             </div>
           )}
-          {willUnlockSakura && (
-            <div className="mt-4 animate-pop border-2 border-pink-400 bg-pink-950/80 p-3 text-center">
-              <div className="text-xs tracking-widest text-pink-300">SECRET CHARACTER</div>
-              <div className="text-xl font-bold text-pink-100">紺のネクタイが、もう一人来た。</div>
-              <div className="mt-1 text-xs text-slate-300">微笑む観測者を最高偏差値で観測した ── タイトルに戻ると報告があります</div>
-            </div>
-          )}
+          {willUnlockHidden && <HiddenUnlockBanner id={willUnlockHidden} />}
           <div className="mt-5 border-2 border-slate-700 bg-slate-950/80 p-3 text-sm">
             <div className="text-xs text-emerald-300">匿名掲示板「ヘイカツ雑談スレ」に新着</div>
             <div className="mt-1 text-slate-200">
@@ -162,12 +178,15 @@ function TeamResult({
   onRematch,
   onSelect,
   onTitle,
+  willUnlockHidden,
 }: {
   setup: Setup;
   result: { winner: Side; wins: [number, number] };
   onRematch: () => void;
   onSelect: () => void;
   onTitle: () => void;
+  /** この試合で解禁された隠しキャラ（無ければ null） */
+  willUnlockHidden?: CharId | null;
 }) {
   const fighters = setup.fighters!;
   const w = result.winner;
@@ -220,6 +239,7 @@ function TeamResult({
             {teamName}
           </div>
           <div className="mt-1 text-amber-200">{youWon ? '勝利 ── ✝本質✝はお前たちのものだ' : '敗北 ── まあ（四百二十一回目）'}</div>
+          {willUnlockHidden && <HiddenUnlockBanner id={willUnlockHidden} />}
           <div className="mt-4 flex items-center gap-3 text-xl">
             <span style={{ color: '#38bdf8' }}>青{fighters.filter((f) => f.team === 0).length}人</span>
             <span className="border-2 border-slate-600 bg-slate-950 px-3 py-1 text-3xl">

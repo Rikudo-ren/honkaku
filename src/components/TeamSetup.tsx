@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CHARS, DIFFICULTY_SHORT, rosterFor } from '@/game/characters';
+import type { HiddenUnlocks } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import type { CharId, Difficulty, FighterSetup, Team } from '@/game/types';
@@ -7,8 +8,8 @@ import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
 interface Props {
   defaultDifficulty: Difficulty;
-  /** 隠しキャラ「櫻優」が解禁済みか */
-  sakuraUnlocked?: boolean;
+  /** 隠しキャラの解禁状況（解禁済みのキャラを編成に使える） */
+  hiddenUnlocked?: HiddenUnlocks;
   onDone: (fighters: FighterSetup[]) => void;
   onBack: () => void;
 }
@@ -26,8 +27,8 @@ const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
 const CTRL_LABEL: Record<Ctrl, string> = { p1: '1P操作', p2: '2P操作', cpu: 'CPU' };
 
-export default function TeamSetup({ defaultDifficulty, sakuraUnlocked = false, onDone, onBack }: Props) {
-  const roster = rosterFor(sakuraUnlocked);
+export default function TeamSetup({ defaultDifficulty, hiddenUnlocked = {}, onDone, onBack }: Props) {
+  const roster = rosterFor(hiddenUnlocked);
   const [rows, setRows] = useState<Row[]>([
     { char: 'mie', team: 0, ctrl: 'p1', aiDifficulty: defaultDifficulty },
     { char: 'ryoma', team: 0, ctrl: 'cpu', aiDifficulty: defaultDifficulty },

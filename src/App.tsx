@@ -8,11 +8,12 @@ import VersusScreen from '@/components/VersusScreen';
 import BattleScreen from '@/components/BattleScreen';
 import ResultScreen from '@/components/ResultScreen';
 import { preloadPortraits } from '@/components/Portrait';
-import { STAGES } from '@/game/characters';
+import { STAGES, hiddenCharsSatisfied } from '@/game/characters';
+import type { HiddenUnlocks } from '@/game/characters';
 import { audio } from '@/game/audio';
 import { net, type StartData } from '@/game/net';
 import { makeOnlineSetup } from '@/game/onlineSetup';
-import { EXTREME_UNLOCK_KEY, SAKURA_UNLOCK_KEY, isExtremeUnlockMatch, isSakuraUnlockMatch, loadUnlocked, saveUnlocked } from '@/game/unlock';
+import { EXTREME_UNLOCK_KEY, isExtremeUnlockMatch, loadHiddenUnlocks, loadUnlocked, saveUnlocked } from '@/game/unlock';
 import type { CharId, Difficulty, FighterSetup, Mode, Setup, Side, StageId } from '@/game/types';
 
 type Screen = 'loading' | 'title' | 'select' | 'teamsetup' | 'online' | 'versus' | 'battle' | 'result';
@@ -30,15 +31,17 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [extremeUnlocked, setExtremeUnlocked] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
-  const [sakuraUnlocked, setSakuraUnlocked] = useState(false);
-  const [sakuraJustUnlocked, setSakuraJustUnlocked] = useState(false);
-  /** 直前の試合で解禁が発生したか（リザルト画面の予告バナー用） */
-  const [unlockedThisMatch, setUnlockedThisMatch] = useState<{ extreme: boolean; sakura: boolean }>({ extreme: false, sakura: false });
+  /** 隠しキャラの解禁状況（HIDDEN_META 由来。キーが増えてもここは自動対応） */
+  const [hiddenUnlocked, setHiddenUnlocked] = useState<HiddenUnlocks>({});
+  /** 直前の試合で新たに解禁された隠しキャラ（解禁演出用。id が増えてもそのまま） */
+  const [hiddenJustUnlocked, setHiddenJustUnlocked] = useState<CharId | null>(null);
+  /** 直前の試合で解禁が発生したか（リザルト画面の予告バナー・遷移用） */
+  const [unlockedThisMatch, setUnlockedThisMatch] = useState<{ extreme: boolean; hidden: CharId | null }>({ extreme: false, hidden: null });
   const bgmRef = useRef<'title' | 'battle'>('title');
 
   useEffect(() => {
     setExtremeUnlocked(loadUnlocked(EXTREME_UNLOCK_KEY));
-    setSakuraUnlocked(loadUnlocked(SAKURA_UNLOCK_KEY));
+    setHiddenUnlocked(loadHiddenUnlocks());
   }, []);
 
   useEffect(() => {
@@ -151,23 +154,29 @@ export default function App() {
       setResult({ winner, wins });
       // 解禁判定は試合終了の時点で確定して保存する（再戦で負けても解禁が消えないように）。
       // 演出はタイトルに戻ったときに流す。
-      const got = { extreme: false, sakura: false };
+      const got = { extreme: false, hidden: null as CharId | null };
       if (isExtremeUnlockMatch(setup, winner) && !extremeUnlocked) {
         saveUnlocked(EXTREME_UNLOCK_KEY);
         setExtremeUnlocked(true);
         setJustUnlocked(true);
         got.extreme = true;
       }
-      if (isSakuraUnlockMatch(setup, winner) && !sakuraUnlocked) {
-        saveUnlocked(SAKURA_UNLOCK_KEY);
-        setSakuraUnlocked(true);
-        setSakuraJustUnlocked(true);
-        got.sakura = true;
+      // 隠しキャラは HIDDEN_META の条件を全て調べる（増えてもここを変えなくてよい）
+      const newHidden = hiddenCharsSatisfied(hiddenUnlocked, setup, winner);
+      if (newHidden.length) {
+        const next: HiddenUnlocks = { ...hiddenUnlocked };
+        for (const m of newHidden) {
+          saveUnlocked(m.key);
+          next[m.id] = true;
+        }
+        setHiddenUnlocked(next);
+        setHiddenJustUnlocked(newHidden[0].id);
+        got.hidden = newHidden[0].id;
       }
       setUnlockedThisMatch(got);
       setScreen('result');
     },
-    [setup, extremeUnlocked, sakuraUnlocked]
+    [setup, extremeUnlocked, hiddenUnlocked]
   );
 
   const rematch = useCallback(() => {
@@ -196,8 +205,8 @@ export default function App() {
       return;
     }
     // 解禁が発生した試合の直後は、演出を見せるためにタイトルへ
-    if (unlockedThisMatch.extreme || unlockedThisMatch.sakura) {
-      setUnlockedThisMatch({ extreme: false, sakura: false });
+    if (unlockedThisMatch.extreme || unlockedThisMatch.hidden) {
+      setUnlockedThisMatch({ extreme: false, hidden: null });
       setScreen('title');
       return;
     }
@@ -213,18 +222,18 @@ export default function App() {
           extremeUnlocked={extremeUnlocked}
           justUnlocked={justUnlocked}
           onUnlockSeen={() => setJustUnlocked(false)}
-          sakuraUnlocked={sakuraUnlocked}
-          sakuraJustUnlocked={sakuraJustUnlocked}
-          onSakuraUnlockSeen={() => setSakuraJustUnlocked(false)}
+          hiddenUnlocked={hiddenUnlocked}
+          hiddenJustUnlocked={hiddenJustUnlocked}
+          onHiddenUnlockSeen={() => setHiddenJustUnlocked(null)}
         />
       )}
       {screen === 'select' && (
-        <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} sakuraUnlocked={sakuraUnlocked} onDone={chosen} onBack={() => setScreen('title')} />
+        <CharacterSelect mode={setup.mode} difficulty={setup.difficulty} hiddenUnlocked={hiddenUnlocked} onDone={chosen} onBack={() => setScreen('title')} />
       )}
       {screen === 'teamsetup' && (
-        <TeamSetup defaultDifficulty={setup.difficulty} sakuraUnlocked={sakuraUnlocked} onDone={teamChosen} onBack={() => setScreen('title')} />
+        <TeamSetup defaultDifficulty={setup.difficulty} hiddenUnlocked={hiddenUnlocked} onDone={teamChosen} onBack={() => setScreen('title')} />
       )}
-      {screen === 'online' && <OnlineLobby sakuraUnlocked={sakuraUnlocked} onStart={onlineStart} onBack={() => setScreen('title')} />}
+      {screen === 'online' && <OnlineLobby hiddenUnlocked={hiddenUnlocked} onStart={onlineStart} onBack={() => setScreen('title')} />}
       {screen === 'versus' && <VersusScreen setup={setup} onDone={toBattle} />}
       {screen === 'battle' && (
         <BattleScreen
@@ -242,7 +251,7 @@ export default function App() {
           onSelect={handleResultToSelect}
           onTitle={handleResultToTitle}
           willUnlockExtreme={unlockedThisMatch.extreme}
-          willUnlockSakura={unlockedThisMatch.sakura}
+          willUnlockHidden={unlockedThisMatch.hidden}
         />
       )}
       {screen !== 'loading' && (

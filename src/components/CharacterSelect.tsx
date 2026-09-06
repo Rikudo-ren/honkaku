@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHARS, DIFFICULTY_SHORT, HIDDEN_CHARS, SAKURA_UNLOCK_HINT, rosterFor } from '@/game/characters';
+import { CHARS, DIFFICULTY_SHORT, hiddenMeta, lockedHidden, rosterFor } from '@/game/characters';
+import type { HiddenUnlocks } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import type { CharDef, CharId, Difficulty, Mode } from '@/game/types';
@@ -7,18 +8,19 @@ import type { CharDef, CharId, Difficulty, Mode } from '@/game/types';
 interface Props {
   mode: Mode;
   difficulty: Difficulty;
-  /** 隠しキャラ「櫻優」が解禁済みか */
-  sakuraUnlocked?: boolean;
+  /** 隠しキャラの解禁状況（未解禁の分は「？？？」枠として並ぶ） */
+  hiddenUnlocked?: HiddenUnlocks;
   onDone: (p1: CharId, p2: CharId) => void;
   onBack: () => void;
 }
 
 const COLS = 3;
 
-export default function CharacterSelect({ mode, difficulty, sakuraUnlocked = false, onDone, onBack }: Props) {
-  // 解禁済みなら櫻優を含む7人、未解禁なら6人＋「？？？」枠（選べない）
-  const roster = rosterFor(sakuraUnlocked);
-  const ROWS = Math.ceil((sakuraUnlocked ? roster.length : roster.length + HIDDEN_CHARS.length) / COLS);
+export default function CharacterSelect({ mode, difficulty, hiddenUnlocked = {}, onDone, onBack }: Props) {
+  // 解禁済みの隠しキャラをロスターに含め、未解禁の分は「？？？」枠（選べない）を並べる
+  const roster = rosterFor(hiddenUnlocked);
+  const hiddenLocked = lockedHidden(hiddenUnlocked);
+  const ROWS = Math.ceil((roster.length + hiddenLocked.length) / COLS);
   const [cur, setCur] = useState<[number, number]>([0, 1]);
   const [locked, setLocked] = useState<[boolean, boolean]>([false, false]);
   const [turn, setTurn] = useState<0 | 1>(0);
@@ -215,7 +217,7 @@ export default function CharacterSelect({ mode, difficulty, sakuraUnlocked = fal
             {mode === '1p' ? (
               <>
                 相手の強さ：<span className="font-bold text-amber-200">{DIFFICULTY_SHORT[difficulty]}</span>
-                {difficulty === 'hard' || difficulty === 'extreme' ? '（ガードガチ）' : ''}
+                {difficulty === 'hard' ? '（手強い相手）' : difficulty === 'extreme' ? '（格段に強い相手）' : ''}
               </>
             ) : (
               '生徒を選べ ── 偏差値は関係ない。地面を見ろ。'
@@ -272,23 +274,29 @@ export default function CharacterSelect({ mode, difficulty, sakuraUnlocked = fal
               </button>
             );
           })}
-          {!sakuraUnlocked && (
-            <div
-              className="group relative aspect-[3/4] w-[26vw] max-w-[150px] overflow-hidden border-4 border-dashed border-slate-700 bg-slate-950/80 text-left lg:w-[150px]"
-              title={SAKURA_UNLOCK_HINT.hint}
-            >
-              <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 pb-7 text-center">
-                <div className="pixel-text-shadow text-3xl text-slate-500">？？？</div>
-                <div className="text-[10px] leading-tight text-slate-500">{SAKURA_UNLOCK_HINT.sub}</div>
-                <div className="mt-1 text-[9px] leading-tight text-fuchsia-300/80">{SAKURA_UNLOCK_HINT.hint}</div>
+          {hiddenLocked.map((h) => {
+            const ht = hiddenMeta(h);
+            if (!ht) return null;
+            return (
+              <div
+                key={h}
+                className="group relative aspect-[3/4] w-[26vw] max-w-[150px] overflow-hidden border-4 border-dashed border-slate-700 bg-slate-950/80 text-left lg:w-[150px]"
+                title={ht.hint}
+              >
+                <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 pb-7 text-center">
+                  <div className="pixel-text-shadow text-3xl text-slate-500">？？？</div>
+                  <div className="text-[10px] leading-tight text-slate-500">{ht.sub}</div>
+                  {/* ヒントは未解禁の「？？？」枠にだけ出す */}
+                  <div className="mt-1 text-[9px] leading-tight text-amber-300/80">{ht.hint}</div>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-1.5 py-1">
+                  <div className="text-sm leading-tight text-slate-500 md:text-base">{ht.title}</div>
+                  <div className="truncate text-[10px] text-slate-600">LOCKED</div>
+                </div>
+                <div className="absolute left-0 top-0 h-full w-1.5 opacity-50" style={{ background: ht.stripe }} />
               </div>
-              <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-1.5 py-1">
-                <div className="text-sm leading-tight text-slate-500 md:text-base">{SAKURA_UNLOCK_HINT.title}</div>
-                <div className="truncate text-[10px] text-slate-600">LOCKED</div>
-              </div>
-              <div className="absolute left-0 top-0 h-full w-1.5 bg-[#2f4f8f]/50" />
-            </div>
-          )}
+            );
+          })}
         </div>
         <DetailPanel
           def={c2}
