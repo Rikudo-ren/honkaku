@@ -40,6 +40,8 @@ export interface LobbyInfo {
   maxHumans: number;
   players: LobbyPlayer[];
   ai: LobbyAi[];
+  /** [チーム戦ルーム] ホストが設定した使用禁止キャラクター（複数指定可） */
+  banned: CharId[];
 }
 
 /** 試合開始時にサーバーから配られるファイター1人分 */
@@ -350,6 +352,11 @@ class NetClient {
   /** [ホスト専用] AIを削除 */
   removeAi(index: number) {
     this.room?.send('ai-del', index);
+  }
+
+  /** [ホスト専用] 使用禁止キャラの一括設定（チーム戦ルームのみ・複数指定可） */
+  setBanned(ids: CharId[]) {
+    this.room?.send('ban', ids);
   }
 
   /** [ホスト専用] 試合開始（チーム戦ルーム） */

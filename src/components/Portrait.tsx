@@ -15,6 +15,7 @@ const PORTRAIT_FILES: Record<CharId, string> = {
   terachi: 'b1eQ6.jpg',
   rei: 'OCvNF.jpg',
   sakura: 'sakura_yu.jpg',
+  heikatsu: 'heikatsu.jpg',
   kakusei: 'kakusei_mie.jpg',
 };
 
@@ -38,6 +39,7 @@ export const USER_PORTRAIT_URLS: Record<CharId, string | null> = {
   terachi: byName[PORTRAIT_FILES.terachi.toLowerCase()] ?? null,
   rei: byName[PORTRAIT_FILES.rei.toLowerCase()] ?? null,
   sakura: byName[PORTRAIT_FILES.sakura.toLowerCase()] ?? null,
+  heikatsu: byName[PORTRAIT_FILES.heikatsu.toLowerCase()] ?? null,
   kakusei: byName[PORTRAIT_FILES.kakusei.toLowerCase()] ?? null,
 };
 

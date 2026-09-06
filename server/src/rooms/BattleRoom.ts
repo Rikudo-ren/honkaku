@@ -4,7 +4,7 @@ import { InputRelay } from "./InputRelay";
 /** 合言葉コードに使う文字（紛らわしい 0/O/1/I は除外） */
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const STAGES = ["classroom", "lake", "sakura", "hawaii"] as const;
-const CHAR_IDS = ["mie", "ryoma", "naito", "mitsumine", "terachi", "rei", "sakura", "kakusei"] as const;
+const CHAR_IDS = ["mie", "ryoma", "naito", "mitsumine", "terachi", "rei", "sakura", "heikatsu", "kakusei"] as const;
 const DIFFICULTIES = ["easy", "normal", "hard", "extreme"] as const;
 
 /** チーム戦ルームの上限（人間＋AIの合計ファイター数） */
@@ -79,6 +79,7 @@ function calcInputDelay(humanCount: number): number {
  *  - "ai-add" (ai)      [ホスト専用] AI追加 {team,char,difficulty}
  *  - "ai-set" ({index,..}) [ホスト専用] AI設定変更
  *  - "ai-del" (index)   [ホスト専用] AI削除
+ *  - "ban"    (CharId[]) [ホスト専用] 使用禁止キャラの一括設定（チーム戦ルームのみ・複数指定可）
  *  - "start-game"       [ホスト専用] 試合開始（チーム戦ルーム）
  *  - "i"      [matchId,f,s,mask] 入力リレー
  *  - "h"      [matchId,f,hash]   同期チェック用ハッシュ
@@ -90,6 +91,8 @@ export class BattleRoom extends Room {
 
   private players = new Map<string, PlayerInfo>();
   private aiSlots: AiSlot[] = [];
+  /** [チーム戦ルーム] ホストが使用禁止にしたキャラクター（複数指定可） */
+  private banned: string[] = [];
   private isPrivate = false;
   private teamMode = false;
   private started = false;
@@ -134,6 +137,7 @@ export class BattleRoom extends Room {
       const p = this.players.get(client.sessionId);
       if (!p || this.started) return;
       if (!CHAR_IDS.includes(id as (typeof CHAR_IDS)[number])) return;
+      if (this.banned.includes(id)) return; // 使用禁止中は選択不可
       if (p.ready) return; // ready 後は変更不可
       p.char = id;
       this.broadcastLobby();
@@ -167,6 +171,7 @@ export class BattleRoom extends Room {
       if (this.players.size + this.aiSlots.length >= MAX_FIGHTERS) return;
       const team = data?.team === 1 ? 1 : 0;
       const char = CHAR_IDS.includes(data?.char as (typeof CHAR_IDS)[number]) ? data.char : "mie";
+      if (this.banned.includes(char)) return; // 使用禁止中はAIにも出せない
       const difficulty = DIFFICULTIES.includes(data?.difficulty as (typeof DIFFICULTIES)[number]) ? data.difficulty : "normal";
       this.aiSlots.push({ team, char, difficulty });
       this.broadcastLobby();
@@ -179,7 +184,7 @@ export class BattleRoom extends Room {
       const slot = this.aiSlots[data?.index];
       if (!slot) return;
       if (data.team === 0 || data.team === 1) slot.team = data.team;
-      if (data.char && CHAR_IDS.includes(data.char as (typeof CHAR_IDS)[number])) slot.char = data.char;
+      if (data.char && CHAR_IDS.includes(data.char as (typeof CHAR_IDS)[number]) && !this.banned.includes(data.char)) slot.char = data.char;
       if (data.difficulty && DIFFICULTIES.includes(data.difficulty as (typeof DIFFICULTIES)[number])) slot.difficulty = data.difficulty;
       this.broadcastLobby();
     });
@@ -190,6 +195,26 @@ export class BattleRoom extends Room {
       if (!me?.host) return;
       if (typeof index !== "number" || index < 0 || index >= this.aiSlots.length) return;
       this.aiSlots.splice(index, 1);
+      this.broadcastLobby();
+    });
+
+    // ── [ホスト専用] 使用禁止キャラの一括設定（チーム戦ルームのみ）──
+    // data: CharId[]（不正な値は落とす）。BAN中のキャラは試合開始できず、選択もサーバー側で拒否される。
+    this.onMessage("ban", (client, rawIds: unknown) => {
+      if (!this.teamMode || this.started) return;
+      const me = this.players.get(client.sessionId);
+      if (!me?.host) return;
+      if (!Array.isArray(rawIds)) return;
+      const next = [...new Set(rawIds.filter((id): id is string => typeof id === "string" && CHAR_IDS.includes(id as (typeof CHAR_IDS)[number])))];
+      this.banned = next;
+      // BANされたキャラを選択中の人は選択をクリア（ready も解除）
+      for (const p of this.players.values()) {
+        if (p.char && this.banned.includes(p.char)) {
+          p.char = null;
+          p.ready = false;
+        }
+      }
+      this.aiSlots = this.aiSlots.filter((a) => !this.banned.includes(a.char));
       this.broadcastLobby();
     });
 
@@ -296,6 +321,7 @@ export class BattleRoom extends Room {
       maxHumans: this.teamMode ? MAX_HUMANS : 2,
       players: [...this.players.entries()].map(([id, p]) => ({ id, team: p.team, char: p.char, ready: p.ready, host: p.host, name: p.name })),
       ai: this.aiSlots.map((a) => ({ team: a.team, char: a.char, difficulty: a.difficulty })),
+      banned: this.banned,
     });
   }
 
@@ -339,6 +365,9 @@ export class BattleRoom extends Room {
       if (!p.char) return;
       if (!p.host && !p.ready) return;
     }
+    // 使用禁止（BAN）キャラが混ざっていたら開始できない
+    if (humans.some(([, p]) => p.char && this.banned.includes(p.char))) return;
+    if (this.aiSlots.some((a) => this.banned.includes(a.char))) return;
     // 両チームに1人以上
     const teams = new Set<number>();
     for (const [, p] of humans) teams.add(p.team);

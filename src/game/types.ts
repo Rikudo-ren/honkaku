@@ -1,4 +1,4 @@
-export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura' | 'kakusei';
+export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura' | 'heikatsu' | 'kakusei';
 export type Side = 0 | 1;
 /** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
 export type Team = 0 | 1;
@@ -79,7 +79,7 @@ export interface Look {
   gender: 'm' | 'f';
   outfit: 'blazer' | 'vest' | 'suit' | 'kensetsu';
   accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map' | 'loveNote';
-  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'hammer' | 'none';
+  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'hammer' | 'map' | 'none';
   winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug';
   /** 男子ネクタイの色（未指定なら理数科のえんじ）。内進は紺。 */
   tieColor?: string;
@@ -111,7 +111,8 @@ export type ProjKind =
   | 'kuraishi'
   | 'qed'
   | 'koi'
-  | 'shock';
+  | 'shock'
+  | 'chisen';
 
 export interface ProjectileSpec {
   kind: ProjKind;

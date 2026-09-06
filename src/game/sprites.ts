@@ -646,6 +646,16 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(hx + 4, hy - 9, 2, 7, '#3a3f46');
         R(hx - 4, hy - 8, 3, 2, '#e8ecf0');
         break;
+      case 'map':
+        // 地形図（折りたたんで持ち、広げて払う）。紙と等高線
+        R(hx - 2, hy - 8, 8, 10, '#e6dcc0');
+        R(hx - 2, hy - 8, 8, 1, '#c9bd98');
+        R(hx - 2, hy - 8, 1, 10, '#c9bd98');
+        R(hx + 2, hy - 8, 1, 10, '#c9bd98');
+        R(hx - 1, hy - 5, 6, 1, '#7a9a6a');
+        R(hx - 1, hy - 2, 6, 1, '#7a9a6a');
+        R(hx + 1, hy - 5, 1, 2, '#5a7a4a');
+        break;
     }
   };
 

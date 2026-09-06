@@ -90,6 +90,10 @@ export default function OnlineLobby({ hiddenUnlocked = {}, onStart, onBack }: Pr
 
   const pickChara = (id: CharId) => {
     if (ready) return;
+    if (lobby?.banned?.includes(id)) {
+      audio.sfx('back');
+      return;
+    }
     setSel(id);
     net.setChara(id);
     audio.sfx('move');
@@ -366,16 +370,28 @@ function TeamLobbyView({
   const isHost = lobby.players.find((p) => p.id === myId)?.host ?? false;
   const total = lobby.players.length + lobby.ai.length;
   const full = total >= MAX_FIGHTERS;
+  const banned = (lobby.banned ?? []) as CharId[];
+  const isBanned = (id: CharId) => banned.includes(id);
 
   const teamOf = (t: Team) => ({
     humans: lobby.players.filter((p) => p.team === t),
     ai: lobby.ai.map((a, i) => ({ ...a, index: i })).filter((a) => a.team === t),
   });
 
+  /** BAN解除のトグル（ホスト専用・複数指定可）。サーバーが選択中の人を解除して返してくる。 */
+  const toggleBan = (id: CharId) => {
+    const next = isBanned(id) ? banned.filter((b) => b !== id) : [...banned, id];
+    net.setBanned(next);
+    audio.sfx(isBanned(id) ? 'back' : 'confirm');
+  };
+
+  const hasBannedPick = lobby.players.some((p) => p.char && isBanned(p.char)) || lobby.ai.some((a) => isBanned(a.char));
+
   const canStart = (() => {
     if (!isHost) return false;
     if (total < 2) return false;
     if (!lobby.players.every((p) => p.char)) return false;
+    if (hasBannedPick) return false;
     if (!lobby.players.filter((p) => !p.host).every((p) => p.ready)) return false;
     const teams = new Set<number>();
     lobby.players.forEach((p) => teams.add(p.team));
@@ -386,6 +402,7 @@ function TeamLobbyView({
   const startHint = (() => {
     if (total < 2) return '対戦には合計2人以上が必要です（AI追加可）';
     if (!lobby.players.every((p) => p.char)) return 'キャラ未選択のプレイヤーがいます';
+    if (hasBannedPick) return '使用禁止（BAN）キャラが混ざっています。選択を変えてください';
     const notReady = lobby.players.filter((p) => !p.host && !p.ready).length;
     if (notReady > 0) return `あと${notReady}人の準備待ち…`;
     const teams = new Set<number>();
@@ -397,7 +414,9 @@ function TeamLobbyView({
 
   const addAi = (team: Team) => {
     if (full) return;
-    const ai: LobbyAi = { team, char: roster[Math.floor(Math.random() * roster.length)], difficulty: 'normal' };
+    const usable = roster.filter((id) => !isBanned(id));
+    if (!usable.length) return;
+    const ai: LobbyAi = { team, char: usable[Math.floor(Math.random() * usable.length)], difficulty: 'normal' };
     net.addAi(ai);
     audio.sfx('confirm');
   };
@@ -442,21 +461,66 @@ function TeamLobbyView({
           {isHost && <div className="text-[10px] text-slate-500">ホストは準備ボタン不要（開始ボタンで開戦）</div>}
         </div>
         <div className={`mt-2 grid gap-1 ${roster.length > 6 ? 'grid-cols-7' : 'grid-cols-6'}`}>
-          {roster.map((id) => (
-            <button
-              key={id}
-              onClick={() => pickChara(id)}
-              disabled={ready}
-              title={CHARS[id].name}
-              className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${sel === id ? 'scale-105 border-amber-300' : 'border-slate-600 opacity-70 hover:opacity-100'} disabled:cursor-not-allowed`}
-              style={{ background: `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
-            >
-              <Portrait id={id} alt={CHARS[id].name} className="h-full w-full object-contain object-bottom" />
-            </button>
-          ))}
+          {roster.map((id) => {
+            const b = isBanned(id);
+            return (
+              <button
+                key={id}
+                onClick={() => pickChara(id)}
+                disabled={ready || b}
+                title={b ? `${CHARS[id].name}（使用禁止）` : CHARS[id].name}
+                className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${sel === id ? 'scale-105 border-amber-300' : b ? 'border-rose-500 opacity-40' : 'border-slate-600 opacity-70 hover:opacity-100'} disabled:cursor-not-allowed`}
+                style={{ background: `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
+              >
+                <Portrait id={id} alt={CHARS[id].name} className={`h-full w-full object-contain object-bottom ${b ? 'grayscale' : ''}`} />
+                {b && (
+                  <div className="absolute inset-x-0 top-0 bg-rose-500 py-0.5 text-center text-[10px] font-bold text-slate-950">BAN</div>
+                )}
+              </button>
+            );
+          })}
         </div>
         {isHost && (
           <div className="mt-1 px-1 text-[10px] text-slate-500">※ホストのキャラは選択した時点で確定（部屋にいる全員に見えています）</div>
+        )}
+      </div>
+
+      {/* 使用禁止キャラ（BAN）…ホスト専用・複数指定可 */}
+      <div className="mx-auto mt-3 w-full max-w-2xl border-2 border-slate-700 bg-slate-950/80 p-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="text-xs text-rose-300">
+            使用禁止キャラ（BAN）
+            {banned.length > 0 && <span className="ml-1 text-slate-400">：{banned.map((id) => CHARS[id]?.name ?? id).join('、')}</span>}
+          </div>
+          {!isHost && <div className="text-[10px] text-slate-500">ホストが設定</div>}
+        </div>
+        {isHost ? (
+          <>
+            <div className="mt-2 grid grid-cols-7 gap-1">
+              {roster.map((id) => {
+                const b = isBanned(id);
+                return (
+                  <button
+                    key={id}
+                    onClick={() => toggleBan(id)}
+                    title={`${CHARS[id].name}${b ? '（BAN解除）' : '（BANする）'}`}
+                    className={`relative aspect-[3/4] overflow-hidden border-2 transition-transform ${b ? 'border-rose-500 opacity-60' : 'border-slate-600 opacity-80 hover:opacity-100'}`}
+                    style={{ background: `linear-gradient(160deg,#fff, ${CHARS[id].light})` }}
+                  >
+                    <Portrait id={id} alt={CHARS[id].name} className={`h-full w-full object-contain object-bottom ${b ? 'grayscale' : ''}`} />
+                    {b && <div className="absolute inset-x-0 top-0 bg-rose-500 py-0.5 text-center text-[10px] font-bold text-slate-950">BAN</div>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-1 px-1 text-[10px] text-slate-500">
+              BANしたキャラは全員（CPUも）選べなくなります。選択中の人がいた場合は自動で解除されます。
+            </div>
+          </>
+        ) : (
+          <div className="mt-1 px-1 text-[10px] text-slate-500">
+            {banned.length === 0 ? 'BANキャラはいません' : 'この試合では上記のキャラを使用できません。'}
+          </div>
         )}
       </div>
 
@@ -483,16 +547,18 @@ function TeamLobbyView({
               <div className="mt-2 flex flex-col gap-1.5">
                 {humans.map((p) => {
                   const isMe = p.id === myId;
+                  const pBan = !!p.char && isBanned(p.char);
                   return (
                     <div key={p.id} className="flex items-center gap-2 border border-slate-700 bg-black/50 p-1">
                       <div className="h-10 w-8 shrink-0 overflow-hidden border border-slate-600" style={{ background: p.char ? `linear-gradient(160deg,#fff, ${CHARS[p.char].light})` : '#111' }}>
-                        {p.char && <Portrait id={p.char} alt="" className="h-full w-full object-contain object-bottom" />}
+                        {p.char && <Portrait id={p.char} alt="" className={`h-full w-full object-contain object-bottom ${pBan ? 'grayscale' : ''}`} />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs text-amber-100">
                           {p.name || DEFAULT_NAME}
                           {p.host && <span className="ml-1 text-amber-300">👑</span>}
                           {isMe && <span className="ml-1 text-sky-300">（あなた）</span>}
+                          {pBan && <span className="ml-1 bg-rose-500 px-1 text-[9px] font-bold text-slate-950">BAN</span>}
                         </div>
                         <div className="truncate text-[10px]" style={{ color: p.char ? CHARS[p.char].color : '#64748b' }}>
                           {p.char ? CHARS[p.char].name : '選択中…'} ／ {p.ready || p.host ? (p.host ? 'ホスト' : '準備OK ✝') : '準備中…'}
@@ -513,14 +579,17 @@ function TeamLobbyView({
                     </div>
                   );
                 })}
-                {ai.map((a) => (
+                {ai.map((a) => {
+                  const aBan = isBanned(a.char);
+                  return (
                   <div key={`ai-${a.index}`} className="flex items-center gap-2 border border-dashed border-slate-600 bg-black/30 p-1">
                     <div className="h-10 w-8 shrink-0 overflow-hidden border border-slate-600" style={{ background: `linear-gradient(160deg,#fff, ${CHARS[a.char].light})` }}>
-                      <Portrait id={a.char} alt="" className="h-full w-full object-contain object-bottom" />
+                      <Portrait id={a.char} alt="" className={`h-full w-full object-contain object-bottom ${aBan ? 'grayscale' : ''}`} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs text-slate-200">
                         {CHARS[a.char].name} <span className="text-slate-500">🤖CPU</span>
+                        {aBan && <span className="ml-1 bg-rose-500 px-1 text-[9px] font-bold text-slate-950">BAN</span>}
                       </div>
                       <div className="text-[10px] text-slate-500">
                         強さ：<span className={a.difficulty === 'extreme' ? 'text-fuchsia-300' : a.difficulty === 'hard' ? 'text-rose-300' : 'text-amber-200'}>{DIFFICULTY_SHORT[a.difficulty]}</span>
@@ -530,8 +599,10 @@ function TeamLobbyView({
                       <div className="flex shrink-0 items-center gap-1">
                         <button
                           onClick={() => {
-                            const i = roster.indexOf(a.char);
-                            net.updateAi(a.index, { char: roster[(i + 1) % roster.length] });
+                            const usable = roster.filter((id) => !isBanned(id));
+                            if (!usable.length) return;
+                            const i = usable.indexOf(a.char);
+                            net.updateAi(a.index, { char: usable[(i + 1) % usable.length] });
                             audio.sfx('move');
                           }}
                           title="キャラ変更"
@@ -573,7 +644,8 @@ function TeamLobbyView({
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
                 {humans.length + ai.length === 0 && <div className="p-2 text-center text-xs text-slate-600">── 空き ──</div>}
               </div>
             </div>
