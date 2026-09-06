@@ -24,17 +24,22 @@ const run = (opts: Partial<BattleOpts>, frames: number, inputs?: (t: number, b: 
   return b;
 };
 
-test('隠しキャラ①櫻優・②覚醒三重：通常ロスターには出ず、解禁すると末尾に追加される', () => {
+test('隠しキャラ①櫻優・②塀勝也・③覚醒三重：通常ロスターには出ず、解禁すると末尾に追加される', () => {
   assert.ok(!CHAR_ORDER.includes('sakura'));
+  assert.ok(!CHAR_ORDER.includes('heikatsu'));
   assert.ok(!CHAR_ORDER.includes('kakusei'));
-  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'kakusei']);
+  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'heikatsu', 'kakusei']);
   assert.deepEqual(rosterFor({}), CHAR_ORDER);
   assert.deepEqual(rosterFor({ sakura: true }), [...CHAR_ORDER, 'sakura']);
-  assert.deepEqual(rosterFor({ kakusei: true }), [...CHAR_ORDER, 'kakusei']);
-  assert.deepEqual(rosterFor({ sakura: true, kakusei: true }), [...CHAR_ORDER, 'sakura', 'kakusei']);
+  assert.deepEqual(rosterFor({ heikatsu: true }), [...CHAR_ORDER, 'heikatsu']);
+  assert.deepEqual(rosterFor({ sakura: true, heikatsu: true, kakusei: true }), [...CHAR_ORDER, 'sakura', 'heikatsu', 'kakusei']);
   assert.deepEqual(ALL_CHARS, [...CHAR_ORDER, ...HIDDEN_CHARS]);
   assert.equal(CHARS.sakura.hidden, true);
   assert.equal(CHARS.sakura.look.tieColor, '#2f4f8f', '内進コースなのでネクタイは紺');
+  assert.equal(CHARS.heikatsu.hidden, true);
+  assert.equal(CHARS.heikatsu.look.outfit, 'suit', '塀勝也はスーツの地理教師');
+  assert.equal(CHARS.heikatsu.look.accessory, 'map', '地形図は脇に抱える');
+  assert.equal(CHARS.heikatsu.look.weapon, 'none', '地図は武器にしない（本で殴る他キャラとの差別化）');
   assert.equal(CHARS.kakusei.hidden, true);
   assert.equal(CHARS.kakusei.look.outfit, 'kensetsu', '覚醒三重は土木作業員の恰好');
   assert.equal(CHARS.kakusei.look.weapon, 'hammer', '大ハンマーを持つ');

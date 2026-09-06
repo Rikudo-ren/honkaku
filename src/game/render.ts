@@ -108,14 +108,14 @@ export class Renderer {
     this.drawStage(b.stage, b.t);
 
     // ground props (items) behind fighters
-    for (const p of b.projectiles) if (p.item || p.kind === 'vending') this.drawProjectile(p, b.t);
+    for (const p of b.projectiles) if (p.item || p.kind === 'vending' || p.kind === 'chisen') this.drawProjectile(p, b.t);
 
     // fighters: draw the "active" ones last
     const isActive = (f: Fighter) => f.state === 'attack' || f.state === 'super' || f.state === 'launch';
     const order = [...b.f].sort((p, q) => Number(isActive(p)) - Number(isActive(q)));
     for (const f of order) this.drawFighter(f, b);
 
-    for (const p of b.projectiles) if (!p.item && p.kind !== 'vending') this.drawProjectile(p, b.t);
+    for (const p of b.projectiles) if (!p.item && p.kind !== 'vending' && p.kind !== 'chisen') this.drawProjectile(p, b.t);
     for (const e of b.fx) this.drawFx(e, b.t);
 
     if (b.darkness > 0) this.drawDarkness(b);
@@ -322,6 +322,47 @@ export class Renderer {
         }
         break;
       }
+      case 'chisen': {
+        // 塀勝也の「防災マップ」：地面に広がる予報図。発災ゲージが溜まるほど警告色が濃くなる。
+        const d = Math.floor(t / 4) % 2 === 0 ? 0 : 1;
+        const px = Math.round(p.x);
+        const py = Math.round(p.y);
+        // 発災ゲージ（0〜1）
+        const charge = Math.min(1, (p.charge ?? 0) / 60);
+        const warn = charge * charge;
+        const bl = 220 - warn * 140; // 赤が濃くなる
+        // 紙面（うっすらしたベージュ→発災前に警告の赤み）
+        g.fillStyle = `rgba(${bl},${Math.round(215 - warn * 120)},${Math.round(192 - warn * 140)},${0.3 + warn * 0.25})`;
+        g.fillRect(px - p.w / 2, py - 3, p.w, 7);
+        g.fillStyle = 'rgba(180,170,130,0.55)';
+        g.fillRect(px - p.w / 2, py - 3, p.w, 1);
+        g.fillRect(px - p.w / 2, py + 3, p.w, 1);
+        // 等高線（楕円の輪郭）＊縮小して地面に描く。発災が近いと震える
+        const shk = warn > 0.5 && d ? 1 : 0;
+        for (let i = 0; i < 3; i++) {
+          pixEllipseOutline(g, px - 8 + i * 8 + shk, py + 1, 5 + i * 2, 2, `rgba(${Math.round(120 + warn * 100)},${Math.round(150 - warn * 90)},${Math.round(90 - warn * 40)},${0.6 + warn * 0.3})`);
+        }
+        // 川・集落の記号
+        g.fillStyle = 'rgba(90,130,180,0.55)';
+        g.fillRect(px + 10, py, 8, 1);
+        g.fillStyle = 'rgba(150,110,70,0.5)';
+        g.fillRect(px - 14, py + 1, 2, 1);
+        g.fillRect(px - 11, py - 1, 2, 1);
+        // 発災ゲージのバー
+        g.fillStyle = 'rgba(20,16,8,0.6)';
+        g.fillRect(px - 6, GROUND - 12, 12, 2);
+        g.fillStyle = charge >= 1 ? '#ff4d3d' : d ? '#fbbf24' : '#e9a23b';
+        g.fillRect(px - 5 + (charge >= 1 ? (d ? 1 : 0) : 0), GROUND - 12, Math.round(10 * charge), 2);
+        // 中央の測量点（発災が近いと点滅して赤くなる）
+        if (warn < 0.8 || d) {
+          g.fillStyle = warn > 0.5 ? '#ff4d3d' : d ? '#c0392b' : '#e74c3c';
+          g.fillRect(px - 1, py - 1, 2, 2);
+        } else {
+          g.fillStyle = '#ffb199';
+          g.fillRect(px - 2, py - 2, 4, 4);
+        }
+        break;
+      }
       case 'shock': {
         // 覚醒三重の「地面震撃」：地面を走る亀裂と砕けた瓦礫
         const d = p.vx >= 0 ? 1 : -1;
@@ -415,6 +456,45 @@ export class Renderer {
       case 'afterimage':
         if (e.look && e.pose && e.facing) drawFighter(g, e.x, e.y, e.look, { pose: e.pose, facing: e.facing, t, alpha: 0.35 * k });
         break;
+      case 'soil':
+        // 土砂の粒（重力で落ちる）
+        g.globalAlpha = k;
+        g.fillStyle = e.color;
+        g.fillRect(x, y, e.size, e.size);
+        g.globalAlpha = 1;
+        break;
+      case 'geyser': {
+        // 地面から噴き上がる土の柱：伸びたあと細くなって消える
+        const prog = e.t / e.life;
+        const h = Math.round(e.size * Math.min(1, prog * 2.2));
+        const w = Math.max(1, Math.round(5 * (1 - prog)));
+        g.globalAlpha = Math.max(0, k * 1.4);
+        g.fillStyle = '#8a6c46';
+        g.fillRect(x - w, GROUND - h, w * 2 + 1, h + 1);
+        g.fillStyle = '#b09264';
+        g.fillRect(x - w + 1, GROUND - h, Math.max(1, w - 1), h + 1);
+        // 先端の飛沫
+        if (e.t % 3 < 2) {
+          g.fillStyle = '#a3b18a';
+          g.fillRect(x + (e.t % 5 === 0 ? 3 : -3), GROUND - h - 2, 1, 2);
+        }
+        g.globalAlpha = 1;
+        break;
+      }
+      case 'crack': {
+        // 地面のヒビ：中心から左右にギザギザが走り、じわじわ薄くなる
+        const prog = e.t / e.life;
+        const d = Math.round((e.size / 2) * Math.min(1, prog * 3));
+        g.globalAlpha = Math.max(0, k);
+        g.fillStyle = '#4a3a26';
+        for (let i = 0; i < d; i += 3) {
+          const jx = i % 6 === 0 ? 1 : i % 6 === 3 ? -1 : 0;
+          g.fillRect(x - d + i + jx, e.y + (i % 4 === 0 ? 1 : 0), 4, 1);
+          g.fillRect(x + d - i - 3 - jx, e.y + (i % 4 === 0 ? 1 : 0), 4, 1);
+        }
+        g.globalAlpha = 1;
+        break;
+      }
     }
   }
 

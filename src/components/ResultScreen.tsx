@@ -90,7 +90,9 @@ export default function ResultScreen({ setup, result, onRematch, onSelect, onTit
               ? `${wd.name}が少し笑った。それだけで${ld.name}の理論が崩壊した。`
               : wd.id === 'sakura'
                 ? `紺のネクタイの恋愛学者が${ld.name}を観測して勝った。本人談「研究です」。ノートには✝本質✝と書いてあった。`
-                : wd.id === 'kakusei'
+                : wd.id === 'heikatsu'
+                  ? `地理教師・塀先生が${ld.name}の足元を防災マップに記録して発災させた。本人談「同じ地図でも、見え方が変わったな」。`
+                  : wd.id === 'kakusei'
                   ? `元・否定の守護者が${ld.name}を解体した。本人談「通夜は終わった」。現場は、まだ終わらないらしい。`
                   : `${wd.name}「理論はいい！！」で${ld.name}が沈黙。波動関数、崩壊。`;
 

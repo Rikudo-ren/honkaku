@@ -12,7 +12,7 @@ export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'tera
 // ═══════════════════════════════════════════════════════════════════════
 
 /** 隠しキャラクター（解禁で選択可能になる）。並び順＝解禁後にロスター末尾へ付く順番 */
-export const HIDDEN_CHARS: CharId[] = ['sakura', 'kakusei'];
+export const HIDDEN_CHARS: CharId[] = ['sakura', 'heikatsu', 'kakusei'];
 /** 隠しキャラ込みの全ロスター */
 export const ALL_CHARS: CharId[] = [...CHAR_ORDER, ...HIDDEN_CHARS];
 
@@ -92,6 +92,23 @@ export const HIDDEN_META: HiddenMeta[] = [
     bannerTitle: '紺のネクタイが、もう一人来た。',
     bannerText: '微笑む観測者を最高偏差値で観測した ── タイトルに戻ると報告があります',
     isUnlock: (setup, winner) => winner === 0 && setup.mode === '1p' && setup.difficulty === 'extreme' && setup.p2 === 'naito' && !setup.teamMode,
+  },
+  {
+    id: 'heikatsu',
+    key: 'honkaku_heikatsu_unlocked',
+    accent: '#a3b18a',
+    title: '？？？',
+    sub: '窓の外を見る、大人がもう一人。',
+    hint: 'ヒント：同じ地図を、自分自身と見よ。',
+    condition: '1P対CPU・自分と同じキャラクター（自己鏡像）で偏差値100に勝利すると解禁',
+    stripe: '#5f6f4a',
+    quote: '「──同じ地図だ。見る側が変わると、同じ地図が違う地図になる」',
+    byline: '── 自分の地図を自分自身で見た者の前に、地形図の向こう側が見える地理教師が現れた。',
+    kit: '弱「等高線」は指先の一筆、強「地図を上から描く」は足元が隆起する跳ね上げ。必殺「防災マップ」は相手の現在地に時限の予報図を広げ、約1秒後に必ず発災（図の上では動きを読まれてフューズ倍速）。超必殺「地面は忘れない」は前震のあと全画面で発災。空中にいる相手は無傷。',
+    bannerTitle: '同じ地図に、自分自身がいた。',
+    bannerText: '自分自身との鏡像に勝った ── タイトルに戻ると、窓の外に先生がいます',
+    isUnlock: (setup, winner) =>
+      winner === 0 && setup.mode === '1p' && setup.difficulty === 'extreme' && !setup.teamMode && setup.p1 === setup.p2,
   },
   {
     id: 'kakusei',
@@ -767,6 +784,109 @@ export const CHARS: Record<CharId, CharDef> = {
     stats: { power: 2, speed: 3, honshitsu: 4, joushiki: 2 },
     desc: '内進コース二年。紺のネクタイで北棟に通う恋愛学の研究者。彼女はいません。いたこともありません。ノートは✝本質✝だらけになり、理論は崩壊中（実存的）。被弾・ガードで研究データnが溜まる。',
   },
+  heikatsu: {
+    id: 'heikatsu',
+    hidden: true,
+    name: '塀勝也',
+    kana: 'へい・かつや',
+    title: '地形図の向こう側が見える地理教師',
+    affiliation: '地理科（理数科B組・担当）',
+    tie: 'こげ茶',
+    tieColor: '#33324a',
+    color: '#a3b18a',
+    light: '#e9edd9',
+    hp: 105,
+    speed: 1.45,
+    jump: 6.1,
+    dmgMul: 1,
+    look: {
+      hair: 'adult',
+      hairColor: '#4d4038',
+      hairDark: '#332a24',
+      skin: '#e8c8a8',
+      eyeColor: '#2a2a2a',
+      glasses: true,
+      gender: 'm',
+      outfit: 'suit',
+      accessory: 'map',
+      weapon: 'none',
+      winPose: 'cool',
+      tieColor: '#33324a',
+    },
+    moves: {
+      light: {
+        key: 'light',
+        name: '等高線',
+        desc: '指先で地面をなぞる一筆。武器は持たない────塀の武器は、地面そのもの。',
+        callout: ['等高線', 'ここは急斜面だ', '間隔が狭い'],
+        startup: 4,
+        active: 4,
+        recovery: 8,
+        dmg: 5,
+        hitstun: 14,
+        kbx: 1.6,
+        kby: 0,
+        box: JAB_BOX,
+        kind: 'melee',
+        pose: 'point',
+        sfx: 'hit',
+      },
+      heavy: {
+        key: 'heavy',
+        name: '地図を上から描く',
+        desc: '目の前の地面が隆起する。上から描くのが塀の流儀──地面が先に動く。跳ね上げてダウンを奪う。',
+        callout: ['上から描く', 'まず、今の地面だ', '持ち上がるぞ'],
+        startup: 12,
+        active: 6,
+        recovery: 17,
+        dmg: 13,
+        hitstun: 24,
+        kbx: 2.2,
+        kby: 5.5,
+        knockdown: true,
+        box: { x: 3, y: -34, w: 20, h: 20 },
+        moveX: 1.5,
+        kind: 'melee',
+        pose: 'pointUp',
+        sfx: 'heavy',
+      },
+      special: {
+        key: 'special',
+        name: '防災マップ',
+        desc: '相手の今いる場所に時限の予報図を広げる。図の上に立つと動きを読まれて鈍り、フューズも倍速になる。置いてから約1秒後に必ず「発災」────地面が隆起して、その場にいる相手を吹き飛ばす。',
+        callout: ['ここは、浸水する', '防災マップは、「なぜ」を描く', '予報は、あと1秒だ'],
+        startup: 14,
+        active: 6,
+        recovery: 18,
+        dmg: 16,
+        hitstun: 26,
+        kbx: 1.2,
+        kby: 6,
+        knockdown: true,
+        kind: 'projectile',
+        pose: 'point',
+        sfx: 'special',
+        cooldown: 30,
+        projectile: { kind: 'chisen', vx: 0, life: 90, ground: true, w: 46, h: 8 },
+      },
+    },
+    superName: '地面は忘れない',
+    superQuote: '地面は、全部を記録してる。──その上に、立て。',
+    superDesc:
+      '前震のあと、画面全体で地面が発災する。地面に立っている相手は逃げ場がなく、記録ごと持ち上げられて吹き飛ぶ。だが、空中にいる相手は「まだ地図に載っていない」──無傷。地面を走る飛び道具も呑み込まれる。',
+    intro: '──今日は、同じ地図だ。',
+    wins: [
+      '同じ地図でも、見え方が変わったな',
+      '地面は忘れない。地図は、人間が作るものだから',
+      'お前の等高線の向こうに、人が見えた',
+      '……窓の外は、今日も静かだ',
+      '今がわかってると、過去が見えやすい',
+    ],
+    blockText: '……うーん',
+    koText: '授業終了',
+    stats: { power: 3, speed: 3, honshitsu: 4, joushiki: 5 },
+    desc: '地理教師・塀勝也。黒板は上から描く。今の地表から過去に向かって掘り下げる。窓の外を見る癖があり、その目には地形図の「向こう側」──時間と、等高線の向こうに住む人間が見えている。何も知らないまま、地理を教えている。彼は地図で殴らない。彼が殴るのは、地面ごとだ。',
+  },
   kakusei: {
     id: 'kakusei',
     hidden: true,
@@ -888,14 +1008,16 @@ export const EXTRA_LOOKS: Record<'kuraishi' | 'heikatsu', Look> = {
   },
   heikatsu: {
     hair: 'adult',
-    hairColor: '#5a5048',
-    hairDark: '#8a8078',
+    hairColor: '#4d4038',
+    hairDark: '#332a24',
     eyeColor: '#2a2a2a',
+    glasses: true,
     gender: 'm',
     outfit: 'suit',
     accessory: 'map',
     weapon: 'none',
     skin: '#e8c8a8',
+    tieColor: '#33324a',
   },
 };
 
@@ -1010,6 +1132,61 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
     { first: 'rei', a: 'それ、データあるの？', b: '文献調査です。自分のデータはないので' },
   ],
 
+  // ───── 塀勝也（ヘイカツ：隠しキャラ③／地理教師）との掛け合い ─────
+  // 生徒は先生に敬語。ヘイカツは「お前ら」と友達言葉。掛け合いの素材は motoneta1.md のみ
+  // （覚醒三重との掛け合いだけ、motoneta2.md の「治水工事」「人命救助」「防波堤」を使う）。
+  'heikatsu|mie': [
+    { first: 'mie', a: '先生。今日は、何の話ですか', b: '同じ地図だ。一学期に見たのと同じ' },
+    { first: 'mie', a: '先生。上から描くのは、どうしてなんですか', b: '今がわかってると、過去が見えやすい' },
+    { first: 'heikatsu', a: 'お前、最近まともに前を向いてるな', b: '……先生の授業は、普通に聞いてます' },
+    { first: 'heikatsu', a: 'お前の〈は？〉は、この教室の治水工事だな', b: '……褒めてるんですか、それ' },
+    { first: 'mie', a: '先生、窓の外に何が見えるんですか', b: '……地形図の、向こう側だ' },
+  ],
+  'heikatsu|ryoma': [
+    { first: 'ryoma', a: '先生！！ あの味噌の話、まじ✝本質✝でした！！', b: '✝本質✝って、なんだ' },
+    { first: 'heikatsu', a: 'お前、俺をネットに書くな', b: '書き込んでません！ 書かれてるだけです！' },
+    { first: 'ryoma', a: '先生。地図に感動できる大人、最高です', b: '……お前の口から出ると、褒められてない気がするな' },
+    { first: 'heikatsu', a: 'お前のその言葉、どっから来るんだ', b: '先生の授業です！ 等高線の向こうに人が見えるって、先生が——', note: '（本質配信 #4）' },
+  ],
+  'heikatsu|naito': [
+    { first: 'naito', a: '先生。人がそこに住んだ理由、地図からわかるんですか', b: 'わかる。等高線が、教えてくれる' },
+    { first: 'heikatsu', a: '内藤。お前は人を見るのが好きだな', b: 'はい。人が何を考えてるか、知るのが好きです' },
+    { first: 'naito', a: '消しゴム、落ちてます', b: '……ああ、ありがとうな。落ちてるものも、そこに落ちた理由がある' },
+    { first: 'naito', a: '先生も、地図の向こう側を見てるんですか', b: '……たぶんな。見えてるかどうかは、わからん' },
+  ],
+  'heikatsu|mitsumine': [
+    { first: 'mitsumine', a: '先生！ 防災マップって、なんで普通の地図と違うんですか', b: '普通の地図は「今」を描く。防災マップは「なぜ」を描く' },
+    { first: 'mitsumine', a: 'あたしたちのマップは、なぜ危ないかを地面の歴史から説明します', b: '……見方が変わると、同じ地図が違う地図になる。ちゃんと伝わってるな' },
+    { first: 'heikatsu', a: '三峰。お前の作戦ノートは、面白いか', b: '面白いかどうかより、役立つかどうかです！' },
+    { first: 'mitsumine', a: '先生、恋愛も作戦って言いました？', b: '言ってない。だが、川も恋も、低い方へ流れはするな' },
+  ],
+  'heikatsu|terachi': [
+    { first: 'terachi', a: '先生……俺、配信で先生のこと話しました', b: '……お前の配信は、俺が見たことあるぞ' },
+    { first: 'terachi', a: 'え、見てくれたんですか！？ 感想とか……', b: '……よくわからんかった。でも、なんか、あれでいいと思う' },
+    { first: 'heikatsu', a: '寺地。地面は忘れない。地図は、人間が作るものだから', b: 'じゃあ、地形図の向こう側って、地面そのもののことですか' },
+    { first: 'terachi', a: '先生の授業、地理じゃなくて人間学ですよね', b: '……人間が地面の上に住んでるからな' },
+  ],
+  'heikatsu|rei': [
+    { first: 'rei', a: '先生。上から描くの、面白いですね', b: '面白いか。それなら、面白い方で覚えろ' },
+    { first: 'rei', a: '同じ地図なのに、見え方が違うのが、面白いです', b: '……見る側が変わったんだよ。お前がな' },
+    { first: 'heikatsu', a: '数理。お前は地図より先に、考えが進むな', b: '地図より先に進んじゃだめですか' },
+    { first: 'rei', a: '先生の話、面白いので集中して聞いてます', b: '……それは、嬉しいことだな' },
+  ],
+  'heikatsu|sakura': [
+    { first: 'sakura', a: '先生。人間の判断は地形に刻まれる、という説を検証しています', b: '……刻まれる。地図は、過去の人間の選択の集積だ' },
+    { first: 'heikatsu', a: '櫻。お前のノート、何を研究してるんだ', b: '……恋愛学です。先生の授業より、少しだけ要検証です' },
+    { first: 'sakura', a: '先生は、窓の外を見るとき、何を見ているんですか', b: '……時間と、人だ' },
+    { first: 'heikatsu', a: '櫻。同じ地図を二度見たら、どうなる', b: '同じ地図でも、見え方が変わります。入学時と現在で、既に二回変わりました' },
+  ],
+  'heikatsu|kakusei': [
+    // 覚醒三重（＝旧・三重県臣）との掛け合いのみ motoneta2.md の言葉を使う。
+    // 「治水工事」「人命救助」「防波堤がないなら水は低い方へ流れる」。
+    { first: 'heikatsu', a: 'お前は、理数科B組という地形において、立派な治水工事をしてた', b: '……治水工事は、決壊しました。先生' },
+    { first: 'kakusei', a: '先生。氾濫しそうな川に飛び込むバカがいたら、どうしますか', b: '助けに行くに決まってるだろ。治水は事前の備えだが、あとは人命救助だ' },
+    { first: 'heikatsu', a: '防波堤がないなら、水は低い方へ流れるだけだ', b: '……そういう地形を、俺が作ります。もう一度、な' },
+    { first: 'kakusei', a: '先生。地面は、忘れないですか', b: '忘れない。だから、お前の地図もまだ残ってる' },
+  ],
+
   // ───── 覚醒三重（隠しキャラ②）との掛け合い ─────
   // 覚醒三重＝三峰瑠衣の葬儀に、土木現場のハンマーをカバンの底に沈めて出席した三重県臣。
   // 「通夜を終えて現場へ戻る男」ではなく「数理零を殺す覚悟で式場に来た男」。
@@ -1059,6 +1236,7 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
 /** 同キャラ対戦（自己対話）の専用掛け合い。未定義なら「自演じゃなくて自己対話だよ」 */
 export const MIRROR_INTROS: Partial<Record<CharId, { a: string; b: string }>> = {
   sakura: { a: '同一個体を二つ観測した場合、n=2になりますか', b: 'なりません。自己対話はn=1のままです' },
+  heikatsu: { a: '──同じ地図だ。お前は、何が見える', b: '……同じ地図でも、見え方が違う。それでいい' },
   kakusei: { a: '……お前も、葬式か', b: 'ああ。……鉄は、一本しかない' },
 };
 

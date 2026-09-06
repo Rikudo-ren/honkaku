@@ -6,7 +6,7 @@ import { EMPTY_INPUT, MAX_FIGHTERS } from '../src/game/types';
 import type { CharId } from '../src/game/types';
 
 /** 覚醒三重が絡む全ペア（ロスターの他の全員） */
-const OTHERS: CharId[] = ['mie', 'mitsumine', 'naito', 'rei', 'ryoma', 'sakura', 'terachi'];
+const OTHERS: CharId[] = ['mie', 'mitsumine', 'naito', 'rei', 'ryoma', 'sakura', 'terachi', 'heikatsu'];
 
 const run = (p1: CharId, p2: CharId, seed: number) => {
   const b = new Battle({ p1, p2, ai: [true, true], difficulty: 'extreme', stage: 'classroom', seed });

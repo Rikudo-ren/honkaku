@@ -89,6 +89,8 @@ export interface Fighter {
   research: number;
   /** 櫻優：「理論のない状態の恋」バフの残りフレーム */
   loveT: number;
+  /** 塀勝也：地形図に「読まれている」残りフレーム（移動・ジャンプが鈍る） */
+  readT: number;
 }
 
 export interface Projectile {
@@ -119,10 +121,12 @@ export interface Projectile {
   hitMask: number;
   t: number;
   seed: number;
+  /** 塀勝也「防災マップ」：図の上に立っている蓄積フレーム（発災ゲージ） */
+  charge?: number;
 }
 
 export interface PixelFx {
-  kind: 'spark' | 'ring' | 'dust' | 'crossburst' | 'heart' | 'afterimage' | 'sparkle' | 'guard';
+  kind: 'spark' | 'ring' | 'dust' | 'crossburst' | 'heart' | 'afterimage' | 'sparkle' | 'guard' | 'soil' | 'geyser' | 'crack';
   x: number;
   y: number;
   vx: number;
@@ -297,6 +301,7 @@ function makeFighter(idx: number, team: Team, id: CharId, ai: boolean, aiDifficu
     superData: null,
     research: 0,
     loveT: 0,
+    readT: 0,
   };
 }
 
@@ -471,6 +476,46 @@ export class Battle {
     for (let i = 0; i < 5; i++) this.fx.push({ kind: 'dust', x: x + (this.rng() - 0.5) * 10, y: GROUND - 1, vx: (this.rng() - 0.5) * 1.2, vy: -this.rng() * 0.8, t: 0, life: 14, color: '#c9c2b4', size: 1 });
   }
 
+  /** 塀勝也：土砂の粒子（重力で落ちる） */
+  private soilBurst(x: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      this.fx.push({
+        kind: 'soil',
+        x: x + (this.rng() - 0.5) * 24,
+        y: GROUND - this.rng() * 3,
+        vx: (this.rng() - 0.5) * 2.4,
+        vy: -1.5 - this.rng() * 2.5,
+        t: 0,
+        life: 26 + this.rng() * 18,
+        color: this.rng() < 0.5 ? '#9a7b52' : '#7a5f3e',
+        size: this.rng() < 0.3 ? 2 : 1,
+      });
+    }
+  }
+
+  /** 塀勝也：地面から噴き上がる土の柱 */
+  private geyser(x: number, height: number) {
+    this.fx.push({ kind: 'geyser', x, y: GROUND, vx: 0, vy: 0, t: 0, life: 30, color: '#a3b18a', size: height });
+    for (let i = 0; i < 4; i++) {
+      this.fx.push({
+        kind: 'soil',
+        x: x + (this.rng() - 0.5) * 6,
+        y: GROUND - 2,
+        vx: (this.rng() - 0.5) * 1.6,
+        vy: -2 - this.rng() * 3,
+        t: 0,
+        life: 30 + this.rng() * 14,
+        color: i % 2 ? '#b09264' : '#8a6c46',
+        size: i % 2 ? 2 : 1,
+      });
+    }
+  }
+
+  /** 塀勝也：地面に走る亀裂（ヒビ） */
+  private crack(x: number, width: number) {
+    this.fx.push({ kind: 'crack', x, y: GROUND + 1, vx: 0, vy: 0, t: 0, life: 44, color: '#4a3a26', size: width });
+  }
+
   private crossBurst(x: number, y: number, n = 6) {
     for (let i = 0; i < n; i++) this.fx.push({ kind: 'crossburst', x, y, vx: (this.rng() - 0.5) * 3, vy: -1 - this.rng() * 2, t: 0, life: 30, color: '#fde68a', size: 3 });
   }
@@ -566,6 +611,8 @@ export class Battle {
         return 'point';
       case 'sakura':
         return (f.superData as { confessed?: boolean })?.confessed ? 'spread' : 'confess';
+      case 'heikatsu':
+        return 'spread';
       case 'kakusei':
         return 'swing';
     }
@@ -576,9 +623,9 @@ export class Battle {
     return f.def.dmgMul * (f.loveT > 0 ? 1.3 : 1);
   }
 
-  /** 実効移動速度 */
+  /** 実効移動速度（塀勝也の地形図に読まれている間は鈍る） */
   private speedOf(f: Fighter): number {
-    return f.def.speed * (f.loveT > 0 ? 1.25 : 1);
+    return f.def.speed * (f.loveT > 0 ? 1.25 : 1) * (f.readT > 0 ? 0.55 : 1);
   }
 
   /** 櫻優が設置中の「シュレディンガーの好意」 */
@@ -639,6 +686,7 @@ export class Battle {
       f.superData = null;
       f.research = 0;
       f.loveT = 0;
+      f.readT = 0;
       f.look = f.def.look;
       if (f.ai) f.ai = { plan: 'wait', planT: 0, nextDecision: 20, held: null };
     }
@@ -878,7 +926,7 @@ export class Battle {
       e.t++;
       e.x += e.vx;
       e.y += e.vy;
-      if (e.kind === 'dust' || e.kind === 'crossburst') e.vy += 0.08;
+      if (e.kind === 'dust' || e.kind === 'crossburst' || e.kind === 'soil') e.vy += 0.08;
     }
     this.fx = this.fx.filter((e) => e.t < e.life);
     for (const e of this.texts) {
@@ -912,6 +960,10 @@ export class Battle {
     if (f.invuln > 0) f.invuln--;
     if (f.silence > 0) f.silence--;
     if (f.cooldown > 0) f.cooldown--;
+    if (f.readT > 0) {
+      f.readT--;
+      if (f.readT === 0) this.text('地図から、外れた', f.x, f.y - 56, { size: 6, color: '#d6d3bc', life: 30, vy: -0.3 });
+    }
     if (f.loveT > 0) {
       f.loveT--;
       if (f.loveT === 0) {
@@ -1027,7 +1079,7 @@ export class Battle {
         return;
       }
       if (inp.up) {
-        f.vy = -f.def.jump;
+        f.vy = -f.def.jump * (f.readT > 0 ? 0.6 : 1);
         f.vx = (inp.left ? -1 : inp.right ? 1 : 0) * this.speedOf(f) * 0.95;
         f.y -= 1;
         this.setState(f, 'jump');
@@ -1061,7 +1113,10 @@ export class Battle {
 
   private canSpecial(f: Fighter) {
     const m = f.def.moves.special;
-    if (m.kind === 'projectile') return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind).length < 2;
+    if (m.kind === 'projectile') {
+      const max = m.projectile!.kind === 'chisen' ? 1 : 2;
+      return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind).length < max;
+    }
     // trap（櫻）：未設置なら設置、設置済みなら「観測」なので常に出せる
     return true;
   }
@@ -1107,6 +1162,13 @@ export class Battle {
       f.x += f.facing * m.moveX;
       if (f.moveFrame % 2 === 0) this.afterimage(f);
     }
+    // 塀勝也：強攻撃は空振りでも地面が隆起する（上から描く＝地面が先に動く）
+    if (f.id === 'heikatsu' && m.key === 'heavy' && f.movePhase === 1 && f.moveFrame % 3 === 0) {
+      const gx = f.x + f.facing * 20;
+      this.crack(gx, 16 + Math.floor(f.moveFrame / 3));
+      this.geyser(gx, 13 + (f.moveFrame % 3));
+      this.soilBurst(gx, 2);
+    }
     if (f.moveFrame >= total) {
       if (m.cooldown) f.cooldown = m.cooldown;
       this.setState(f, f.y < GROUND ? 'jump' : 'idle');
@@ -1122,10 +1184,12 @@ export class Battle {
       this.text('★', o.x, 12, { size: 8, color: '#fde68a', life: 20, vy: 0 });
     } else {
       const ground = !!spec.ground;
+      // 防災マップは「相手の今いる場所」に広げる（予報は立っている場所に書く）
+      const x = spec.kind === 'chisen' ? clamp(o.x + o.vx * 4, 16, W - 16) : f.x + f.facing * 14;
       this.spawnProj({
         kind: spec.kind,
         owner: f.idx,
-        x: f.x + f.facing * 14,
+        x,
         y: ground ? GROUND - h / 2 : f.y - 30,
         vx: f.facing * (spec.vx ?? 3),
         vy: spec.vy ?? 0,
@@ -1281,6 +1345,20 @@ export class Battle {
               this.text('近接性', o.x, o.y - 62, { size: 7, color: '#f5d0fe', life: 30, vy: -0.4 });
             }
           }
+          if (f.id === 'heikatsu') {
+            if (m.key === 'light') {
+              // 等高線：指先でなぞった線が一瞬浮かぶ
+              this.text('〰︎', o.x, o.y - 34, { size: 8, color: '#d9dcc0', life: 22, vy: -0.6 });
+            }
+            if (m.key === 'heavy') {
+              // 地図を上から描く：足元が隆起して跳ね上げる
+              this.ring(o.x, GROUND - 4, '#b8c4a0', 34);
+              this.crack(o.x, 24);
+              this.geyser(o.x - f.facing * 4, 22);
+              this.soilBurst(o.x, 6);
+              this.shake = Math.max(this.shake, 7);
+            }
+          }
         }
         break; // 1振り1ヒット（多人数でも1人だけ）
       }
@@ -1383,6 +1461,63 @@ export class Battle {
           const toucher = this.f.find((e) => e.team !== ownerTeam && e.hp > 0 && this.hittable(e) && overlap(box, this.hurtbox(e)));
           if (toucher) {
             this.collapseKoi(p, owner, 30);
+            continue;
+          }
+        }
+        keep.push(p);
+        continue;
+      }
+      if (p.kind === 'chisen') {
+        // 塀勝也の「防災マップ」：相手の現在地に広げた時限の予報図。
+        // フューズは常に進み、置いてから約1秒で必ず「発災」。図の上に立つと動きを読まれてフューズも倍速になる。
+        p.t++;
+        p.life--;
+        p.charge ??= 0;
+        if (p.life <= 0) {
+          this.text('防災マップは、予報だけだった', p.x, p.y - 14, { size: 6, color: '#c9c9a8', life: 36, vy: -0.3 });
+          continue;
+        }
+        if (this.phase === 'fight') {
+          const ownerTeam = p.owner >= 0 ? this.f[p.owner]?.team : -1;
+          const box = this.projBox(p);
+          let standing = false;
+          for (const f of this.f) {
+            if (f.team === ownerTeam || f.hp <= 0) continue;
+            if (f.y < GROUND) continue; // 空中は地図の上にいない
+            if (!this.hittable(f)) continue;
+            if (!overlap(box, this.hurtbox(f))) continue;
+            standing = true;
+            const wasRead = f.readT > 0;
+            f.readT = Math.max(f.readT, 40);
+            if (!wasRead) {
+              this.text('動きを、読まれてる', f.x, f.y - 56, { size: 6, color: '#d6d3bc', life: 40, vy: -0.3 });
+              this.text('防災マップは、「なぜ」を描く', p.x, p.y - 22, { size: 6, color: '#b8c4a0', life: 40, vy: -0.2 });
+            }
+          }
+          // フューズは常に進む（時限）。図の上に立っている間は倍速。
+          p.charge += standing ? 2 : 1;
+          if (p.charge === 30) this.text('……そろそろ、だ', p.x, p.y - 34, { size: 6, color: '#e9a23b', life: 34, vy: -0.3, shake: true });
+          if (p.charge >= 60) {
+            // 発災：その場にいる全員が隆起に呑まれる（乗っていなければ巻き込まれない）
+            this.text('発災！！', p.x, GROUND - 52, { size: 18, color: '#fbbf24', life: 46, vy: -0.4, shake: true });
+            this.sfx('heavy');
+            this.ring(p.x, GROUND - 4, '#e9a23b', 56);
+            this.crack(p.x, 46);
+            this.geyser(p.x, 26);
+            this.soilBurst(p.x, 12);
+            this.shake = Math.max(this.shake, 9);
+            this.flash = Math.max(this.flash, 5);
+            const owner = p.owner >= 0 ? this.f[p.owner] : null;
+            const dmg = p.dmg * (owner ? this.dmgMulOf(owner) : 1);
+            for (const f of this.f) {
+              if (f.team === ownerTeam || f.hp <= 0) continue;
+              if (f.y < GROUND || !this.hittable(f)) continue;
+              if (!overlap(box, this.hurtbox(f))) continue;
+              const dir: Facing = f.x >= p.x ? 1 : -1;
+              if (this.isBlocking(f)) this.applyBlock(owner, f, p.dmg, p.hitstun);
+              else this.applyHit(owner, f, dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: p.kby, knockdown: true }, dir, 'heavy');
+            }
+            p.life = 0; // 発災したら図は使い終わり
             continue;
           }
         }
@@ -1747,6 +1882,64 @@ export class Battle {
           this.sfx('heal');
         }
         if (T >= 54) this.setState(f, 'idle');
+        break;
+      }
+      case 'heikatsu': {
+        // 地面は忘れない ── 前震 → 全画面の発災。地面に立っている相手は記録ごと持ち上げられて吹き飛ぶ。
+        // 空中にいる相手は「まだ地図に載っていない」ので無傷。地面を走る飛び道具も呑み込む。
+        if (T === 1) {
+          this.setBanner('地面は忘れない', '地面は、全部を記録してる。──その上に、立て。', c, 130);
+          this.sfx('heavy');
+        }
+        // 前震（T=4〜12）：画面が揺れ、地面にヒビが入り始める
+        if (T >= 4 && T < 14) {
+          if (T % 2 === 0) {
+            this.shake = Math.max(this.shake, T * 0.8);
+            this.crack(f.x + (T - 4) * 22, 18 + T);
+            this.dust(f.x + (T - 4) * 22);
+          }
+        }
+        if (T === 14) {
+          this.flash = 14;
+          this.shake = 26;
+          this.ring(f.x, GROUND - 4, '#a3b18a', 76);
+          this.text('発災！！', W / 2, H / 2 - 30, { size: 26, color: '#fbbf24', life: 50, vy: -0.3, shake: true });
+          // 画面全体の地面が一斉に隆起する（土砂が舞い上がる）
+          for (let x = 20; x < W - 8; x += 34) {
+            this.crack(x + (this.rng() - 0.5) * 12, 20 + this.rng() * 24);
+            if (this.rng() < 0.8) this.geyser(x + (this.rng() - 0.5) * 8, 18 + this.rng() * 22);
+          }
+          this.soilBurst(f.x, 16);
+          // 地面を走っていた飛び道具は隆起に呑み込まれる
+          for (const p of this.projectiles) {
+            if (!p.item && (p.ground || p.kind === 'chisen' || p.kind === 'shock' || p.kind === 'kusa')) p.life = 0;
+          }
+          for (const e of this.aliveEnemies(f)) {
+            if (!this.hittable(e)) continue;
+            if (e.y < GROUND) {
+              this.text('（空中は、まだ地図に載っていない）', e.x, e.y - 64, { size: 6, color: '#cbd5e1', life: 42, vy: -0.3 });
+              continue;
+            }
+            const dir: Facing = e.x >= f.x ? 1 : -1;
+            this.ring(e.x, GROUND - 4, '#b8c4a0', 44);
+            this.crack(e.x, 26);
+            this.geyser(e.x, 34);
+            this.soilBurst(e.x, 12);
+            this.applyHit(f, e, 26 * this.dmgMulOf(f), { hitstun: 34, kbx: 1.5, kby: 6.5, knockdown: true }, dir, 'heavy');
+            this.text('地面は忘れない', e.x, e.y - 68, { size: 11, color: '#d9dcc0', life: 46, vy: -0.4, shake: true });
+          }
+        }
+        // 余震（T=26〜38）：降り積もった土がまだ落ちてくる
+        if (T >= 26 && T < 40 && T % 2 === 0) {
+          this.shake = Math.max(this.shake, 6);
+          for (let i = 0; i < 3; i++) this.soilBurst(f.x + (this.rng() - 0.5) * 300, 3);
+        }
+        if (T === 26) {
+          for (const e of this.aliveEnemies(f)) {
+            if (e.y < GROUND && this.hittable(e)) this.text('飛んでる間は、安全だ', e.x, e.y - 48, { size: 6, color: '#cbd5e1', life: 34, vy: -0.3 });
+          }
+        }
+        if (T >= 60) this.setState(f, 'idle');
         break;
       }
       case 'kakusei': {
@@ -2439,6 +2632,9 @@ export class Battle {
         if (trap) return false;
         return dist > 52 && dist < 150;
       }
+      case 'heikatsu':
+        // 地形図：相手が歩いてくる経路（30px先）に広げる。相手との距離が近すぎず遠すぎずのとき
+        return dist > 40 && dist < 170;
       default:
         return this.canSpecial(f);
     }
