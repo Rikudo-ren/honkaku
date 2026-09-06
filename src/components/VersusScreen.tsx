@@ -61,22 +61,22 @@ export function DuelVersus({ setup, onDone }: Props) {
   return (
     <div className="relative h-screen w-full cursor-pointer overflow-hidden bg-black" onClick={onDone}>
       <div className="absolute inset-0 animate-vs-l" style={{ clipPath: 'polygon(0 0, 58% 0, 42% 100%, 0 100%)', background: `linear-gradient(135deg, ${a.light} 0%, #ffffff 60%, ${a.light} 100%)` }}>
-        <Portrait id={a.id} alt={a.name} className="absolute bottom-0 left-[2%] h-[106%] max-w-none drop-shadow-[5px_5px_0_rgba(0,0,0,0.3)]" />
-        <div className="absolute left-4 top-6 md:left-8 md:top-10">
+        <Portrait id={a.id} alt={a.name} className="absolute bottom-0 left-[25%] h-[92%] max-w-none -translate-x-1/2 md:left-[2%] md:h-[106%] md:translate-x-0 drop-shadow-[5px_5px_0_rgba(0,0,0,0.3)]" />
+        <div className="absolute left-4 top-6 w-[43%] md:left-8 md:top-10">
           <div className="text-xs text-slate-600 md:text-base">
             {p1Label} ／ {a.affiliation}
           </div>
-          <div className="pixel-text-shadow text-3xl text-white md:text-6xl">{a.name}</div>
+          <div className="pixel-text-shadow text-[clamp(20px,4.8vw,60px)] leading-tight text-white">{a.name}</div>
           <div className="mt-1 inline-block bg-slate-900 px-2 py-0.5 text-xs text-white md:text-base">{a.title}</div>
         </div>
       </div>
       <div className="absolute inset-0 animate-vs-r" style={{ clipPath: 'polygon(58% 0, 100% 0, 100% 100%, 42% 100%)', background: `linear-gradient(225deg, ${b.light} 0%, #ffffff 60%, ${b.light} 100%)` }}>
-        <Portrait id={b.id} alt={b.name} className="absolute bottom-0 right-[2%] h-[106%] max-w-none drop-shadow-[-5px_5px_0_rgba(0,0,0,0.3)]" />
-        <div className="absolute right-4 top-6 text-right md:right-8 md:top-10">
+        <Portrait id={b.id} alt={b.name} className="absolute bottom-0 right-[25%] h-[92%] max-w-none translate-x-1/2 md:right-[2%] md:h-[106%] md:translate-x-0 drop-shadow-[-5px_5px_0_rgba(0,0,0,0.3)]" />
+        <div className="absolute right-4 top-6 w-[43%] text-right md:right-8 md:top-10">
           <div className="text-xs text-slate-600 md:text-base">
             {b.affiliation} ／ {p2Label}
           </div>
-          <div className="pixel-text-shadow text-3xl text-white md:text-6xl">{b.name}</div>
+          <div className="pixel-text-shadow text-[clamp(20px,4.8vw,60px)] leading-tight text-white">{b.name}</div>
           <div className="mt-1 inline-block bg-slate-900 px-2 py-0.5 text-xs text-white md:text-base">{b.title}</div>
           {showDiff && (
             <div className={`mt-2 inline-block border-2 bg-black/80 px-2 py-0.5 text-sm font-bold md:text-base ${diffColor}`}>
@@ -85,7 +85,7 @@ export function DuelVersus({ setup, onDone }: Props) {
           )}
         </div>
       </div>
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-vs-pop">
+      <div className="pointer-events-none absolute left-1/2 top-1/2 animate-vs-pop text-center">
         <div className="pixel-text-shadow text-7xl text-amber-300 md:text-9xl">VS</div>
         {showDiff && (
           <div className={`mx-auto mt-1 w-fit border-2 bg-black/85 px-3 py-1 text-center text-sm font-bold md:text-lg ${diffColor}`}>
@@ -93,12 +93,14 @@ export function DuelVersus({ setup, onDone }: Props) {
           </div>
         )}
         {pair && (
-          <div className="mt-2 whitespace-nowrap bg-black/80 px-3 py-1 text-center text-xs text-amber-100 md:text-base">
-            「{pair.a}」「{pair.b}」{pair.note ?? ''}
+          <div className="mt-2 w-[min(90vw,52rem)] whitespace-normal break-words bg-black/85 px-3 py-2 text-center text-xs leading-relaxed text-amber-100 md:text-base">
+            <div>{CHARS[pair.first].name}「{pair.a}」</div>
+            <div>{pair.first === a.id ? b.name : a.name}「{pair.b}」</div>
+            {pair.note && <div className="text-xs text-slate-400">{pair.note}</div>}
           </div>
         )}
         {a.id === b.id && (
-          <div className="mt-2 whitespace-nowrap bg-black/80 px-3 py-1 text-center text-xs text-amber-100 md:text-base">
+          <div className="mt-2 w-[min(90vw,52rem)] whitespace-normal break-words bg-black/85 px-3 py-2 text-center text-xs text-amber-100 md:text-base">
             {mirror ? `「${mirror.a}」「${mirror.b}」` : '自演じゃなくて自己対話だよ'}
           </div>
         )}

@@ -1,4 +1,5 @@
 import { CHARS, EXTRA_LOOKS } from './characters';
+import { CHEER } from './cheer';
 import { GROUND, H, W, type Battle, type Fighter, type PixelFx, type Projectile } from './engine';
 import { drawFighter, drawShadow } from './sprites';
 import type { CharId, StageId } from './types';
@@ -106,6 +107,7 @@ export class Renderer {
     g.translate(sx, sy);
 
     this.drawStage(b.stage, b.t);
+    if (b.f.some((f) => f.id === 'mitsumine_cheer' && f.state === 'super')) this.drawCheerStands(b.t);
 
     // ground props (items) behind fighters
     for (const p of b.projectiles) if (p.item || p.kind === 'vending' || p.kind === 'chisen') this.drawProjectile(p, b.t);
@@ -157,6 +159,42 @@ export class Renderer {
     const x = Math.round(p.x);
     const y = Math.round(p.y);
     switch (p.kind) {
+      case 'cheerEcho':
+      case 'cheerNote': {
+        const d = p.vx >= 0 ? 1 : -1;
+        const color = p.echoReturned ? '#7dd3fc' : '#fb7185';
+        // 声は弾丸ではなく、三本の括弧型の音圧。復路は水色かつ低い位置。
+        for (let i = 0; i < 3; i++) {
+          const xx = x + d * (i * 4 - 5);
+          const h = 3 + i * 2;
+          g.fillStyle = i === 1 ? '#fff1f2' : color;
+          g.fillRect(xx, y - h, 2, h * 2);
+          g.fillRect(xx - d * 2, y - h - 1, 2, 2);
+          g.fillRect(xx - d * 2, y + h - 1, 2, 2);
+        }
+        if (p.kind === 'cheerNote') {
+          g.fillStyle = '#ffffff';
+          g.fillRect(x - d * 8, y - 6, 2, 2);
+          g.fillRect(x - d * 11, y - 9, 1, 1);
+        }
+        break;
+      }
+      case 'cheerWave': {
+        const radius = p.t * CHEER.waveSpeed;
+        // 判定と同じ速度で円の先端が広がる。遠い相手へも瞬間着弾はしない。
+        const strong = p.dmg > 10;
+        for (let yy = Math.max(0, y - radius); yy < Math.min(H, y + radius); yy++) {
+          const dx = Math.round(Math.sqrt(Math.max(0, radius * radius - (yy - y) ** 2)));
+          for (const xx of [x - dx, x + dx]) {
+            if (xx < -4 || xx > W + 4) continue;
+            g.fillStyle = strong ? '#fb7185' : '#7dd3fc';
+            g.fillRect(xx - 2, yy, strong ? 5 : 3, 1);
+            g.fillStyle = '#fff1f2';
+            g.fillRect(xx, yy, 1, 1);
+          }
+        }
+        break;
+      }
       case 'cross': {
         const pulse = Math.floor(t / 6) % 2 === 0;
         drawCross(g, x, y, p.owner === -1 ? '#fbbf24' : '#fde68a', pulse ? '#ffffff' : '#fff7cc');
@@ -406,6 +444,18 @@ export class Renderer {
         g.fillRect(x, y, e.size, e.size);
         g.globalAlpha = 1;
         break;
+      case 'sound': {
+        g.globalAlpha = k;
+        const d = e.facing ?? 1;
+        const reach = Math.round(e.size * e.t / e.life);
+        for (let i = -1; i <= 1; i++) {
+          g.fillStyle = i === 0 ? '#ffffff' : e.color;
+          g.fillRect(x + d * reach, y + i * (4 + Math.floor(reach / 2)), 2, 2);
+          g.fillRect(x + d * (reach + 3), y + i * (5 + Math.floor(reach / 2)), 3, 1);
+        }
+        g.globalAlpha = 1;
+        break;
+      }
       case 'ring': {
         const r = e.size * (e.t / e.life);
         g.globalAlpha = k;
@@ -530,6 +580,37 @@ export class Renderer {
       if ((i + Math.floor(b.t / 20)) % 7 === 0) continue;
       g.fillRect(Math.floor(seeded(i) * W), Math.floor(seeded(i + 100) * 90), 1, 1);
     }
+  }
+
+  /** 超必殺だけ、いつもの背景に二階応援席の記憶が重なる。 */
+  private drawCheerStands(t: number) {
+    const g = this.g;
+    g.fillStyle = 'rgba(22,29,53,0.8)';
+    g.fillRect(0, 72, W, 64);
+    for (let row = 0; row < 2; row++) {
+      const y = 91 + row * 29;
+      g.fillStyle = '#47516d';
+      g.fillRect(0, y + 10, W, 3);
+      g.fillStyle = '#c7cbd9';
+      g.fillRect(0, y + 14, W, 1);
+      for (let i = 0; i < 23; i++) {
+        const x = i * 18 + (row ? 7 : 0);
+        const clap = (Math.floor(t / 6) + i + row) % 2;
+        g.fillStyle = '#1c2239';
+        g.fillRect(x + 4, y - 5, 5, 5);
+        g.fillStyle = i % 3 === 0 ? '#f5f4fa' : '#707f9f';
+        g.fillRect(x + 2, y, 9, 9);
+        g.fillStyle = '#e6c6b7';
+        g.fillRect(x + (clap ? 4 : 0), y - (clap ? 1 : 5), 2, 4);
+        g.fillRect(x + (clap ? 7 : 11), y - (clap ? 1 : 5), 2, 4);
+      }
+    }
+    g.fillStyle = '#fda4af';
+    g.fillRect(128, 117, 128, 17);
+    g.fillStyle = '#29334e';
+    g.font = `8px ${FONT}`;
+    g.textAlign = 'center';
+    g.fillText('理数科、最後まで！', W / 2, 129);
   }
 
   // ═══════════════════════ STAGES ═══════════════════════
@@ -958,6 +1039,16 @@ export class Renderer {
     // fighter status labels
     for (const f of b.f) {
       if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - 52, 5, '#e2e8f0');
+      if (f.hp > 0 && b.phase === 'fight' && f.def.airControl) {
+        const ay = Math.min(GROUND + 7, f.y + 7);
+        const width = 20;
+        c.fillStyle = '#172033';
+        c.fillRect(f.x - width / 2 - 1, ay - 2, width + 2, 4);
+        c.fillStyle = f.airLift > 0 ? '#7dd3fc' : '#64748b';
+        c.fillRect(f.x - width / 2, ay - 1, width * f.airLift / f.def.airControl.liftFrames, 2);
+        this.txt(`AIR  ${f.airUsed & 1 ? '－' : '弱'} ${f.airUsed & 2 ? '－' : '強'}`, f.x, ay + 6, 3.8, '#e0f2fe');
+      }
+      if (f.rallyT > 0 && f.hp > 0) this.txt(`声援↑ ${Math.ceil(f.rallyT / 60)}`, f.x, f.y - 49, 4.5, '#bae6fd');
       if (f.id === 'sakura' && f.hp > 0 && b.phase === 'fight') {
         // 研究データ n（超必殺の威力に反映）／理論のない状態の恋の残り時間
         if (f.loveT > 0) this.txt(`恋 ${Math.ceil(f.loveT / 60)}`, f.x, f.y - 50, 5, '#f9a8d4');

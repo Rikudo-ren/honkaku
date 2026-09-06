@@ -99,6 +99,24 @@ class AudioEngine {
   sfx(name: SfxName) {
     if (!this.ctx) return;
     switch (name) {
+      case 'clap':
+        // 二拍のタイミングは技側で指定。短い手拍子と体育館の小さな反響。
+        this.noise(0.045, 0.18, 0, 3800);
+        this.noise(0.035, 0.055, 0.055, 2600);
+        this.tone({ freq: 950, to: 600, dur: 0.025, vol: 0.06, type: 'triangle' });
+        break;
+      case 'squeak':
+        this.tone({ freq: 1250, to: 1950, dur: 0.055, vol: 0.1, type: 'sine' });
+        this.tone({ freq: 1900, to: 850, dur: 0.1, vol: 0.08, type: 'sine', delay: 0.04 });
+        this.noise(0.045, 0.05, 0, 1800);
+        break;
+      case 'cheer':
+        // 生声ではなく、既存のチップ音源に合わせた「わっ」という声援の音圧。
+        this.tone({ freq: 330, to: 570, dur: 0.3, vol: 0.14, type: 'sawtooth', attack: 0.05 });
+        this.tone({ freq: 660, to: 850, dur: 0.28, vol: 0.055, type: 'triangle', delay: 0.03 });
+        this.noise(0.23, 0.07, 0.05, 2200);
+        this.tone({ freq: 440, to: 600, dur: 0.22, vol: 0.035, type: 'sawtooth', delay: 0.16 });
+        break;
       case 'hit':
         this.tone({ freq: 240, to: 90, dur: 0.09, vol: 0.25 });
         this.noise(0.06, 0.18);

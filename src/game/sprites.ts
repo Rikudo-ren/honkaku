@@ -13,8 +13,12 @@ type ArmPose =
   | 'flail'
   | 'hold'
   | 'hip'
-  | 'none';
-type LegPose = 'stand' | 'walk' | 'jump' | 'crouch' | 'kick' | 'wide' | 'dangle';
+  | 'none'
+  | 'behind'
+  | 'clap'
+  | 'clapOpen'
+  | 'cup';
+type LegPose = 'stand' | 'walk' | 'jump' | 'crouch' | 'kick' | 'wide' | 'dangle' | 'dive';
 type Face = 'normal' | 'hurt' | 'shout' | 'smile' | 'closed' | 'dizzy';
 
 interface PoseParams {
@@ -49,10 +53,12 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
   const hug = look.accessory === 'bookFront' || look.accessory === 'loveNote';
   switch (pose) {
     case 'idle':
+      if (look.outfit === 'gym') return { ...base, dy: bob, armF: 'behind', armB: 'behind', lean: -1 };
       return { ...base, dy: bob, armF: hug ? 'hold' : 'down', armB: hug ? 'hold' : 'down' };
     case 'frozen':
       return { ...base, face: 'closed', armF: hug ? 'hold' : 'down', armB: hug ? 'hold' : 'down' };
     case 'walk':
+      if (look.outfit === 'gym') return { ...base, lean: 2, legs: 'walk', legFrame: Math.floor(t / 3) % 4, armF: 'chamber', armB: 'flail' };
       return { ...base, legs: 'walk', legFrame: Math.floor(t / 6) % 4, armF: hug ? 'hold' : 'down', armB: hug ? 'hold' : 'down' };
     case 'jump':
       return { ...base, legs: 'jump', armF: 'up', armB: 'up' };
@@ -77,6 +83,24 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
         : phase === 1
           ? { ...base, armF: 'punch', armB: hug ? 'hold' : 'down', face: 'closed', legs: 'wide', lean: 1, pen: true }
           : { ...base, armF: 'hold', armB: 'hold', legs: 'wide', face: 'normal', pen: true };
+    case 'cheerClap':
+      return { ...base, armF: phase === 1 ? 'clap' : 'clapOpen', armB: phase === 1 ? 'clap' : 'clapOpen', legs: 'wide', lean: phase === 1 ? 1 : -1, face: 'shout' };
+    case 'cheerTurn':
+      return phase === 0
+        ? { ...base, lean: -2, armF: 'hip', armB: 'hip', legs: 'crouch', dy: 2 }
+        : phase === 1
+          ? { ...base, lean: 3, armF: 'chamber', armB: 'flail', legs: 'walk', legFrame: Math.floor(t / 2) % 4 }
+          : { ...base, lean: -2, armF: 'forward', armB: 'spread', legs: 'wide', face: 'shout' };
+    case 'cheerCall':
+      return phase === 0
+        ? { ...base, armF: 'clapOpen', armB: 'clapOpen', face: 'closed', legs: 'wide' }
+        : { ...base, lean: 2, armF: 'cup', armB: 'cup', face: 'shout', legs: 'wide' };
+    case 'airStep':
+      return { ...base, lean: 1, armF: 'spread', armB: 'spread', legs: 'jump' };
+    case 'airClap':
+      return { ...base, lean: 1, armF: phase === 1 ? 'clap' : 'clapOpen', armB: phase === 1 ? 'clap' : 'clapOpen', legs: 'jump', face: 'shout' };
+    case 'airDive':
+      return { ...base, lean: 2, armF: 'up', armB: 'flail', legs: phase === 1 ? 'dive' : 'jump', face: 'shout' };
     case 'confess':
       // 深呼吸して、ノートを胸の前で開く。目は閉じている（緊張）
       return { ...base, lean: 2, armF: 'hold', armB: 'hold', legs: 'wide', face: 'closed', openNote: true };
@@ -123,6 +147,7 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
       return { ...base, armF: 'raise', face: 'normal', paper: true };
     case 'win': {
       const wp = look.winPose ?? 'cheer';
+      if (wp === 'tsundere') return { ...base, dy: bob, lean: -1, armF: 'behind', armB: 'behind', face: 'closed' };
       if (wp === 'cool') return { ...base, dy: bob, face: 'closed', armF: 'hip', armB: 'hip' };
       if (wp === 'shy') return { ...base, dy: bob, face: 'smile', armF: 'block', armB: hug ? 'hold' : 'down' };
       if (wp === 'peace') return { ...base, dy: bob, face: 'smile', armF: 'up' };
@@ -154,13 +179,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   const skinD = look.skinDark ?? '#d9a986';
   const isF = look.gender === 'f';
   const outfit = look.outfit;
+  const isGym = outfit === 'gym';
   const blazer = '#26335f';
   const blazerD = '#1b2547';
-  const sleeve = outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : outfit === 'kensetsu' ? '#232938' : blazer;
-  const body = outfit === 'vest' ? '#242b4c' : outfit === 'suit' ? '#6e6a5e' : outfit === 'kensetsu' ? '#e0691a' : blazer;
+  const sleeve = isGym ? '#f5f4fa' : outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : outfit === 'kensetsu' ? '#232938' : blazer;
+  const body = isGym ? '#f5f4fa' : outfit === 'vest' ? '#242b4c' : outfit === 'suit' ? '#6e6a5e' : outfit === 'kensetsu' ? '#e0691a' : blazer;
   const pants = outfit === 'suit' ? '#45454a' : outfit === 'kensetsu' ? '#4a4640' : '#243059';
-  const shoe = isF ? '#5b3a22' : '#141418';
-  const sock = '#1c1c28';
+  const shoe = isGym ? '#f7f7fc' : isF ? '#5b3a22' : '#141418';
+  const sock = isGym ? '#e9e9f1' : '#1c1c28';
   const dy = P.dy;
   const ln = P.lean;
   const hc = look.hairColor;
@@ -168,7 +194,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   if (P.lying) {
     R(-12, -8, 14, 7, body);
-    if (isF) R(-1, -9, 8, 8, '#2a3357');
+    if (isF) R(-1, -9, 8, 8, isGym ? '#29334e' : '#2a3357');
+    if (isGym) R(4, -9, 1, 7, '#e9e9f1');
     const c = isF ? skin : pants;
     R(2, -7, 11, 5, c);
     if (isF) R(9, -7, 4, 5, sock);
@@ -183,6 +210,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     R(-15, -6, 1, 1, look.eyeColor);
     R(-14, -3, 2, 1, '#8a4a4a');
     if (look.glasses) R(-17, -7, 5, 1, '#2a2a30');
+    if (isGym) {
+      R(-22, -11, 12, 2, '#f7f7fc');
+      R(-24, -10, 3, 3, '#e9e9f1');
+      R(-28, -8, 5, 2, '#f7f7fc');
+      R(-9, -11, 2, 5, skin);
+      R(-11, -8, 8, 1, '#29334e');
+      R(13, -3, 3, 1, '#29334e');
+    }
     ctx.globalAlpha = prevAlpha;
     return;
   }
@@ -193,6 +228,12 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(lx, ly + h - 4, w, 4, sock);
     } else R(lx, ly, w, h, pants);
     R(lx, ly + h - 2, w + 1, 2, shoe);
+    if (isGym) {
+      R(lx, ly + h - 6, w, 1, '#ffffff');
+      R(lx - 1, ly + h - 3, w + 2, 2, shoe);
+      R(lx, ly + h - 3, 2, 1, '#c4c6d3');
+      R(lx - 1, ly + h - 1, w + 2, 1, '#29334e');
+    }
   };
 
   const legs = () => {
@@ -219,6 +260,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(3, -8, 4, 4, c);
         if (isF) R(3, -7, 4, 2, sock);
         R(3, -5, 5, 2, shoe);
+        break;
+      case 'dive':
+        // 片脚を下へ伸ばし、もう片脚を畳む。空中強専用の急降下シルエット。
+        leg(5, -15, 4, 15);
+        R(-6, -14, 4, 6, c);
+        R(-10, -11, 4, 3, c);
+        R(-11, -11, 4, 3, sock);
+        R(-13, -11, 3, 4, shoe);
         break;
       case 'dangle':
         R(-5, -12, 4, 8, c);
@@ -250,6 +299,85 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(lx, ly, w, h, skin);
       if (side === 'F') hand = { x: lx, y: ly };
     };
+    if (isGym) {
+      // 半袖は肩だけ。制服の長袖を白く塗り替えず、肘〜手首は肌色で描く。
+      const S = (lx: number, ly: number, w = 4, h = 5) => R(lx + ln, ly + dy, w, h, sleeve);
+      const A = (lx: number, ly: number, w: number, h: number) => R(lx + ln, ly + dy, w, h, skin);
+      const front = side === 'F';
+      const b = front ? 5 : -8;
+      switch (p) {
+        case 'none': return;
+        case 'behind':
+        case 'down':
+          S(b, -30);
+          A(b + (front ? 0 : 1), -25, 3, 7);
+          H(b + ln, -18 + dy, 2, 3);
+          return;
+        case 'clap':
+        case 'clapOpen':
+          S(b, -30);
+          if (front) {
+            A(8, -27, 5, 3);
+            A(p === 'clap' ? 11 : 13, -32, 3, 6);
+            H((p === 'clap' ? 10 : 13) + ln, -33 + dy, 3, 4);
+          } else {
+            A(-6, -25, 12, 3);
+            A(5, -28, p === 'clap' ? 5 : 2, 3);
+            H((p === 'clap' ? 9 : 5) + ln, -31 + dy, 3, 4);
+          }
+          return;
+        case 'cup':
+          S(b, -30);
+          if (front) {
+            A(8, -32, 3, 8);
+            H(5 + ln, -36 + dy, 3, 4);
+          } else {
+            A(-6, -26, 7, 3);
+            A(-2, -32, 3, 8);
+            H(-1 + ln, -36 + dy, 2, 4);
+          }
+          return;
+        case 'hip':
+          S(b, -30);
+          A(b, -25, 3, 5);
+          H(b + ln + (front ? -2 : 2), -22 + dy);
+          return;
+        case 'punch':
+        case 'forward':
+          S(5, front ? -29 : -26, 5, 4);
+          A(10, front ? -28 : -25, p === 'punch' ? 5 : 3, 3);
+          H((p === 'punch' ? 15 : 13) + ln, (front ? -29 : -26) + dy, 3, 4);
+          return;
+        case 'chamber':
+          S(3, -30);
+          A(-3, -27, 7, 3);
+          H(-5 + ln, -28 + dy, 3, 4);
+          return;
+        case 'up':
+        case 'raise':
+        case 'block':
+          S(b, -33, 4, 5);
+          A(b, p === 'raise' ? -44 : -41, 3, p === 'raise' ? 11 : 8);
+          H(b + ln, (p === 'raise' ? -47 : -44) + dy);
+          return;
+        case 'spread':
+          S(b, -32, 4, 5);
+          A(front ? 9 : -12, -35, 4, 5);
+          H((front ? 13 : -15) + ln, -38 + dy);
+          return;
+        case 'flail':
+          S(b, -30);
+          A(front ? 8 : -11, -34, 3, 8);
+          H((front ? 8 : -11) + ln, -37 + dy);
+          return;
+        case 'hold':
+        case 'swingDown':
+          S(b, -30);
+          A(front ? 1 : -7, -25, 8, 3);
+          H((front ? -2 : 1) + ln, -25 + dy);
+          return;
+      }
+    }
     switch (p) {
       case 'none':
         break;
@@ -339,7 +467,45 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     R(-8, -9 + dy, 16, 1, '#1d2440');
   };
 
+  const glyph = (pattern: string[], lx: number, ly: number, color: string) => {
+    pattern.forEach((row, yy) => [...row].forEach((dot, xx) => { if (dot === '1') R(lx + xx, ly + yy, 1, 1, color); }));
+  };
+
+  const shorts = () => {
+    const navy = '#29334e';
+    // 紺の短パン。裾は二つに分かれ、側面に白線。スカートにはしない。
+    R(-7, -16 + dy, 14, 7, navy);
+    R(-7, -10 + dy, 6, 2, navy);
+    R(1, -10 + dy, 6, 2, navy);
+    R(-7, -15 + dy, 1, 6, '#f5f4fa');
+    R(6, -15 + dy, 1, 6, '#f5f4fa');
+    R(0, -13 + dy, 1, 5, '#1c243a');
+    R(-6, -9 + dy, 5, 1, '#36405a');
+    // 写真の右裾の「PE」を、2文字の3px高グリフにする。
+    glyph(['11011', '11010', '10011'], 1, -12 + dy, '#ffffff');
+  };
+
   const torso = () => {
+    if (isGym) {
+      const navy = '#29334e';
+      R(-7 + ln, -31 + dy, 14, 17, '#f5f4fa');
+      R(-7 + ln, -27 + dy, 1, 12, '#d4d1df');
+      R(6 + ln, -27 + dy, 1, 12, '#dedbe5');
+      R(-6 + ln, -15 + dy, 12, 1, '#ffffff');
+      // 紺の丸襟と、写真左肩から胸へ薄くなるハーフトーン。
+      R(-3 + ln, -31 + dy, 7, 2, navy);
+      R(-2 + ln, -31 + dy, 5, 1, skin);
+      for (let row = 0; row < 7; row++) {
+        for (let col = 0; col < 6 - Math.floor(row / 2); col++) {
+          if (row < 2 || (row + col) % 2 === 0) R(-6 + col + ln, -30 + row + dy, 1, 1, row < 3 ? navy : '#9da3b8');
+        }
+      }
+      // 胸の小さな縦書き「桐葉」を3px幅に縮約。大きなロゴにはしない。
+      glyph(['111', '101', '111'], 3 + ln, -27 + dy, navy);
+      glyph(['111', '010', '111'], 3 + ln, -23 + dy, navy);
+      R(-3 + ln, -20 + dy, 1, 4, '#e2dfe9');
+      return;
+    }
     if (outfit === 'kensetsu') {
       // 工事ベスト（ハイビズ）：暗い作業着の上にオレンジの反射ベスト
       R(-6 + ln, -30 + dy, 12, 16, '#242a38');
@@ -474,6 +640,15 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(4 + hx, -34 + hy, 1, 1, '#8a4a4a');
         break;
     }
+    if (isGym) {
+      // 怒っていても頬は赤い。体育着版の立ち絵のツンデレ顔。
+      R(-2 + hx, -35 + hy, 2, 1, '#e89b9f');
+      R(5 + hx, -35 + hy, 1, 1, '#e89b9f');
+      if (P.face === 'normal') {
+        R(-1 + hx, -39 + hy, 2, 1, look.hairDark ?? hc);
+        R(4 + hx, -40 + hy, 2, 1, look.hairDark ?? hc);
+      }
+    }
     if (look.sweat && P.face !== 'smile' && P.face !== 'shout') {
       // こめかみの汗（緊張）
       const drip = Math.floor(o.t / 20) % 3;
@@ -566,6 +741,23 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(5 + hx, -34 + hy, 3, 5, '#1c1c22');
       R(-8 + hx, -33 + hy, 1, 2, '#5c5c6a');
     }
+  };
+
+  /** 白い鉢巻と横の結び目。動くと二本の端がなびく（mitsumine_taiiku.jpg）。 */
+  const headband = () => {
+    if (!isGym) return;
+    const flap = o.pose === 'idle' || o.pose === 'win' ? 0 : Math.floor(o.t / 4) % 3;
+    R(-7 + ln, -43 + dy, 14, 3, '#f7f7fc');
+    R(-7 + ln, -41 + dy, 14, 1, '#dedbe5');
+    // 前髪が鉢巻に少し重なる。こげ茶のハイライト。
+    R(-3 + ln, -45 + dy, 2, 2, '#79564b');
+    R(3 + ln, -45 + dy, 1, 5, hc);
+    R(-10 + ln, -43 + dy, 4, 4, '#f7f7fc');
+    R(-12 + ln - flap, -41 + dy, 4, 3, '#e9e9f1');
+    R(-14 + ln - flap, -40 + dy, 3, 2, '#f7f7fc');
+    R(-10 + ln, -39 + dy, 3, 5, '#f7f7fc');
+    R(-11 + ln - flap, -35 + dy, 3, 4, '#e9e9f1');
+    R(-12 + ln - flap, -32 + dy, 3, 2, '#f7f7fc');
   };
 
   /** 工事ヘルメット（kensetsu 服装のとき頭頂に描く）。R() が左右を反転してくれるので前面ツバは常に正面に来る。 */
@@ -695,11 +887,13 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   arm('B', P.armB);
   legs();
-  if (isF) skirt();
+  if (isGym) shorts();
+  else if (isF) skirt();
   torso();
   accessory();
   head();
   helmet();
+  headband();
   arm('F', P.armF);
   weapon();
   paper();

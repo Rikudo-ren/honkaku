@@ -1,3 +1,4 @@
+import { MITSUMINE_CHEER } from './cheer';
 import type { CharDef, CharId, Difficulty, Look, Setup, Side, StageDef, Team } from './types';
 
 /** 通常ロスター（最初から選べる6人） */
@@ -12,7 +13,7 @@ export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'tera
 // ═══════════════════════════════════════════════════════════════════════
 
 /** 隠しキャラクター（解禁で選択可能になる）。並び順＝解禁後にロスター末尾へ付く順番 */
-export const HIDDEN_CHARS: CharId[] = ['sakura', 'heikatsu', 'kakusei'];
+export const HIDDEN_CHARS: CharId[] = ['sakura', 'heikatsu', 'mitsumine_cheer', 'kakusei'];
 /** 隠しキャラ込みの全ロスター */
 export const ALL_CHARS: CharId[] = [...CHAR_ORDER, ...HIDDEN_CHARS];
 
@@ -23,7 +24,7 @@ export const NO_HIDDEN: HiddenUnlocks = {};
 
 export const isHiddenChar = (id: CharId): boolean => HIDDEN_CHARS.includes(id);
 
-/** 解禁状況に応じたロスター（先頭は常に通常6人、解禁済みの隠しキャラが順に続く） */
+/** 解禁状況に応じたロスター（先頭は常に通常ロスター、解禁済みの隠しキャラが順に続く） */
 export function rosterFor(u: HiddenUnlocks = {}): CharId[] {
   return [...CHAR_ORDER, ...HIDDEN_CHARS.filter((h) => u[h])];
 }
@@ -111,6 +112,25 @@ export const HIDDEN_META: HiddenMeta[] = [
       winner === 0 && setup.mode === '1p' && setup.difficulty === 'extreme' && !setup.teamMode && setup.p1 === setup.p2,
   },
   {
+    id: 'mitsumine_cheer',
+    key: 'honkaku_mitsumine_cheer_unlocked',
+    accent: '#fb7185',
+    title: '？？？',
+    sub: '二階席から、素直じゃない声が届く。',
+    hint: 'ヒント：否定の守護者で、常識の塊に全力を見せよ（偏差値85以上）。',
+    condition: '1P対CPUで三重県臣を使い、偏差値85以上の三峰瑠衣（通常版）に勝利すると解禁',
+    stripe: '#29334e',
+    quote: '「こっちの方が面白いから。……それだけ！」',
+    byline: '── 三重の全力を見届けた三峰が、体育着で理数科の応援席へ。',
+    kit: '空中での加速・反転と、拍手・折り返し・往復エコー。超必殺「残り三十秒・声が枯れるまで」で、声援を味方の力に変える。',
+    bannerTitle: '二階席から、声援が届いた。',
+    bannerText: '三重の全力に応えた声 ── タイトルに戻ると、理数科側に応援が来ています',
+    isUnlock: (setup, winner) =>
+      winner === 0 && setup.mode === '1p' && !setup.teamMode &&
+      setup.p1 === 'mie' && setup.p2 === 'mitsumine' &&
+      (setup.difficulty === 'hard' || setup.difficulty === 'extreme'),
+  },
+  {
     id: 'kakusei',
     key: 'honkaku_kakusei_unlocked',
     accent: '#fb923c',
@@ -151,6 +171,7 @@ const JAB_BOX = { x: 5, y: -32, w: 14, h: 9 };
 const SWING_BOX = { x: 3, y: -38, w: 17, h: 18 };
 
 export const CHARS: Record<CharId, CharDef> = {
+  mitsumine_cheer: MITSUMINE_CHEER,
   mie: {
     id: 'mie',
     name: '三重県臣',
@@ -1059,6 +1080,77 @@ export interface IntroLine {
 }
 
 export const INTRO_PAIRS: Record<string, IntroLine[]> = {
+  // ───── 三峰瑠衣(応援) ─────
+  // motoneta1.md「球技大会、二点差」：内進なのに理数科側。冷笑しない三重を見ていた。
+  // 体育着は今回のアレンジ。ヘイカツには敬語、覚醒三重には制服版と同じく無言。
+  'mie|mitsumine_cheer': [
+    { first: 'mie', a: 'なんでこっち側にいたんだよ', b: 'こっちの方が面白いから。……何よ、その顔' },
+    { first: 'mie', a: '内進なのに、体育着で理数科の応援か', b: '動きやすいから着てるだけ！ あんたのためじゃ……ないし' },
+    { first: 'mitsumine_cheer', a: 'あんたのプレー、かっこよかった', b: '……かっこよくない。普通にやっただけ' },
+    { first: 'mie', a: '負けたけど。二点差で', b: 'うん。でも、冷笑してなかった。全力だった' },
+    { first: 'mitsumine_cheer', a: '三重、前、空いてる！ ……今の聞いた？', b: '聞こえてる。二階からでも、十分' },
+    { first: 'mie', a: 'なんで俺の名前だけ、そんなに大きいんだよ', b: 'あんたが返事しないからでしょ！' },
+    { first: 'mitsumine_cheer', a: '最後、両馬にパスしたでしょ。……ちゃんと見てた', b: 'あいつが打つべきだと思った。理屈じゃない' },
+    { first: 'mie', a: '応援、ありがとな', b: '……先に言わないでよ。何返すか、考えてないし' },
+    { first: 'mitsumine_cheer', a: 'は？', b: 'は？', note: '（体育着でもハモる）' },
+    { first: 'mitsumine_cheer', a: 'あんたの〈普通〉は、普通じゃないんだよ', b: '……二階から、そんなとこまで見てたのか' },
+  ],
+  'mitsumine_cheer|ryoma': [
+    { first: 'ryoma', a: '三重への声援だけ音量マシマシ。まじ✝本質✝', b: '音量をラーメンで言わない！ 全員を応援してたし！' },
+    { first: 'mitsumine_cheer', a: '背番号の✝、まだ消してないの？', b: '消せないけど、応援は届いた。✝' },
+    { first: 'ryoma', a: '最後のシュート、外してごめん', b: 'あたしに謝ってどうするの。三重は、あんたに託したんでしょ' },
+    { first: 'mitsumine_cheer', a: '下手なのに、なんであんな全力で走れるのよ', b: '楽しいから。……最後は、普通に悔しかったけど' },
+    { first: 'ryoma', a: '三峰の応援、掲示板に——', b: '書くな！ ……三重の名前も、あたしの名前も！' },
+  ],
+  'mitsumine_cheer|naito': [
+    { first: 'naito', a: 'あんた、なんでこっち側にいるの', b: 'こっちの方が面白いから。……それだけ！' },
+    { first: 'naito', a: '内進の試合も見なくていいの？', b: '内進は普通でしょ。こっちはバラバラなのに、噛み合ってるんだよ' },
+    { first: 'naito', a: '三重くんが走ると、三峰さんも立ち上がるね', b: '座ってたら見えないから！ ……よく見てるね、蘭' },
+    { first: 'mitsumine_cheer', a: '蘭、今の応援、そんなに大きかった？', b: 'うん。「三重」のところが、特に' },
+    { first: 'naito', a: 'その鉢巻、似合ってる。張り切ってるね', b: '似合うとか、そういうんじゃ……ありがと' },
+  ],
+  'mitsumine|mitsumine_cheer': [
+    { first: 'mitsumine', a: '好きなら好きって言いなよ', b: '自分にまでそれ言う！？ あたしは応援に来ただけ！' },
+    { first: 'mitsumine_cheer', a: '今日は作戦ノート、置いてきた', b: '応援に理論はいらないもんね。……誰の応援？' },
+    { first: 'mitsumine', a: '三重の名前、さっきから呼びすぎじゃない？', b: 'フリーだったから教えただけ！ ……何回かは' },
+    { first: 'mitsumine_cheer', a: '体育着だと、考えるより先に動いちゃう', b: 'そのまま素直に言えばいいんじゃない？' },
+    { first: 'mitsumine', a: 'は？', b: 'は？', note: '（自分ともハモる）' },
+  ],
+  'mitsumine_cheer|terachi': [
+    { first: 'terachi', a: '今の応援、配信で——', b: '読まない！ 紙に書かない！ 三重には絶対見せない！' },
+    { first: 'mitsumine_cheer', a: '球技大会まで天文学の本？ ちゃんと見なさいよ', b: '見てたよ。三峰の応援も、三重のパスも' },
+    { first: 'terachi', a: 'えー……三重県臣を応援せよ', b: '命令されなくても……今のなし！' },
+    { first: 'mitsumine_cheer', a: '声、遠くまで届くかな', b: '一万人じゃなくて、一人に届けばいいんじゃない？' },
+    { first: 'terachi', a: '応援は、声に出したことで完了する——', b: '勝手に完了させないでよ。まだ試合、終わってないし' },
+  ],
+  'mitsumine_cheer|rei': [
+    { first: 'rei', a: '面白い集団だって、言ってたね', b: '聞いてたの？ ……実際、面白かったんだから仕方ないでしょ' },
+    { first: 'mitsumine_cheer', a: '相手がパスを出す前に動くの、反則みたい', b: '三峰も、三重が走る前に立ってたよ' },
+    { first: 'rei', a: '三重は俺にパスした方が確実だった。でも両馬に出した', b: 'うん。……だから、最後まで見たかったんだと思う' },
+    { first: 'rei', a: '内進にも三重がいたんだな', b: 'は？ あたしは三峰！ ……名前、混ぜないで' },
+    { first: 'mitsumine_cheer', a: '応援までデータにしないでよ', b: '数えなくてもわかるよ。楽しそうだった' },
+  ],
+  'mitsumine_cheer|sakura': [
+    { first: 'sakura', a: '三重先輩への声援だけ、音圧が高い。要検証', b: '検証禁止！ あんたは内藤さんを応援しなさい！' },
+    { first: 'mitsumine_cheer', a: '応援は作戦じゃないの。声に出すの！', b: '好きなら好きと言え、の応用でしょうか' },
+    { first: 'sakura', a: '体育着で理数科側。これは好意のシグナルでは——', b: '動きやすい服で面白い試合を見に来ただけ！' },
+    { first: 'mitsumine_cheer', a: '今の「三重、いけ！」はノートから消して', b: '消すと、観測済みのデータが失われます' },
+    { first: 'sakura', a: 'あの、三峰さん。視線が左に動きました', b: 'あたしの言葉であたしを分析しない！' },
+    { first: 'sakura', a: '当事者になると理論は機能しない。三峰さんも——', b: '理論なんて、最初から持ってないし！ ……うるさいな' },
+  ],
+  'heikatsu|mitsumine_cheer': [
+    { first: 'heikatsu', a: '三峰。内進のお前が、なんで理数科のところにいるんだ', b: 'せ、先生！ こっちの方が……面白い試合だったので！ 応援です！' },
+    { first: 'heikatsu', a: '体育着に鉢巻か。ずいぶん本気の応援だな', b: '動きやすいだけです！ 別に、三重のために着たわけじゃ……！' },
+    { first: 'heikatsu', a: 'さっきから三重の名前が、二階まで響いてたぞ', b: '二階から言ってましたので！ ……あ、そういう意味じゃなくて！' },
+    { first: 'heikatsu', a: '席を選ぶのにも、そこを選ぶ理由があるんだな', b: '地理の話にしないでください！ たまたま、見やすかったんです！' },
+    { first: 'mitsumine_cheer', a: '先生。内進に戻るの、試合が終わってからでもいいですか', b: '最後まで見ていけ。お前が見たい方を、な' },
+  ],
+  'kakusei|mitsumine_cheer': [
+    { first: 'kakusei', a: '……あの日は、二点差だったな', b: '……' },
+    { first: 'kakusei', a: '……応援、ちゃんと聞こえてた', b: '……' },
+    { first: 'kakusei', a: '……もう一度だけ、名前を呼んでくれ', b: '……' },
+    { first: 'kakusei', a: '……ごめん。今度こそ、間に合いたかった', b: '……' },
+  ],
   'mie|mitsumine': [
     { first: 'mie', a: 'は？', b: 'は？', note: '（ハモリ）' },
     { first: 'mitsumine', a: 'あんたも〈は？〉って思ってるでしょ', b: '思ってる' },
@@ -1132,7 +1224,7 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
     { first: 'rei', a: 'それ、データあるの？', b: '文献調査です。自分のデータはないので' },
   ],
 
-  // ───── 塀勝也（ヘイカツ：隠しキャラ③／地理教師）との掛け合い ─────
+  // ───── 塀勝也（ヘイカツ：隠しキャラ②／地理教師）との掛け合い ─────
   // 生徒は先生に敬語。ヘイカツは「お前ら」と友達言葉。掛け合いの素材は motoneta1.md のみ
   // （覚醒三重との掛け合いだけ、motoneta2.md の「治水工事」「人命救助」「防波堤」を使う）。
   'heikatsu|mie': [
@@ -1187,7 +1279,7 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
     { first: 'kakusei', a: '先生。地面は、忘れないですか', b: '忘れない。だから、お前の地図もまだ残ってる' },
   ],
 
-  // ───── 覚醒三重（隠しキャラ②）との掛け合い ─────
+  // ───── 覚醒三重（隠しキャラ④）との掛け合い ─────
   // 覚醒三重＝三峰瑠衣の葬儀に、土木現場のハンマーをカバンの底に沈めて出席した三重県臣。
   // 「通夜を終えて現場へ戻る男」ではなく「数理零を殺す覚悟で式場に来た男」。
   // 三峰はこの時点で死んでいるので、覚醒三重が三峰と対峙しても三峰は何も返さない。
@@ -1235,6 +1327,7 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
 
 /** 同キャラ対戦（自己対話）の専用掛け合い。未定義なら「自演じゃなくて自己対話だよ」 */
 export const MIRROR_INTROS: Partial<Record<CharId, { a: string; b: string }>> = {
+  mitsumine_cheer: { a: 'あたしの声、そんなに大きかった？', b: '別に。……三重には、届いたんじゃない？' },
   sakura: { a: '同一個体を二つ観測した場合、n=2になりますか', b: 'なりません。自己対話はn=1のままです' },
   heikatsu: { a: '──同じ地図だ。お前は、何が見える', b: '……同じ地図でも、見え方が違う。それでいい' },
   kakusei: { a: '……お前も、葬式か', b: 'ああ。……鉄は、一本しかない' },
@@ -1272,4 +1365,9 @@ export const LOVE_NOTE_PAGES = [
 
 export function pairKey(a: CharId, b: CharId): string {
   return [a, b].sort().join('|');
+}
+
+/** 対戦中とリザルトで同じ勝利セリフの候補を使う。 */
+export function winQuotesFor(winner: CharId, loser: CharId): string[] {
+  return CHARS[winner].matchupWins?.[loser] ?? CHARS[winner].wins;
 }

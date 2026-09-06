@@ -289,7 +289,7 @@ export default function TitleScreen({
                 <div className="mt-1 text-amber-200">{huDef.title}</div>
                 <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-300">
                   <span className="inline-block h-3 w-3 border border-white/40" style={{ background: huDef.tieColor }} />
-                  {huDef.affiliation}（ネクタイ：{huDef.tie}）
+                  {huDef.affiliation}（{huDef.outfitLabel ?? `ネクタイ：${huDef.tie}`}）
                 </div>
                 <div className="mt-3 border-l-4 bg-black/40 p-2 text-sm text-slate-100" style={{ borderColor: huMeta.accent }}>
                   {huMeta.quote}
@@ -367,6 +367,7 @@ function HelpContent({ hiddenUnlocked = {} }: { hiddenUnlocked?: HiddenUnlocks }
         <li>2本先取。制限時間99秒（授業終了で体力の多い方が勝ち）。チーム戦は相手チーム全滅で1本。</li>
         <li>チーム戦（乱戦）は最大8人が同時に戦う。味方への攻撃は当たらない。青●と赤●が目印。</li>
         <li>攻撃を当てる／受けると✝本質✝ゲージが溜まる。MAXで超必殺技（立ち絵カットイン付き）。</li>
+        {hiddenUnlocked.mitsumine_cheer && <li>三峰瑠衣(応援)だけは空中でも左右に移動・反転できる。上でAIRを使って浮き直し、下で急降下。専用の空中弱・強は各1回、着地で復活。</li>}
         <li>空中でも弱・強攻撃が出せる。三重の「は？」は当身。飛び道具も跳ね返す。</li>
         <li>試合中はランダムで✝本質✝イベントが発生する。ヘイカツが窓の外を見たら全員止まる。</li>
         <li>CPU偏差値はタイトルで変更。偏差値85に勝つと偏差値100が解禁。</li>

@@ -15,6 +15,8 @@ interface Options {
   paused?: (slot: number, now: number) => boolean;
   latency?: (slot: number, now: number) => number;
   fighters?: StartFighter[];
+  inputMask?: (slot: number, frame: number) => number;
+  initialMeter?: number;
 }
 
 /** 仮想時計＋順序を保持する回線で、実際のリレー・時計・Battleを組み合わせて検証する。 */
@@ -32,13 +34,14 @@ function simulate(options: Options = {}) {
     return {
       slot, frame: 0, starts, nextRender: starts, lastRender: starts,
       clock: new OnlineClock(delay), buffer: new InputBuffer(), sent: new Set<number>(),
-      hashes: new Map<number, number>(),
+      hashes: new Map<number, number>(), seen: new Set<string>(),
       battle: new Battle({
         p1: setup.p1, p2: setup.p2, stage: setup.stage, difficulty: setup.difficulty,
         seed: setup.seed, online: true, ai: [false, false], fighters: setup.fighters,
       }),
     };
   });
+  if (options.initialMeter !== undefined) for (const c of clients) for (const f of c.battle.f) f.meter = options.initialMeter;
   const events = new Map<number, (() => void)[]>();
   const lag: { at: number; slots: number[] }[] = [];
   const canonical: { at: number; frame: number; slot: number; mask: number }[] = [];
@@ -71,13 +74,20 @@ function simulate(options: Options = {}) {
         const target = c.frame + delay;
         if (!c.sent.has(target) && c.buffer.get(target, c.slot) === undefined) {
           c.sent.add(target);
-          const mask = (c.slot % 2 === 0 ? 2 : 1) | (target % 37 === 0 ? 16 : 0);
+          const mask = options.inputMask?.(c.slot, target) ?? ((c.slot % 2 === 0 ? 2 : 1) | (target % 37 === 0 ? 16 : 0));
           schedule(c.slot, upAt, () => relay.receive(target, c.slot, mask, now));
         }
         const inputs = fighters.map((f, slot) => f.sessionId === null || c.frame < delay
           ? EMPTY_INPUT : c.buffer.get(c.frame, slot));
         if (inputs.some((input) => input === undefined)) return false;
         c.battle.step(inputs.map((input) => typeof input === 'number' ? unmask(input) : input!));
+        for (const f of c.battle.f) {
+          if (f.id !== 'mitsumine_cheer') continue;
+          if (f.move) c.seen.add(f.move.pose);
+          if (f.airLift < 28 && f.y < 186) c.seen.add('lift');
+          if (f.rallyT > 0) c.seen.add('rally');
+        }
+        for (const p of c.battle.projectiles) if (p.kind.startsWith('cheer')) c.seen.add(p.kind);
         c.buffer.discard(c.frame);
         c.sent.delete(c.frame);
         c.frame++;
@@ -158,4 +168,57 @@ test('eight-human team matches recover a slow player with identical state on eve
   });
   assert.ok(result.commonFrame > 650, `only ${result.commonFrame} frames ran`);
   assert.deepEqual(result.lag.at(-1)?.slots, []);
+});
+
+
+/** 固定入力のジャンプ→空中反転→拍手→降下→反響弾。両方の端末が同じ入力を再生する。 */
+const cheerInputs = (slot: number, frame: number): number => {
+  if (frame < 230) return 0;
+  if (frame < 250) return 128; // 初回はゲージ満タンから大声援
+  const t = (frame - 250) % 150;
+  const toward = slot % 2 === 0 ? 2 : 1;
+  const back = slot % 2 === 0 ? 1 : 2;
+  if (t < 17) return toward | 4;
+  if (t < 23) return back | 4;
+  if (t === 23) return 16 | 4;
+  if (t < 40) return toward | 4;
+  if (t < 46) return 32;
+  if (t < 66) return toward | 8;
+  if (t >= 88 && t <= 98) return 64;
+  return t > 100 ? toward | (t % 17 === 0 ? 16 : 0) : 0;
+};
+
+test('体育着三峰の空中資源・反響・声援が30/144Hzと通信の一時停止を跨いでも一致する', () => {
+  const result = simulate({
+    duration: 24_000, fps: [30, 144], initialMeter: 100,
+    latency: (slot, now) => slot === 1 && now > 9_000 && now < 11_000 ? 380 : 20,
+    paused: (slot, now) => slot === 1 && now >= 13_000 && now < 15_000,
+    fighters: [
+      { char: 'mitsumine_cheer', team: 0, sessionId: 'p0', aiDifficulty: 'normal', name: '応援' },
+      { char: 'mitsumine_cheer', team: 1, sessionId: 'p1', aiDifficulty: 'normal', name: '鏡像' },
+    ],
+    inputMask: (slot, frame) => slot === 0 ? cheerInputs(slot, frame) : frame < 600 ? 0 : cheerInputs(slot, frame + 63),
+  });
+  assert.ok(result.commonFrame > 1_250, `only ${result.commonFrame} frames ran`);
+  assert.deepEqual(result.lag.at(-1)?.slots ?? [], []);
+  for (const effect of ['airClap', 'airDive', 'lift', 'cheerEcho', 'cheerWave', 'rally']) {
+    assert.ok(result.clients[0].seen.has(effect), `シミュレーションで${effect}が実行されていない`);
+  }
+});
+
+test('8人の別々の入力スロットで両チームの応援三峰を選択でき、遅い端末も同じ試合へ戻る', () => {
+  const result = simulate({
+    duration: 18_000, fps: [30, 60, 60, 144, 60, 30, 60, 20], initialMeter: 100,
+    paused: (slot, now) => slot === 7 && now >= 6_000 && now < 8_000,
+    fighters: Array.from({ length: 8 }, (_, slot) => ({
+      char: slot === 0 || slot === 7 ? 'mitsumine_cheer' : slot % 2 === 0 ? 'mie' : 'ryoma',
+      team: slot % 2 as 0 | 1, sessionId: `p${slot}`, aiDifficulty: 'normal', name: `P${slot}`,
+    })),
+    inputMask: (slot, frame) => slot === 0 || slot === 7 ? cheerInputs(slot, frame) : (slot % 2 === 0 ? 2 : 1),
+  });
+  assert.ok(result.commonFrame > 1_000);
+  assert.deepEqual(result.lag.at(-1)?.slots ?? [], []);
+  assert.ok(result.clients[0].seen.has('cheerWave'));
+  assert.ok(result.clients[0].seen.has('rally'));
+  assert.equal(result.clients[7].battle.f[7].id, 'mitsumine_cheer');
 });
