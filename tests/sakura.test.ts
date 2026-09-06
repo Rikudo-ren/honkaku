@@ -3,10 +3,17 @@ import { test } from 'node:test';
 import { ALL_CHARS, CHARS, CHAR_ORDER, HIDDEN_CHARS, INTRO_PAIRS, MIRROR_INTROS, pairKey, rosterFor } from '../src/game/characters';
 import { Battle } from '../src/game/engine';
 import { EMPTY_INPUT } from '../src/game/types';
-import type { CharId, InputState, Setup } from '../src/game/types';
-import { isSakuraUnlockMatch } from '../src/game/unlock';
+import type { CharId, InputState, Setup, Side } from '../src/game/types';
+import { hiddenCharsSatisfied, NO_HIDDEN, rosterFor } from '../src/game/characters';
 
 type BattleOpts = ConstructorParameters<typeof Battle>[0];
+
+/** 解禁済みロスターなしで、この試合が「隠しキャラ解禁」を満たすか（id→bool）で判定する */
+const satisfied = (setup: Setup, winner: Side): Record<string, boolean> => {
+  const out: Record<string, boolean> = {};
+  for (const m of hiddenCharsSatisfied(NO_HIDDEN, setup, winner)) out[m.id] = true;
+  return out;
+};
 
 const run = (opts: Partial<BattleOpts>, frames: number, inputs?: (t: number, b: Battle) => InputState[]) => {
   const b = new Battle({ p1: 'sakura', p2: 'naito', ai: [true, true], difficulty: 'extreme', stage: 'classroom', seed: 42, ...opts });
@@ -17,24 +24,59 @@ const run = (opts: Partial<BattleOpts>, frames: number, inputs?: (t: number, b: 
   return b;
 };
 
-test('櫻優は隠しキャラ：通常ロスターには出ず、解禁すると末尾に追加される', () => {
+test('隠しキャラ①櫻優・②覚醒三重：通常ロスターには出ず、解禁すると末尾に追加される', () => {
   assert.ok(!CHAR_ORDER.includes('sakura'));
-  assert.deepEqual(HIDDEN_CHARS, ['sakura']);
-  assert.deepEqual(rosterFor(false), CHAR_ORDER);
-  assert.deepEqual(rosterFor(true), [...CHAR_ORDER, 'sakura']);
+  assert.ok(!CHAR_ORDER.includes('kakusei'));
+  assert.deepEqual(HIDDEN_CHARS, ['sakura', 'kakusei']);
+  assert.deepEqual(rosterFor({}), CHAR_ORDER);
+  assert.deepEqual(rosterFor({ sakura: true }), [...CHAR_ORDER, 'sakura']);
+  assert.deepEqual(rosterFor({ kakusei: true }), [...CHAR_ORDER, 'kakusei']);
+  assert.deepEqual(rosterFor({ sakura: true, kakusei: true }), [...CHAR_ORDER, 'sakura', 'kakusei']);
   assert.deepEqual(ALL_CHARS, [...CHAR_ORDER, ...HIDDEN_CHARS]);
   assert.equal(CHARS.sakura.hidden, true);
   assert.equal(CHARS.sakura.look.tieColor, '#2f4f8f', '内進コースなのでネクタイは紺');
+  assert.equal(CHARS.kakusei.hidden, true);
+  assert.equal(CHARS.kakusei.look.outfit, 'kensetsu', '覚醒三重は土木作業員の恰好');
+  assert.equal(CHARS.kakusei.look.weapon, 'hammer', '大ハンマーを持つ');
+});
+
+test('覚醒三重の解禁条件：青1人（人間）で赤7体（偏差値100のCPU）にチーム戦で勝つ', () => {
+  const NAMES = ['kakusei', 'mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei', 'sakura'] as const;
+  const F = (i: number, team: 0 | 1, ai: boolean, aiDifficulty: 'extreme' | 'hard' = 'extreme') => ({ char: NAMES[i], team, ai, aiDifficulty });
+  const mk = (mut?: (fs: NonNullable<Setup['fighters']>) => NonNullable<Setup['fighters']>): Setup => {
+    const fighters = [F(0, 0, false), F(1, 1, true), F(2, 1, true), F(3, 1, true), F(4, 1, true), F(5, 1, true), F(6, 1, true), F(7, 1, true)];
+    return { mode: 'team', teamMode: true, p1: 'kakusei', p2: 'mie', difficulty: 'extreme', stage: 'classroom', fighters: mut ? mut(fighters) : fighters };
+  };
+  const isKakusei = (s: Setup, w: Side) => !!satisfied(s, w)['kakusei'];
+  assert.ok(isKakusei(mk(), 0));
+  assert.ok(!isKakusei(mk(), 1), '青が負けたら解禁されない');
+  assert.ok(!isKakusei({ ...mk(), teamMode: false }, 0), 'チーム戦でなければ解禁されない');
+  assert.ok(!isKakusei({ ...mk(), mode: '1p' }, 0), '1P対CPUでは解禁されない');
+  // 赤の1体だけ偏差値が違う
+  assert.ok(
+    !isKakusei(mk((fs) => fs.map((f, i) => (i === 2 ? { ...f, aiDifficulty: 'hard' as const } : f))), 0),
+    '偏差値100でないCPUが混ざると解禁されない'
+  );
+  // 赤に人間が混ざる
+  assert.ok(
+    !isKakusei(mk((fs) => fs.map((f, i) => (i === 3 ? { ...f, ai: false } : f))), 0),
+    '赤に人間がいると解禁されない'
+  );
+  // 赤が6体では解禁されない
+  assert.ok(!isKakusei(mk((fs) => fs.slice(0, 7)), 0), '7体ちょうど必要');
+  // 青にCPUが混ざると解禁されない（自分1人だけで勝っていないと）
+  assert.ok(!isKakusei(mk((fs) => fs.map((f, i) => (i === 0 ? { ...f, ai: true, aiDifficulty: 'hard' as const } : f))), 0), '青は人間1人だけでなければいけない');
 });
 
 test('解禁条件：1P対CPU・偏差値100の内藤蘭に勝つ', () => {
   const base: Setup = { mode: '1p', p1: 'mie', p2: 'naito', difficulty: 'extreme', stage: 'classroom' };
-  assert.ok(isSakuraUnlockMatch(base, 0));
-  assert.ok(!isSakuraUnlockMatch(base, 1), '負けたら解禁されない');
-  assert.ok(!isSakuraUnlockMatch({ ...base, difficulty: 'hard' }, 0), '偏差値85では解禁されない');
-  assert.ok(!isSakuraUnlockMatch({ ...base, p2: 'mie' }, 0), '相手が内藤でないと解禁されない');
-  assert.ok(!isSakuraUnlockMatch({ ...base, mode: '2p' }, 0), '2P対戦では解禁されない');
-  assert.ok(!isSakuraUnlockMatch({ ...base, teamMode: true }, 0), 'チーム戦では解禁されない');
+  const isSakura = (s: Setup, w: Side) => !!satisfied(s, w)['sakura'];
+  assert.ok(isSakura(base, 0));
+  assert.ok(!isSakura(base, 1), '負けたら解禁されない');
+  assert.ok(!isSakura({ ...base, difficulty: 'hard' }, 0), '偏差値85では解禁されない');
+  assert.ok(!isSakura({ ...base, p2: 'mie' }, 0), '相手が内藤でないと解禁されない');
+  assert.ok(!isSakura({ ...base, mode: '2p' }, 0), '2P対戦では解禁されない');
+  assert.ok(!isSakura({ ...base, teamMode: true }, 0), 'チーム戦では解禁されない');
 });
 
 test('掛け合いは全キャラ分あり、鏡合わせも用意されている', () => {

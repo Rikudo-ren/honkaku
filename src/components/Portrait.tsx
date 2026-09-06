@@ -15,6 +15,7 @@ const PORTRAIT_FILES: Record<CharId, string> = {
   terachi: 'b1eQ6.jpg',
   rei: 'OCvNF.jpg',
   sakura: 'sakura_yu.jpg',
+  kakusei: 'kakusei_mie.jpg',
 };
 
 const mods = import.meta.glob<string>('../assets/portraits/*', {
@@ -37,6 +38,7 @@ export const USER_PORTRAIT_URLS: Record<CharId, string | null> = {
   terachi: byName[PORTRAIT_FILES.terachi.toLowerCase()] ?? null,
   rei: byName[PORTRAIT_FILES.rei.toLowerCase()] ?? null,
   sakura: byName[PORTRAIT_FILES.sakura.toLowerCase()] ?? null,
+  kakusei: byName[PORTRAIT_FILES.kakusei.toLowerCase()] ?? null,
 };
 
 // ───────────────────────── 背景（白 or 黒）の透過処理 ─────────────────────────

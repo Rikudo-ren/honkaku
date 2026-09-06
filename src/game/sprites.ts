@@ -156,9 +156,9 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   const outfit = look.outfit;
   const blazer = '#26335f';
   const blazerD = '#1b2547';
-  const sleeve = outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : blazer;
-  const body = outfit === 'vest' ? '#242b4c' : outfit === 'suit' ? '#6e6a5e' : blazer;
-  const pants = outfit === 'suit' ? '#45454a' : '#243059';
+  const sleeve = outfit === 'vest' ? '#eeeef4' : outfit === 'suit' ? '#6e6a5e' : outfit === 'kensetsu' ? '#232938' : blazer;
+  const body = outfit === 'vest' ? '#242b4c' : outfit === 'suit' ? '#6e6a5e' : outfit === 'kensetsu' ? '#e0691a' : blazer;
+  const pants = outfit === 'suit' ? '#45454a' : outfit === 'kensetsu' ? '#4a4640' : '#243059';
   const shoe = isF ? '#5b3a22' : '#141418';
   const sock = '#1c1c28';
   const dy = P.dy;
@@ -340,6 +340,17 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   };
 
   const torso = () => {
+    if (outfit === 'kensetsu') {
+      // 工事ベスト（ハイビズ）：暗い作業着の上にオレンジの反射ベスト
+      R(-6 + ln, -30 + dy, 12, 16, '#242a38');
+      R(-3 + ln, -29 + dy, 6, 14, '#e0691a');
+      R(-3 + ln, -24 + dy, 6, 1, '#d8e0ea');
+      R(-3 + ln, -19 + dy, 6, 1, '#d8e0ea');
+      R(-3 + ln, -29 + dy, 1, 14, '#c9d2dc');
+      R(2 + ln, -29 + dy, 1, 14, '#c9d2dc');
+      R(-6 + ln, -15 + dy, 12, 1, '#1a202e');
+      return;
+    }
     R(-6 + ln, -30 + dy, 12, 16, body);
     if (outfit !== 'vest') R(-6 + ln, -30 + dy, 12, 1, blazerD);
     R(-2 + ln, -30 + dy, 4, 2, '#f4f4f8');
@@ -557,6 +568,25 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     }
   };
 
+  /** 工事ヘルメット（kensetsu 服装のとき頭頂に描く）。R() が左右を反転してくれるので前面ツバは常に正面に来る。 */
+  const helmet = () => {
+    if (outfit !== 'kensetsu') return;
+    const hx = ln;
+    const hy = dy;
+    R(-7 + hx, -46 + hy, 14, 3, '#facc15');
+    R(-6 + hx, -47 + hy, 12, 1, '#fde047');
+    R(-5 + hx, -48 + hy, 3, 1, '#fde047');
+    R(-7 + hx, -43 + hy, 14, 2, '#e0a800');
+    R(-7 + hx, -44 + hy, 14, 1, '#f6d030');
+    // 前面のツバ（+x 側 → 向きに応じて鏡映される）
+    R(5 + hx, -43 + hy, 4, 1, '#c78a00');
+    R(5 + hx, -42 + hy, 2, 1, '#e0a800');
+    // 頭頂のアタッチメント
+    R(-2 + hx, -49 + hy, 4, 1, '#fdd835');
+    // ヘルメットの下からはみ出る額の毛
+    R(-1 + hx, -41 + hy, 2, 1, look.hairColor);
+  };
+
   const weapon = () => {
     if (!P.weapon) return;
     const hx = hand.x;
@@ -603,6 +633,19 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(hx + 1, hy - 3, 4, 1, '#a34d6b');
         R(hx + 3, hy - 1, 1, 1, '#e879f9');
         break;
+      case 'hammer':
+        // 大ハンマー（解体用）── 手から真下に柄、その先に金属の頭
+        R(hx - 1, hy + 1, 3, 16, '#9c6a34');
+        R(hx - 1, hy + 1, 1, 16, '#b98a4e');
+        R(hx + 1, hy + 3, 1, 12, '#6e4a22');
+        R(hx - 1, hy + 17, 3, 2, '#4a3518');
+        R(hx - 5, hy - 8, 11, 6, '#a7adb8');
+        R(hx - 5, hy - 8, 11, 1, '#d5dae1');
+        R(hx - 5, hy - 4, 11, 2, '#565b63');
+        R(hx - 6, hy - 9, 2, 7, '#3a3f46');
+        R(hx + 4, hy - 9, 2, 7, '#3a3f46');
+        R(hx - 4, hy - 8, 3, 2, '#e8ecf0');
+        break;
     }
   };
 
@@ -646,6 +689,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   torso();
   accessory();
   head();
+  helmet();
   arm('F', P.armF);
   weapon();
   paper();

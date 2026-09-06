@@ -322,6 +322,29 @@ export class Renderer {
         }
         break;
       }
+      case 'shock': {
+        // 覚醒三重の「地面震撃」：地面を走る亀裂と砕けた瓦礫
+        const d = p.vx >= 0 ? 1 : -1;
+        const front = d === 1 ? x : x + 1;
+        // 進行方向の盛り上がり
+        g.fillStyle = '#e7dcc7';
+        g.fillRect(front - (d === 1 ? 4 : 0), y - 4, 1, 3);
+        g.fillRect(front - (d === 1 ? 2 : -1), y - 2, 1, 2);
+        // 地を割る亀裂（一定間隔で後ろへ）
+        for (let i = 0; i < 5; i++) {
+          const bx = x - d * (2 + i * 3 + Math.floor(t / 6) % 2);
+          const len = 2 + (i % 3);
+          g.fillStyle = i % 2 ? '#b9a57e' : '#8f7c5c';
+          g.fillRect(Math.round(bx) - 1, y - 1, len, 1);
+        }
+        // 飛び散る破片
+        const bob = Math.floor(t / 4) % 3;
+        g.fillStyle = '#cbb690';
+        g.fillRect(x - d * 3, y - 3 - bob, 1, 1);
+        g.fillStyle = '#e7dcc7';
+        g.fillRect(x + d * 2, y - 2 - (bob === 2 ? 2 : 0), 1, 1);
+        break;
+      }
       case 'formula':
       case 'qed':
       case 'kusa':

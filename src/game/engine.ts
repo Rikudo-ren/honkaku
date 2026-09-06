@@ -566,6 +566,8 @@ export class Battle {
         return 'point';
       case 'sakura':
         return (f.superData as { confessed?: boolean })?.confessed ? 'spread' : 'confess';
+      case 'kakusei':
+        return 'swing';
     }
   }
 
@@ -596,7 +598,16 @@ export class Battle {
   /** 描画用フェーズ */
   phaseOf(f: Fighter): 0 | 1 | 2 {
     if (f.state === 'attack') return f.movePhase;
-    if (f.state === 'super') return 1;
+    if (f.state === 'super') {
+      // 覚醒三重は超必殺中も「振りかぶり→振り下ろし→構え戻し」とアニメを進める
+      if (f.id === 'kakusei') {
+        const T = f.superT;
+        if (T < 26) return 0;
+        if (T < 70) return 1;
+        return 2;
+      }
+      return 1;
+    }
     return 0;
   }
 
@@ -1235,6 +1246,11 @@ export class Battle {
     return v.blocking && (v.state === 'idle' || v.state === 'walk' || v.state === 'crouch');
   }
 
+  /** 超アーマー中か（覚醒三重の振りかぶり〜振り抜き）。地上かつ攻撃中かつ振り抜き後でないときのみ。 */
+  private armorActive(v: Fighter): boolean {
+    return v.state === 'attack' && !!v.move?.armor && v.movePhase !== 2 && v.y >= GROUND && v.hp > 0;
+  }
+
   private resolveHits() {
     if (this.phase !== 'fight') return;
     for (const f of this.f) {
@@ -1289,12 +1305,17 @@ export class Battle {
     const wasCombo = vic.state === 'hurt' || vic.state === 'launch' || vic.state === 'stun' || vic.state === 'grabbed';
     vic.hp = Math.max(0, vic.hp - dmg);
     vic.flash = 3;
-    const kd = !!m.knockdown || vic.hp <= 0 || vic.y < GROUND;
+    const lethal = vic.hp <= 0;
+    const armored = this.armorActive(vic);
+    const kd = !!m.knockdown || lethal || vic.y < GROUND;
     if (vic.state !== 'grabbed') {
-      if (kd) {
+      if (armored && !lethal) {
+        // 超アーマー（覚醒三重）：体勢は崩れず振り続ける。ダメージは食らう＝殴り合いに持ち込む
+        if (!wasCombo && this.t % 3 === 0) this.text('崩れねェ', vic.x, vic.y - 60, { size: 7, color: '#fdba74', life: 24, vy: -0.3 });
+      } else if (kd) {
         this.setState(vic, 'launch');
-        vic.vy = -(m.kby || 3) - (vic.hp <= 0 ? 1.5 : 0);
-        vic.vx = dir * ((m.kbx || 2) + (vic.hp <= 0 ? 1.5 : 0));
+        vic.vy = -(m.kby || 3) - (lethal ? 1.5 : 0);
+        vic.vx = dir * ((m.kbx || 2) + (lethal ? 1.5 : 0));
         vic.y -= 1;
       } else {
         this.setState(vic, 'hurt', m.hitstun);
@@ -1425,6 +1446,17 @@ export class Battle {
             break;
           }
           if (!this.hittable(f)) continue;
+          if (this.armorActive(f)) {
+            // 覚醒三重の振り：飛び道具を叩き落として砕く（ミエの「反射」とは違い消滅させる）
+            const sdir: Facing = p.vx !== 0 ? (p.vx > 0 ? 1 : -1) : 1;
+            dead = true;
+            f.meter = Math.min(100, f.meter + 6);
+            this.dust(f.x - sdir * 6);
+            this.dust(f.x + sdir * 2);
+            this.text('砕いた', f.x - sdir * 6, f.y - 58, { size: 7, color: '#fdba74', life: 26, vy: -0.3 });
+            this.sfx('heavy');
+            break;
+          }
           if (f.countering) {
             p.owner = f.idx;
             p.vx = -p.vx * 1.25;
@@ -1447,7 +1479,7 @@ export class Battle {
           const owner = p.owner;
           const att: Fighter | null = owner === -1 ? null : this.f[owner];
           const dir: Facing = p.vx !== 0 ? (p.vx > 0 ? 1 : -1) : f.x >= p.x ? 1 : -1;
-          if (this.isBlocking(f) && p.kind !== 'kuraishi' && p.kind !== 'vending') {
+          if (this.isBlocking(f) && p.kind !== 'kuraishi' && p.kind !== 'vending' && p.kind !== 'shock') {
             this.applyBlock(att, f, p.dmg, p.hitstun);
           } else {
             this.applyHit(att, f, p.dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: p.kby, knockdown: p.knockdown }, dir, p.kind === 'cross' ? 'cross' : 'hit');
@@ -1717,7 +1749,75 @@ export class Battle {
         if (T >= 54) this.setState(f, 'idle');
         break;
       }
+      case 'kakusei': {
+        // 葬式は終わった ── 前へ進みながら大ハンマーで3連の解体を叩き込み、各撃の衝撃が
+        // 「地を走る震撃」となって画面の端まで届く。着地の相手は逃げ場がないが、ジャンプで震撃は飛び越えられる。
+        if (T === 1) {
+          this.setBanner('葬式は終わった', '何も解決しなかった ── だから、こわす。', c, 130);
+          this.sfx('heavy');
+        }
+        // 前進（ハンマーを振りかぶりながら）
+        if (T >= 2 && T <= 30) {
+          f.x = clamp(f.x + f.facing * 3.1, 10, W - 10);
+          if (T % 2 === 0) this.afterimage(f);
+        }
+        const impact = (x: number, txt: string, big: boolean) => {
+          this.ring(x, GROUND - 6, '#fdba74', big ? 44 : 30);
+          this.dust(x - 8);
+          this.dust(x + 8);
+          this.shake = Math.max(this.shake, big ? 12 : 7);
+          this.flash = Math.max(this.flash, big ? 7 : 4);
+          this.text(txt, x, GROUND - 52, { size: big ? 16 : 12, color: '#fdba74', life: 40, vy: -0.3, shake: big });
+          this.sfx('heavy');
+        };
+        // その場に立ち止まって叩き込む
+        if (T === 34) {
+          impact(f.x + f.facing * 20, '解体！', false);
+          this.spawnShockSuper(f, 34, 10);
+        }
+        if (T === 48) {
+          impact(f.x + f.facing * 20, '排除！', false);
+          this.spawnShockSuper(f, 48, 10);
+        }
+        if (T === 64) {
+          impact(f.x + f.facing * 20, '更地！', true);
+          this.spawnShockSuper(f, 64, 16);
+        }
+        if (T >= 86) this.setState(f, 'idle');
+        break;
+      }
     }
+  }
+
+  /** 覚醒三重の超必殺：その場の至近敵を直撃しつつ、画面端まで走る貫通の地面震撃を放つ */
+  private spawnShockSuper(f: Fighter, at: number, dmg: number) {
+    void at;
+    // 至近（ハンマーで直接叩く範囲）の生存敵を直撃
+    for (const e of this.aliveEnemies(f)) {
+      if (Math.abs(e.x - f.x) < 44 && e.y > GROUND - 60 && this.hittable(e)) {
+        const dir: Facing = e.x >= f.x ? 1 : -1;
+        this.applyHit(f, e, dmg * this.dmgMulOf(f), { hitstun: 28, kbx: 3.5, kby: 4.6, knockdown: true }, dir, 'heavy');
+      }
+    }
+    // 画面の端まで走る貫通の地面震撃（ジャンプで飛び越え可能）
+    this.spawnProj({
+      kind: 'shock',
+      owner: f.idx,
+      x: f.x + f.facing * 18,
+      y: GROUND - 7,
+      vx: f.facing * 4.6,
+      vy: 0,
+      w: 12,
+      h: 14,
+      dmg: dmg * this.dmgMulOf(f) * 0.8,
+      hitstun: 22,
+      kbx: 2.6,
+      kby: 3.4,
+      knockdown: true,
+      life: 150,
+      ground: true,
+      pierce: true,
+    });
   }
 
   private applyTerachi(f: Fighter, o: Fighter, oc: TerachiOutcome) {

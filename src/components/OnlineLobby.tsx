@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CHARS, DIFFICULTY_SHORT, rosterFor } from '@/game/characters';
+import type { HiddenUnlocks } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { audio } from '@/game/audio';
 import { DEFAULT_NAME, MAX_NAME, net, sanitizeName, type LobbyAi, type LobbyInfo, type StartData } from '@/game/net';
@@ -7,8 +8,8 @@ import type { CharId, Difficulty, Team } from '@/game/types';
 import { MAX_FIGHTERS, TEAM_COLORS, TEAM_NAMES } from '@/game/types';
 
 interface Props {
-  /** 隠しキャラ「櫻優」が解禁済みか（解禁している人だけオンラインでも選べる） */
-  sakuraUnlocked?: boolean;
+  /** 隠しキャラの解禁状況（解禁している人だけオンラインでも選べる） */
+  hiddenUnlocked?: HiddenUnlocks;
   onStart: (data: StartData) => void;
   onBack: () => void;
 }
@@ -17,8 +18,8 @@ type Stage = 'menu' | 'code-input' | 'connecting' | 'lobby' | 'error';
 
 const DIFFS: Difficulty[] = ['easy', 'normal', 'hard', 'extreme'];
 
-export default function OnlineLobby({ sakuraUnlocked = false, onStart, onBack }: Props) {
-  const roster = rosterFor(sakuraUnlocked);
+export default function OnlineLobby({ hiddenUnlocked = {}, onStart, onBack }: Props) {
+  const roster = rosterFor(hiddenUnlocked);
   // 再戦時：既に部屋に入っているならロビー画面から始める
   const [stage, setStage] = useState<Stage>(net.connected ? 'lobby' : 'menu');
   const [error, setError] = useState('');

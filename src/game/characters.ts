@@ -1,23 +1,123 @@
-import type { CharDef, CharId, Difficulty, Look, StageDef } from './types';
+import type { CharDef, CharId, Difficulty, Look, Setup, Side, StageDef } from './types';
 
 /** 通常ロスター（最初から選べる6人） */
 export const CHAR_ORDER: CharId[] = ['mie', 'ryoma', 'naito', 'mitsumine', 'terachi', 'rei'];
-/** 隠しキャラクター（解禁で選択可能になる） */
-export const HIDDEN_CHARS: CharId[] = ['sakura'];
+// ═══════════════════════════════════════════════════════════════════════
+//  隠しキャラ（解禁でロスターに追加される）の定義
+//  新しい隠しキャラを増やす手順（3ステップ）:
+//    1. types.ts の CharId に id を追加する
+//    2. このファイルの CHARS にキャラ定義を1つ足す
+//    3. HIDDEN_CHARS 配列に id を加え、HIDDEN_META に解禁条件・演出用文言を1項目足す
+//  ロスター・解禁判定・解禁演出・??の枠・ヒントは全てここから自動で作られる。
+// ═══════════════════════════════════════════════════════════════════════
+
+/** 隠しキャラクター（解禁で選択可能になる）。並び順＝解禁後にロスター末尾へ付く順番 */
+export const HIDDEN_CHARS: CharId[] = ['sakura', 'kakusei'];
 /** 隠しキャラ込みの全ロスター */
 export const ALL_CHARS: CharId[] = [...CHAR_ORDER, ...HIDDEN_CHARS];
-/** 解禁状況に応じたロスター */
-export function rosterFor(sakuraUnlocked: boolean): CharId[] {
-  return sakuraUnlocked ? ALL_CHARS : CHAR_ORDER;
+
+/** 解禁状況：隠しキャラの id → true（未解禁は undefined） */
+export type HiddenUnlocks = Partial<Record<CharId, boolean>>;
+/** 未解禁（空）の状態 */
+export const NO_HIDDEN: HiddenUnlocks = {};
+
+export const isHiddenChar = (id: CharId): boolean => HIDDEN_CHARS.includes(id);
+
+/** 解禁状況に応じたロスター（先頭は常に通常6人、解禁済みの隠しキャラが順に続く） */
+export function rosterFor(u: HiddenUnlocks = {}): CharId[] {
+  return [...CHAR_ORDER, ...HIDDEN_CHARS.filter((h) => u[h])];
 }
-/** 隠しキャラ解禁のヒント（キャラ選択画面の「？？？」枠に表示） */
-export const SAKURA_UNLOCK_HINT = {
-  title: '？？？',
-  sub: '紺のネクタイが、もう一人。',
-  hint: 'ヒント：微笑む観測者を、最高偏差値で観測せよ。',
+
+/** まだ解禁していない隠しキャラ（キャラ選択の「？？？」枠に出す） */
+export function lockedHidden(u: HiddenUnlocks = {}): CharId[] {
+  return HIDDEN_CHARS.filter((h) => !u[h]);
+}
+
+/** 1キャラ分の「隠しキャラ」メタ情報。解禁条件と、解禁演出・??????の枠・バナーで使う文言をここに集約する。 */
+export interface HiddenMeta {
+  /** CHARS のキーと同一 */
+  id: CharId;
+  /** localStorage の解禁フラグキー */
+  key: string;
+  /** 演出の主色（枠・発光・ラベルに使う） */
+  accent: string;
+  /** 「？？？」枠や演出で出す見出し（未解禁時は「？？？」） */
+  title: string;
+  /** 「？？？」枠の2行目（伏せ文字） */
+  sub: string;
+  /** 「？？？」枠にだけ出すヒント（※タイトル等には出さない） */
+  hint: string;
   /** 操作説明などで出す、はっきりした条件 */
-  condition: '1P対CPU・偏差値100の内藤蘭に勝利すると解禁',
-};
+  condition: string;
+  /** 「？？？」枠の左帯色 */
+  stripe: string;
+  /** 解禁演出：胸に刺さる一言 */
+  quote: string;
+  /** 解禁演出：その下の解説 */
+  byline: string;
+  /** 解禁演出：技の紹介 */
+  kit: string;
+  /** リザルトの予告バナー見出し */
+  bannerTitle: string;
+  /** リザルトの予告バナー本文 */
+  bannerText: string;
+  /** この試合結果が解禁条件を満たすか */
+  isUnlock: (setup: Setup, winner: Side) => boolean;
+}
+
+export const HIDDEN_META: HiddenMeta[] = [
+  {
+    id: 'sakura',
+    key: 'honkaku_sakura_unlocked',
+    accent: '#e879f9',
+    title: '？？？',
+    sub: '紺のネクタイが、もう一人。',
+    hint: 'ヒント：微笑む観測者を、最高偏差値で観測せよ。',
+    condition: '1P対CPU・偏差値100の内藤蘭に勝利すると解禁',
+    stripe: '#2f4f8f',
+    quote: '「両馬先輩。報告があります。私は恋をしました」',
+    byline: '── 微笑む観測者を最高偏差値で観測した者の前に、紺のネクタイがもう一人現れた。',
+    kit: '必殺「シュレディンガーの好意」で未観測の♡？を置き、超必殺「実存的崩壊」で告白＝観測。被弾・ガードで研究データ n が溜まるほど重くなる。',
+    bannerTitle: '紺のネクタイが、もう一人来た。',
+    bannerText: '微笑む観測者を最高偏差値で観測した ── タイトルに戻ると報告があります',
+    isUnlock: (setup, winner) => winner === 0 && setup.mode === '1p' && setup.difficulty === 'extreme' && setup.p2 === 'naito' && !setup.teamMode,
+  },
+  {
+    id: 'kakusei',
+    key: 'honkaku_kakusei_unlocked',
+    accent: '#fb923c',
+    title: '？？？',
+    sub: '通夜が終わらない。だから、現場へ。',
+    hint: 'ヒント：青の一人で、赤の七人を同時に鎮圧せよ（偏差値100）。',
+    condition: 'チーム戦で青1人（自分）だけを率い、赤7体（偏差値100のCPU）に勝利すると解禁',
+    stripe: '#b45309',
+    quote: '「葬式は終わった。何も解決しなかった。だから、こわす」',
+    byline: '── 青の一人で赤の七人を鎮圧した者の前に、否定の守護者が壊す側の男として現れた。',
+    kit: '強攻撃「解体の一撃」は振りかぶり〜振り抜きが超アーマーで止まらず、飛び道具も叩き落とす。必殺「地面震撃」で地を走る衝撃波を飛ばし、超必殺「葬式は終わった」は各撃の震撃が画面の端まで届く。弱点は空中。飛び越えられると脆い。',
+    bannerTitle: '青の一人が、赤の七人を鎮圧した。',
+    bannerText: '葬式は終わらない ── タイトルに戻ると、現場から誰かが現れます',
+    isUnlock: (setup, winner) => {
+      // チーム戦で、青が人間1人だけ・赤が偏差値100のCPUのみ・その青が勝つ
+      if (winner !== 0 || !setup.teamMode || setup.mode !== 'team') return false;
+      const fs = setup.fighters;
+      if (!fs || fs.length < 2) return false;
+      const blue = fs.filter((f) => f.team === 0);
+      const red = fs.filter((f) => f.team === 1);
+      if (blue.filter((f) => !f.ai).length !== 1) return false;
+      if (red.length < 7) return false;
+      if (red.some((f) => f.ai !== true || f.aiDifficulty !== 'extreme')) return false;
+      return true;
+    },
+  },
+];
+
+/** id から隠しキャラのメタ情報を引く */
+export const hiddenMeta = (id: CharId): HiddenMeta | undefined => HIDDEN_META.find((m) => m.id === id);
+
+/** 解禁済みの隠しキャラのうち、今回の試合結果で新たに条件を満たしたもの */
+export function hiddenCharsSatisfied(u: HiddenUnlocks, setup: Setup, winner: Side): HiddenMeta[] {
+  return HIDDEN_META.filter((m) => !u[m.id] && m.isUnlock(setup, winner));
+}
 
 const JAB_BOX = { x: 5, y: -32, w: 14, h: 9 };
 const SWING_BOX = { x: 3, y: -38, w: 17, h: 18 };
@@ -656,6 +756,105 @@ export const CHARS: Record<CharId, CharDef> = {
     stats: { power: 2, speed: 3, honshitsu: 4, joushiki: 2 },
     desc: '内進コース二年。紺のネクタイで北棟に通う恋愛学の研究者。彼女はいません。いたこともありません。ノートは✝本質✝だらけになり、理論は崩壊中（実存的）。被弾・ガードで研究データnが溜まる。',
   },
+  kakusei: {
+    id: 'kakusei',
+    hidden: true,
+    name: '覚醒三重',
+    kana: 'みえ・けんしん（かくせい）',
+    title: '葬式から殴り込む土木作業員',
+    affiliation: '元・理数科B組（現在：現場）',
+    tie: 'えんじ（＝理数科）',
+    tieColor: '#a8262e',
+    color: '#f05a28',
+    light: '#ffefe2',
+    hp: 114,
+    speed: 1.55,
+    jump: 6.2,
+    dmgMul: 1.12,
+    look: {
+      hair: 'short',
+      hairColor: '#33220f',
+      hairDark: '#1f1308',
+      eyeColor: '#d9480f',
+      skin: '#e8c4a0',
+      gender: 'm',
+      outfit: 'kensetsu',
+      weapon: 'hammer',
+      winPose: 'cool',
+    },
+    moves: {
+      light: {
+        key: 'light',
+        name: '杭打ち',
+        desc: '大ハンマーの柄で小さく叩く。速いツッコミ程度には間合いを取る。',
+        callout: ['来るな', '立ち入り禁止', '危険区域です'],
+        startup: 4,
+        active: 5,
+        recovery: 8,
+        dmg: 7,
+        hitstun: 16,
+        kbx: 2.2,
+        kby: 0,
+        box: { x: 5, y: -30, w: 20, h: 10 },
+        kind: 'melee',
+        pose: 'jab',
+        sfx: 'hit',
+      },
+      heavy: {
+        key: 'heavy',
+        name: '解体の一撃',
+        desc: '頭上から振り下ろす大振り。振りかぶり〜振り抜きは「超アーマー」で崩れず、飛び道具も叩き落とす。読まれれば振り抜き後が無防備。',
+        callout: ['ガンッ', '解体！', '更地にする', '止まらねェ'],
+        startup: 14,
+        active: 7,
+        recovery: 22,
+        dmg: 19,
+        hitstun: 30,
+        kbx: 4.2,
+        kby: 5,
+        knockdown: true,
+        box: { x: 2, y: -46, w: 27, h: 28 },
+        moveX: 2,
+        armor: true,
+        kind: 'melee',
+        pose: 'swing',
+        sfx: 'heavy',
+      },
+      special: {
+        key: 'special',
+        name: '地面震撃',
+        desc: 'ハンマーで目の前の地面を叩き、砕けた地盤が前方へ震撃（衝撃波）となって走る。地面専用なのでジャンプで飛び越えられる。',
+        callout: ['地面が来る', '割れた', '足を止めろ'],
+        startup: 15,
+        active: 6,
+        recovery: 24,
+        dmg: 13,
+        hitstun: 26,
+        kbx: 2.8,
+        kby: 3.4,
+        knockdown: true,
+        kind: 'projectile',
+        pose: 'lash',
+        sfx: 'heavy',
+        projectile: { kind: 'shock', vx: 3.8, ground: true, life: 280, w: 12, h: 14 },
+      },
+    },
+    superName: '葬式は終わった',
+    superQuote: '何も解決しなかった。だから、こわす。',
+    superDesc: '前へ進みながら大ハンマーで3連の解体（解体・排除・更地）を叩き込む。各撃は近接を直撃しつつ、砕けた地盤が画面の端まで走る貫通震撃になる。着地している相手は逃げ場がない。ジャンプで震撃は飛び越えられる。',
+    intro: '……通夜は終わった。俺は、現場から来た。',
+    wins: [
+      '……まあ（これで、多少は直ったか）',
+      '何も解決しなかった。だから、こわした',
+      '更地にして、正しく立て直す',
+      'は？（本気で言った）',
+      '否定してる場合じゃなかった',
+    ],
+    blockText: '……来た',
+    koText: '解体完了',
+    stats: { power: 5, speed: 3, honshitsu: 2, joushiki: 1 },
+    desc: '何も解決せずに終わった通夜の夜、三重県臣が現場のヘルメットと大ハンマーを掴んで帰ってきた姿。「は？」で守るのをやめ、自らこわして直すことを選んだ。高HPを活かしてアーマーで殴り合い、地を走る震撃で距離を支配する解体屋。弱点は「空中」。飛び越えられると崩れやすい。',
+  },
 };
 
 /** 櫻優「理論のない状態の恋」中の見た目：ノートを手放し、汗も引いた */
@@ -699,7 +898,7 @@ export const STAGES: StageDef[] = [
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '偏差値50',
   normal: '偏差値60（理数科）',
-  hard: '偏差値85（ガチ）',
+  hard: '偏差値85（難関）',
   extreme: '偏差値100（解禁）',
 };
 
@@ -711,9 +910,9 @@ export const DIFFICULTY_SHORT: Record<Difficulty, string> = {
 };
 
 export const DIFFICULTY_HINT: Record<Difficulty, string> = {
-  easy: 'ガード甘い・反応遅い',
+  easy: 'ガードが甘く反応も遅い',
   normal: '標準的な理数科レベル',
-  hard: 'ガードガチ・反応速い',
+  hard: 'ガードが堅く反応も速い',
   extreme: '数理零カンスト相当・ほぼ完璧',
 };
 
@@ -799,11 +998,48 @@ export const INTRO_PAIRS: Record<string, IntroLine[]> = {
     { first: 'rei', a: '面白いな', b: '面白いと言われても、私は今つらいんですが' },
     { first: 'rei', a: 'それ、データあるの？', b: '文献調査です。自分のデータはないので' },
   ],
+
+  // ───── 覚醒三重（隠しキャラ②）との掛け合い ─────
+  'kakusei|mie': [
+    { first: 'kakusei', a: '……は？　俺だ', b: '（自分の顔に「は？」と言う日が来るとは）' },
+    { first: 'mie', a: 'お前、そんな恰好で葬式から来たのか', b: '葬式は終わった。俺はこれから、現場に出る' },
+    { first: 'kakusei', a: 'お前はまだ否定で守ってるのか', b: '……否定してる場合じゃなかったのか？' },
+    { first: 'mie', a: '俺を俺で殴るな', b: 'お前も俺も、同じ構造だ。それを直す' },
+  ],
+  'kakusei|ryoma': [
+    { first: 'ryoma', a: '……三重？　その恰好まじ✝本質✝', b: 'は？（本気で）' },
+    { first: 'kakusei', a: '✝本質✝を追ってる場合か。地面を直してる', b: '俺は追う。お前は壊す。それでいいんじゃない？' },
+    { first: 'ryoma', a: '葬式、俺も行きたかった', b: '来るな。本質配信の現場がまた増える' },
+  ],
+  'kakusei|naito': [
+    { first: 'kakusei', a: '……蘭。何か、解決したか', b: '面白い考え方だね。何も解決してないよ' },
+    { first: 'naito', a: '三重くん、壊したら直せるの？', b: 'わかんない。直るまで、こわし続ける' },
+    { first: 'kakusei', a: '理論で何か直ったことはあるか？', b: '……ないね。でも、それでも面白い' },
+  ],
+  'kakusei|sakura': [
+    { first: 'kakusei', a: '……お前も、現場から来たのか', b: '私は、理論の続きです。三重先輩は……現場ですか' },
+    { first: 'sakura', a: '三重先輩。何か、解決しましたか', b: '何も。だから、こわしてる', note: '（否定の守護者は、壊す側になった）' },
+    { first: 'kakusei', a: '恋は、観測して済むものなのか？', b: '……してないから、崩れてるんです。要検証' },
+    { first: 'sakura', a: '壊した先に、何がありますか', b: '直すための地面が、そこにあるはずだ' },
+  ],
+  'kakusei|mitsumine': [
+    { first: 'mitsumine', a: '三重？　そのヘルメット、似合ってる……', b: '（素直に言うな）' },
+    { first: 'kakusei', a: '理論も、迷いも、一括で解体する', b: '理論はいい！！　……え、解体はやめて' },
+  ],
+  'kakusei|terachi': [
+    { first: 'terachi', a: 'え、三重……配信、見てた？', b: '配信より先に、地面を直せ' },
+    { first: 'kakusei', a: 'お前、本質配信のことを考えるのはやめろ', b: '……それを言うなら、俺はペットボトルです' },
+  ],
+  'kakusei|rei': [
+    { first: 'kakusei', a: '……零。面白いか、これ', b: '面白い。今のが一番面白い' },
+    { first: 'rei', a: '壊すことは、面白いデータだよ', b: '直すところまで見て、面白いって言え' },
+  ],
 };
 
 /** 同キャラ対戦（自己対話）の専用掛け合い。未定義なら「自演じゃなくて自己対話だよ」 */
 export const MIRROR_INTROS: Partial<Record<CharId, { a: string; b: string }>> = {
   sakura: { a: '同一個体を二つ観測した場合、n=2になりますか', b: 'なりません。自己対話はn=1のままです' },
+  kakusei: { a: '……通夜の続きだ', b: 'ああ。……現場は、終わらない' },
 };
 
 /** 櫻優の恋愛発生法則（超必殺で画面に散る） */
