@@ -136,6 +136,10 @@ export interface Projectile {
 
 export interface PixelFx {
   kind: 'spark' | 'ring' | 'dust' | 'crossburst' | 'heart' | 'afterimage' | 'sparkle' | 'guard' | 'soil' | 'geyser' | 'crack' | 'sound';
+  /** キャラ別の縮小立ち絵を残像にも使う。未指定のイベントFXは従来どおり。 */
+  id?: CharId;
+  /** 8人乱戦の残像も本体と同じ縮尺にする。 */
+  scale?: number;
   x: number;
   y: number;
   vx: number;
@@ -563,7 +567,22 @@ export class Battle {
   }
 
   private afterimage(f: Fighter) {
-    this.fx.push({ kind: 'afterimage', x: f.x, y: f.y, vx: 0, vy: 0, t: 0, life: 14, color: f.def.color, size: 0, look: f.look, pose: this.poseOf(f), facing: f.facing });
+    this.fx.push({
+      kind: 'afterimage',
+      id: f.id,
+      scale: this.f.length > 4 ? 0.7 : 1,
+      x: f.x,
+      y: f.y,
+      vx: 0,
+      vy: 0,
+      t: 0,
+      life: 14,
+      color: f.def.color,
+      size: 0,
+      look: f.look,
+      pose: this.poseOf(f),
+      facing: f.facing,
+    });
   }
 
   hurtbox(f: Fighter): Box {

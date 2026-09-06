@@ -1,6 +1,7 @@
 import { CHARS, EXTRA_LOOKS } from './characters';
 import { CHEER } from './cheer';
 import { GROUND, H, W, type Battle, type Fighter, type PixelFx, type Projectile } from './engine';
+import { drawPixelPortrait, sharedPixelPortraits } from './pixelPortraits';
 import { drawFighter, drawShadow } from './sprites';
 import type { CharId, StageId } from './types';
 
@@ -96,6 +97,19 @@ export class Renderer {
     this.drawOverlay(b);
   }
 
+  /** The reduced standing art is taller than the legacy 50px fallback sprite. */
+  private portraitScale(b: Battle) {
+    return b.f.length > 4 ? 0.7 : 1;
+  }
+
+  private fighterVisualHeight(f: Fighter, b: Battle) {
+    return (sharedPixelPortraits.height(f.id) ?? 52) * this.portraitScale(b);
+  }
+
+  private fighterVisualWidth(f: Fighter, b: Battle) {
+    return (sharedPixelPortraits.width(f.id) ?? 16) * this.portraitScale(b);
+  }
+
   // ═══════════════════════ GAME LAYER (1x pixel) ═══════════════════════
   private drawGame(b: Battle) {
     const g = this.g;
@@ -127,30 +141,101 @@ export class Renderer {
     }
   }
 
+  private drawMotionAccent(f: Fighter, b: Battle, pose: ReturnType<Battle['poseOf']>, phase: 0 | 1 | 2, visualTop: number) {
+    const g = this.g;
+    const d = f.facing;
+    const sx = this.portraitScale(b);
+    g.save();
+    g.imageSmoothingEnabled = false;
+
+    // Missed attacks still need a readable key pose.  These small stepped
+    // streaks are deliberately pixel-sized, so they read as animation rather
+    // than a vector slash pasted over the standing art.
+    if (f.state === 'attack' && phase === 1) {
+      const heavy = pose === 'swing' || pose === 'kick' || pose === 'throw';
+      g.globalAlpha = 0.72;
+      for (let i = 0; i < (heavy ? 5 : 3); i++) {
+        const reach = 13 + i * (heavy ? 4 : 3);
+        const yy = Math.round(f.y - 30 * sx - i * (heavy ? 4 : 3) + ((b.t + i) % 2));
+        g.fillStyle = i === 0 ? '#fff7cc' : f.def.color;
+        g.fillRect(Math.round(f.x + d * reach), yy, heavy ? 3 : 2, 1);
+        if (i % 2 === 0) g.fillRect(Math.round(f.x + d * (reach + 3)), yy - 2, 1, 2);
+      }
+    }
+
+    if (pose === 'jump' || pose === 'airStep' || pose === 'airDive' || pose === 'airClap') {
+      g.globalAlpha = 0.55;
+      g.fillStyle = '#f8fafc';
+      g.fillRect(Math.round(f.x - 8 * sx), Math.round(f.y + 1), 2, 1);
+      g.fillRect(Math.round(f.x + 6 * sx), Math.round(f.y + 2), 2, 1);
+    }
+
+    if (f.state === 'super') {
+      g.globalAlpha = 0.38 + 0.12 * Math.sin(b.t * 0.2);
+      pixEllipseOutline(g, f.x, f.y - visualTop * 0.48, 24 * sx, visualTop * 0.48, f.def.color);
+      g.globalAlpha = 0.75;
+      g.fillStyle = '#fff7cc';
+      for (let i = 0; i < 4; i++) {
+        const ang = b.t * 0.08 + i * Math.PI / 2;
+        g.fillRect(Math.round(f.x + Math.cos(ang) * (25 * sx)), Math.round(f.y - visualTop * 0.48 + Math.sin(ang) * (visualTop * 0.46)), 2, 2);
+      }
+    }
+
+    if (f.state === 'walk' && b.t % 8 < 2) {
+      g.globalAlpha = 0.45;
+      g.fillStyle = '#d8c9a4';
+      g.fillRect(Math.round(f.x - 8), GROUND - 2, 2, 1);
+      g.fillRect(Math.round(f.x + 7), GROUND - 3, 1, 1);
+    }
+    g.restore();
+  }
+
   private drawFighter(f: Fighter, b: Battle) {
     const g = this.g;
-    drawShadow(g, f.x, GROUND, GROUND - f.y);
+    const scale = this.portraitScale(b);
+    const portrait = sharedPixelPortraits.get(f.id);
+    drawShadow(g, f.x, GROUND, GROUND - f.y, this.fighterVisualWidth(f, b) * 0.72);
     const alpha = f.state === 'getup' ? 0.65 : f.invuln > 0 && f.state !== 'win' && f.state !== 'super' && f.state !== 'frozen' && b.t % 4 < 2 ? 0.55 : 1;
-    drawFighter(g, f.x, f.y, f.look, { pose: b.poseOf(f), phase: b.phaseOf(f), facing: f.facing, t: b.t, flash: f.flash > 0, alpha });
-    // status marks
+    const pose = b.poseOf(f);
+    const phase = b.phaseOf(f);
+    if (portrait) {
+      drawPixelPortrait(g, portrait, f.x, f.y, {
+        pose,
+        phase,
+        facing: f.facing,
+        t: b.t,
+        flash: f.flash > 0,
+        alpha,
+        scale,
+      });
+    } else {
+      // Loading is normally finished before a battle starts.  Keep the
+      // handcrafted sprite as a safe fallback for slow image decoding and
+      // characters without a supplied standing illustration.
+      drawFighter(g, f.x, f.y, f.look, { pose, phase, facing: f.facing, t: b.t, flash: f.flash > 0, alpha });
+    }
+    // status marks stay above the head even when a full-body pixel portrait is
+    // being used (the old offsets were tuned for the 50px fallback sprite).
+    const visualTop = this.fighterVisualHeight(f, b);
+    this.drawMotionAccent(f, b, pose, phase, visualTop);
     if (f.state === 'frozen') {
       g.fillStyle = 'rgba(147,197,253,0.55)';
       for (let i = 0; i < 6; i++) {
         const ang = (i / 6) * Math.PI * 2 + b.t * 0.03;
-        g.fillRect(Math.round(f.x + Math.cos(ang) * 12), Math.round(f.y - 24 + Math.sin(ang) * 16), 2, 2);
+        g.fillRect(Math.round(f.x + Math.cos(ang) * 18), Math.round(f.y - visualTop * 0.58 + Math.sin(ang) * 16), 2, 2);
       }
     }
     if (f.state === 'stun') {
       g.fillStyle = '#fde047';
       for (let i = 0; i < 3; i++) {
         const ang = (i / 3) * Math.PI * 2 + b.t * 0.12;
-        g.fillRect(Math.round(f.x + Math.cos(ang) * 9), Math.round(f.y - 50 + Math.sin(ang) * 3), 2, 2);
+        g.fillRect(Math.round(f.x + Math.cos(ang) * 12), Math.round(f.y - visualTop - 5 + Math.sin(ang) * 3), 2, 2);
       }
     }
     if (f.countering) {
       g.fillStyle = `rgba(125,211,252,${0.35 + 0.25 * Math.sin(b.t * 0.6)})`;
-      g.fillRect(Math.round(f.x - 12), f.y - 46, 24, 1);
-      g.fillRect(Math.round(f.x - 12), f.y - 1, 24, 1);
+      g.fillRect(Math.round(f.x - 20), Math.round(f.y - visualTop * 0.55), 40, 1);
+      g.fillRect(Math.round(f.x - 20), f.y - 1, 40, 1);
     }
   }
 
@@ -503,9 +588,17 @@ export class Renderer {
         g.fillRect(x - 3, y + 5, 2, 2);
         g.globalAlpha = 1;
         break;
-      case 'afterimage':
+      case 'afterimage': {
+        if (e.id) {
+          const portrait = sharedPixelPortraits.get(e.id);
+          if (portrait && e.pose && e.facing) {
+            drawPixelPortrait(g, portrait, e.x, e.y, { pose: e.pose, facing: e.facing, t, alpha: 0.35 * k, scale: e.scale ?? 1 });
+            break;
+          }
+        }
         if (e.look && e.pose && e.facing) drawFighter(g, e.x, e.y, e.look, { pose: e.pose, facing: e.facing, t, alpha: 0.35 * k });
         break;
+      }
       case 'soil':
         // 土砂の粒（重力で落ちる）
         g.globalAlpha = k;
@@ -750,9 +843,18 @@ export class Renderer {
       g.fillRect(x + 9, 164, 2, 8);
       g.fillRect(x + 17, 164, 2, 8);
     }
-    // Heikatsu, looking out of the window
+    // Heikatsu, looking out of the window.  Use the same reduced standing art
+    // as the battle scene so the teacher does not turn into a generic student
+    // when he appears in the classroom background.
     const looking = t % 720 < 150;
-    drawFighter(g, 44, 176, EXTRA_LOOKS.heikatsu, { pose: looking ? 'pointUp' : 'idle', facing: -1, t, alpha: 0.95 });
+    const teacher = sharedPixelPortraits.get('heikatsu');
+    if (teacher) {
+      const scale = 0.42;
+      drawShadow(g, 44, 176, 0, teacher.visibleWidth * scale * 0.72);
+      drawPixelPortrait(g, teacher, 44, 176, { pose: looking ? 'pointUp' : 'idle', facing: -1, t, alpha: 0.95, scale });
+    } else {
+      drawFighter(g, 44, 176, EXTRA_LOOKS.heikatsu, { pose: looking ? 'pointUp' : 'idle', facing: -1, t, alpha: 0.95 });
+    }
     if (looking && Math.floor(t / 30) % 2 === 0) {
       g.fillStyle = '#f8fafc';
       g.fillRect(48, 122, 12, 6);
@@ -1038,7 +1140,8 @@ export class Renderer {
 
     // fighter status labels
     for (const f of b.f) {
-      if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - 52, 5, '#e2e8f0');
+      const visualTop = this.fighterVisualHeight(f, b);
+      if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - visualTop - 4, 5, '#e2e8f0');
       if (f.hp > 0 && b.phase === 'fight' && f.def.airControl) {
         const ay = Math.min(GROUND + 7, f.y + 7);
         const width = 20;
@@ -1048,16 +1151,16 @@ export class Renderer {
         c.fillRect(f.x - width / 2, ay - 1, width * f.airLift / f.def.airControl.liftFrames, 2);
         this.txt(`AIR  ${f.airUsed & 1 ? '－' : '弱'} ${f.airUsed & 2 ? '－' : '強'}`, f.x, ay + 6, 3.8, '#e0f2fe');
       }
-      if (f.rallyT > 0 && f.hp > 0) this.txt(`声援↑ ${Math.ceil(f.rallyT / 60)}`, f.x, f.y - 49, 4.5, '#bae6fd');
+      if (f.rallyT > 0 && f.hp > 0) this.txt(`声援↑ ${Math.ceil(f.rallyT / 60)}`, f.x, f.y - visualTop - 11, 4.5, '#bae6fd');
       if (f.id === 'sakura' && f.hp > 0 && b.phase === 'fight') {
         // 研究データ n（超必殺の威力に反映）／理論のない状態の恋の残り時間
-        if (f.loveT > 0) this.txt(`恋 ${Math.ceil(f.loveT / 60)}`, f.x, f.y - 50, 5, '#f9a8d4');
-        else if (f.research > 0) this.txt(`n=${f.research}`, f.x, f.y - 50, 4.5, f.research >= 15 ? '#f0abfc' : '#e9d5ff');
+        if (f.loveT > 0) this.txt(`恋 ${Math.ceil(f.loveT / 60)}`, f.x, f.y - visualTop - 11, 5, '#f9a8d4');
+        else if (f.research > 0) this.txt(`n=${f.research}`, f.x, f.y - visualTop - 11, 4.5, f.research >= 15 ? '#f0abfc' : '#e9d5ff');
       }
       if (b.phase === 'intro' || (b.phase === 'fight' && b.phaseT < 150)) {
         const tag = f.tag ?? (f.ai ? 'CPU' : f.side === 0 ? '1P' : '2P');
         const bob = Math.sin(b.t / 6) * 1.5;
-        this.txt(`${tag}▼`, f.x, f.y - 56 + bob, 5.5, f.you || tag === 'あなた' ? '#fde68a' : f.def.color);
+        this.txt(`${tag}▼`, f.x, f.y - visualTop - 5 + bob, 5.5, f.you || tag === 'あなた' ? '#fde68a' : f.def.color);
       }
       // チームカラーの足元マーカー（チーム戦のみ）
       if (!b.isDuel && f.hp > 0 && b.phase !== 'matchEnd') {
@@ -1088,7 +1191,8 @@ export class Renderer {
       const h = 11 * grow;
       let x = f.x;
       x = Math.max(w / 2 + 2, Math.min(W - w / 2 - 2, x));
-      const y = f.y - 60 - (f.state === 'crouch' ? -6 : 0);
+      const visualTop = this.fighterVisualHeight(f, b);
+      const y = f.y - visualTop - 10 - (f.state === 'crouch' ? -6 : 0);
       c.fillStyle = '#ffffff';
       c.fillRect(x - w / 2, y - h / 2, w, h);
       c.strokeStyle = '#1f2937';
@@ -1230,7 +1334,7 @@ export class Renderer {
     // コンボ表示（チーム戦は発生位置の近くに）
     for (const f of b.f) {
       if (f.combo >= 2 && f.comboTimer > 0) {
-        this.txt(`${f.combo}HIT`, Math.max(20, Math.min(W - 20, f.x)), f.y - 68, 7, f.def.color);
+        this.txt(`${f.combo}HIT`, Math.max(20, Math.min(W - 20, f.x)), f.y - this.fighterVisualHeight(f, b) - 18, 7, f.def.color);
       }
     }
   }
@@ -1316,8 +1420,15 @@ export function drawTitleScene(g: CanvasRenderingContext2D, t: number, ids: Char
   ids.forEach((id, i) => {
     const x = Math.round(W / 2 + (i - (n - 1) / 2) * 44);
     const def = CHARS[id];
-    drawShadow(g, x, GROUND, 0);
     const pose = Math.floor((t + i * 60) / 240) % 4 === 0 ? 'win' : 'idle';
-    drawFighter(g, x, GROUND, def.look, { pose, facing: i < n / 2 ? 1 : -1, t: t + i * 13 });
+    const portrait = sharedPixelPortraits.get(id);
+    if (portrait) {
+      const scale = n > 6 ? 0.42 : 0.52;
+      drawShadow(g, x, GROUND, 0, portrait.visibleWidth * scale * 0.72);
+      drawPixelPortrait(g, portrait, x, GROUND, { pose, facing: i < n / 2 ? 1 : -1, t: t + i * 13, scale });
+    } else {
+      drawShadow(g, x, GROUND, 0);
+      drawFighter(g, x, GROUND, def.look, { pose, facing: i < n / 2 ? 1 : -1, t: t + i * 13 });
+    }
   });
 }

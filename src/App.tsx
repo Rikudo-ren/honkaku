@@ -8,6 +8,7 @@ import VersusScreen from '@/components/VersusScreen';
 import BattleScreen from '@/components/BattleScreen';
 import ResultScreen from '@/components/ResultScreen';
 import { preloadPortraits } from '@/components/Portrait';
+import { preloadPixelPortraits } from '@/game/pixelPortraits';
 import { STAGES, hiddenCharsSatisfied } from '@/game/characters';
 import type { HiddenUnlocks } from '@/game/characters';
 import { audio } from '@/game/audio';
@@ -50,16 +51,20 @@ export default function App() {
     preloadPortraits((done, total) => {
       if (cancelled) return;
       setLoadProgress(total === 0 ? 1 : done / total);
-    }).then(() => {
-      if (cancelled) return;
-      const elapsed = performance.now() - started;
-      const wait = Math.max(0, MIN_LOADING_MS - elapsed);
-      window.setTimeout(() => {
+    })
+      // 立ち絵の透過だけで終わらせず、戦闘用の縮小ドット立ち絵も
+      // ローディング中に作る。試合開始後のフォールバック→差し替えを防ぐ。
+      .then(() => preloadPixelPortraits())
+      .then(() => {
         if (cancelled) return;
-        setLoadProgress(1);
-        setScreen('title');
-      }, wait);
-    });
+        const elapsed = performance.now() - started;
+        const wait = Math.max(0, MIN_LOADING_MS - elapsed);
+        window.setTimeout(() => {
+          if (cancelled) return;
+          setLoadProgress(1);
+          setScreen('title');
+        }, wait);
+      });
     return () => {
       cancelled = true;
     };

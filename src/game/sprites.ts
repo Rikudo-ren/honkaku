@@ -656,13 +656,26 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(6 + hx, -39 + hy + drip, 1, 1, '#e6f6ff');
     }
     if (look.glasses) {
-      const g = '#2a2a30';
-      R(-1 + hx, -39 + hy, 7, 1, g);
-      R(-1 + hx, -36 + hy, 7, 1, g);
-      R(-1 + hx, -39 + hy, 1, 4, g);
-      R(2 + hx, -39 + hy, 1, 4, g);
-      R(5 + hx, -39 + hy, 1, 4, g);
-      R(-6 + hx, -38 + hy, 5, 1, g);
+      // 眼鏡は「黒い帯」ではなく、目が透ける細いセルフレームとして描く。
+      // 以前は上下の線が太く、暗いステージでサングラスに見えていた。
+      const frame = '#526070';
+      const shine = '#c9e4f2';
+      const lens = 'rgba(190,220,236,0.16)';
+      R(-1 + hx, -39 + hy, 3, 3, lens);
+      R(3 + hx, -39 + hy, 3, 3, lens);
+      R(-1 + hx, -39 + hy, 3, 1, frame);
+      R(-1 + hx, -37 + hy, 3, 1, frame);
+      R(-1 + hx, -39 + hy, 1, 3, frame);
+      R(1 + hx, -39 + hy, 1, 3, frame);
+      R(3 + hx, -39 + hy, 3, 1, frame);
+      R(3 + hx, -37 + hy, 3, 1, frame);
+      R(3 + hx, -39 + hy, 1, 3, frame);
+      R(5 + hx, -39 + hy, 1, 3, frame);
+      R(2 + hx, -38 + hy, 1, 1, frame);
+      R(-6 + hx, -38 + hy, 5, 1, frame);
+      R(6 + hx, -38 + hy, 3, 1, frame);
+      R(-1 + hx, -39 + hy, 1, 1, shine);
+      R(3 + hx, -39 + hy, 1, 1, shine);
     }
     // hair
     R(-7 + hx, -45 + hy, 14, 6, hc);
@@ -902,9 +915,9 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.globalAlpha = prevAlpha;
 }
 
-/** 足元の影 */
-export function drawShadow(ctx: CanvasRenderingContext2D, x: number, y: number, airHeight: number) {
-  const w = Math.max(6, 16 - airHeight * 0.15);
+/** 足元の影。立ち絵の横幅を渡すと、細い旧影ではなく足元に合った影になる。 */
+export function drawShadow(ctx: CanvasRenderingContext2D, x: number, y: number, airHeight: number, bodyWidth = 16) {
+  const w = Math.max(6, bodyWidth - airHeight * 0.15);
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.fillRect(Math.round(x - w / 2), y - 1, Math.round(w), 2);
 }

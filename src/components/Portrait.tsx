@@ -52,6 +52,13 @@ const processedCache = new Map<string, Promise<string>>();
 // 選択画面などで背景付き版が一瞬表示されるポップインを防ぐ。
 const resolvedCache = new Map<string, string>();
 
+/** Renderer 用：ローディング画面で透過処理済みの立ち絵 URL。
+ * 未処理の画像を返さないことで、ゲーム中に白黒背景が一瞬混ざるのを防ぐ。 */
+export function getPreloadedPortraitUrl(id: CharId): string | null {
+  const source = USER_PORTRAIT_URLS[id];
+  return source ? resolvedCache.get(source) ?? null : null;
+}
+
 function loadImg(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const img = new Image();
