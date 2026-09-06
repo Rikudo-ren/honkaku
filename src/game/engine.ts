@@ -1,4 +1,4 @@
-import { CHARS, INTRO_PAIRS, LOVE_LAWS, LOVE_NOTE_PAGES, MIRROR_INTROS, SAKURA_LOVE_LOOK, pairKey } from './characters';
+import { CHARS, INTRO_PAIRS, KAKUSEI_PLAN_PAGES, LOVE_LAWS, LOVE_NOTE_PAGES, MIRROR_INTROS, SAKURA_LOVE_LOOK, pairKey } from './characters';
 import { COMBO_COMMENTS, HIT_TEXTS, TERACHI_OUTCOMES, type TerachiOutcome } from './quotes';
 import { EMPTY_INPUT } from './types';
 import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDef, PoseId, ProjKind, SfxName, Side, StageId, Team } from './types';
@@ -566,6 +566,8 @@ export class Battle {
         return 'point';
       case 'sakura':
         return (f.superData as { confessed?: boolean })?.confessed ? 'spread' : 'confess';
+      case 'kakusei':
+        return 'hoist';
     }
   }
 
@@ -710,7 +712,7 @@ export class Battle {
     if (winner === -1) this.setBanner('DOUBLE K.O.', '自演？', '#fca5a5', 130, true);
     else {
       const w = this.teamRep(winner);
-      this.setBanner(w.def.koText, w.id === 'mie' ? '四百二十一回目' : w.id === 'rei' ? '面白かった' : w.id === 'sakura' ? '波動関数、崩壊' : undefined, w.def.color, 130, true);
+      this.setBanner(w.def.koText, w.id === 'mie' ? '四百二十一回目' : w.id === 'rei' ? '面白かった' : w.id === 'sakura' ? '波動関数、崩壊' : w.id === 'kakusei' ? 'がれき撤去、完了' : undefined, w.def.color, 130, true);
     }
     this.sfx('ko');
   }
@@ -1051,6 +1053,8 @@ export class Battle {
   private canSpecial(f: Fighter) {
     const m = f.def.moves.special;
     if (m.kind === 'projectile') return this.projectiles.filter((p) => p.owner === f.idx && p.kind === m.projectile!.kind).length < 2;
+    // wall（覚醒三重）：土嚢は2つまで
+    if (m.kind === 'wall') return this.projectiles.filter((p) => p.kind === 'sandbag' && p.owner === f.idx).length < 2;
     // trap（櫻）：未設置なら設置、設置済みなら「観測」なので常に出せる
     return true;
   }
@@ -1081,6 +1085,7 @@ export class Battle {
     if (f.moveFrame === m.startup + 1) {
       if (m.kind === 'projectile' && m.projectile) this.spawnMoveProjectile(f, o, m);
       if (m.kind === 'trap') this.placeOrObserveKoi(f, m);
+      if (m.kind === 'wall') this.placeSandbag(f, m);
       if (m.kind === 'teleport') {
         this.afterimage(f);
         f.x = clamp(o.x - o.facing * 26, 12, W - 12);
@@ -1131,6 +1136,33 @@ export class Battle {
       });
     }
     if (spec.kind === 'cross') this.crossBurst(f.x + f.facing * 12, f.y - 30, 3);
+  }
+
+  // ───────────────────────── 覚醒三重：土嚢堡 ─────────────────────────
+  /** 足元前方に土嚢を積む。敵の飛び道具を止める壁になる（updateProjectiles で衝突判定）。 */
+  private placeSandbag(f: Fighter, m: MoveDef) {
+    const x = clamp(f.x + f.facing * 20, 16, W - 16);
+    this.spawnProj({
+      kind: 'sandbag',
+      owner: f.idx,
+      x,
+      y: GROUND - 8,
+      vx: 0,
+      vy: 0,
+      w: 13,
+      h: 16,
+      dmg: m.dmg * this.dmgMulOf(f),
+      hitstun: m.hitstun,
+      kbx: m.kbx,
+      kby: 0,
+      life: 420,
+      ground: true,
+      pierce: true,
+    });
+    this.dust(x - 5);
+    this.dust(x + 5);
+    this.shake = Math.max(this.shake, 4);
+    this.sfx('land');
   }
 
   // ───────────────────────── 櫻優：シュレディンガーの好意 ─────────────────────────
@@ -1257,6 +1289,12 @@ export class Battle {
         if (this.isBlocking(o)) this.applyBlock(f, o, m.dmg, m.hitstun);
         else {
           this.applyHit(f, o, m.dmg * this.dmgMulOf(f), m, f.facing, m.sfx);
+          if (f.id === 'kakusei' && m.key === 'heavy') {
+            // 杭打ちは地面ごと響く
+            this.dust(o.x);
+            this.dust(o.x + 4);
+            this.shake = Math.max(this.shake, 7);
+          }
           if (f.id === 'sakura') {
             if (m.key === 'light') this.addResearch(f, 'メモ');
             if (m.key === 'heavy') {
@@ -1345,8 +1383,67 @@ export class Battle {
 
   // ───────────────────────── projectiles ─────────────────────────
   private updateProjectiles() {
+    // 土嚢・ローラーは敵の飛び道具を止める（壁判定）。土嚢は代わりに壊れる
+    const walls = this.projectiles.filter((p) => (p.kind === 'sandbag' || p.kind === 'roller') && p.life > 0);
+    if (walls.length) {
+      const crushed = new Set<Projectile>();
+      let bagBroke = false;
+      for (const w of walls) {
+        const wTeam = w.owner >= 0 ? (this.f[w.owner]?.team ?? -2) : -2;
+        const wb = this.projBox(w);
+        for (const p of this.projectiles) {
+          if (p === w || p.item || p.kind === 'sandbag' || p.kind === 'roller') continue;
+          if (p.owner >= 0 && this.f[p.owner]?.team === wTeam) continue; // 味方の飛び道具は通す
+          if (!overlap(wb, this.projBox(p))) continue;
+          crushed.add(p);
+          this.spark(p.x, p.y, '#c9b287', 5, 1);
+          if (w.kind === 'sandbag') {
+            crushed.add(w);
+            bagBroke = true;
+          }
+        }
+      }
+      if (crushed.size) {
+        this.projectiles = this.projectiles.filter((p) => !crushed.has(p));
+        this.sfx('guard');
+        if (bagBroke) {
+          const b = walls.find((w) => w.kind === 'sandbag' && crushed.has(w));
+          if (b) {
+            this.dust(b.x - 4);
+            this.dust(b.x + 4);
+            this.text('土嚢、散土', b.x, GROUND - 26, { size: 8, color: '#d6c39a', life: 40, vy: -0.4 });
+          }
+        }
+      }
+    }
     const keep: Projectile[] = [];
     for (const p of this.projectiles) {
+      if (p.kind === 'sandbag') {
+        // 土嚢：その場に留まり続ける堡塁。触れた敵は押し退ける（1体1回）
+        p.t++;
+        p.life--;
+        if (p.life <= 0) {
+          this.text('撤去', p.x, GROUND - 24, { size: 7, color: '#cbd5e1', life: 30, vy: -0.3 });
+          continue;
+        }
+        if (this.phase === 'fight') {
+          const owner = p.owner >= 0 ? this.f[p.owner] : null;
+          const ownerTeam = owner?.team ?? -1;
+          const box = this.projBox(p);
+          const toucher = this.f.find((e) => e.team !== ownerTeam && e.hp > 0 && !(p.hitMask & (1 << e.idx)) && overlap(box, this.hurtbox(e)));
+          if (toucher && this.hittable(toucher)) {
+            p.hitMask |= 1 << toucher.idx;
+            const dir: Facing = toucher.x >= p.x ? 1 : -1;
+            if (this.isBlocking(toucher)) this.applyBlock(owner, toucher, p.dmg, p.hitstun);
+            else {
+              this.applyHit(owner, toucher, p.dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: 0 }, dir, 'hit');
+              this.text('通さない', p.x, GROUND - 30, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
+            }
+          }
+        }
+        keep.push(p);
+        continue;
+      }
       if (p.kind === 'koi') {
         // 未観測の好意：その場に留まり、敵が触れたら観測されて崩壊する
         p.t++;
@@ -1447,10 +1544,16 @@ export class Battle {
           const owner = p.owner;
           const att: Fighter | null = owner === -1 ? null : this.f[owner];
           const dir: Facing = p.vx !== 0 ? (p.vx > 0 ? 1 : -1) : f.x >= p.x ? 1 : -1;
-          if (this.isBlocking(f) && p.kind !== 'kuraishi' && p.kind !== 'vending') {
+          if (this.isBlocking(f) && p.kind !== 'kuraishi' && p.kind !== 'vending' && p.kind !== 'roller') {
             this.applyBlock(att, f, p.dmg, p.hitstun);
           } else {
             this.applyHit(att, f, p.dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: p.kby, knockdown: p.knockdown }, dir, p.kind === 'cross' ? 'cross' : 'hit');
+            if (p.kind === 'roller') {
+              // 転圧：轢かれた相手は鉄輪の進行方向へ弾き飛ばされ、土煢を上げる
+              f.vx = Math.sign(p.vx) * Math.max(Math.abs(f.vx), Math.abs(p.vx) * 1.1);
+              this.dust(f.x);
+              this.text('轢かれた', f.x, f.y - 62, { size: 9, color: '#fdba74', life: 40, vy: -0.4, shake: true });
+            }
             if (p.kind === 'cross') this.crossBurst(f.x, f.y - 30, 4);
             if (p.kind === 'kuraishi') this.text('✝✝✝', f.x, f.y - 62, { size: 12, color: '#f8fafc', life: 40, vy: -0.5 });
             if (p.kind === 'basketball') this.text('用は済んだ', p.x, p.y - 14, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
@@ -1480,6 +1583,11 @@ export class Battle {
       // 研究ノートの1ページがカットインに映る
       cut.paper = this.pick(LOVE_NOTE_PAGES);
       cut.paperLabel = `恋愛学 研究ノート ── 研究データ n=${f.research}`;
+      f.superData = {};
+    } else if (f.id === 'kakusei') {
+      // 施工計画書の1ページがカットインに映る
+      cut.paper = this.pick(KAKUSEI_PLAN_PAGES);
+      cut.paperLabel = '土木工事 施工計画書 ── 一般建設業・三重';
       f.superData = {};
     } else f.superData = {};
     this.cutin = cut;
@@ -1715,6 +1823,67 @@ export class Battle {
           this.sfx('heal');
         }
         if (T >= 54) this.setState(f, 'idle');
+        break;
+      }
+      case 'kakusei': {
+        // 残土処分：残土（がれき）が降り、起振ローラーが戦場ごと均す。
+        // 三重はハンマーを担いでその場に立つ（startSuper の無敵で轢かれない）。
+        if (T === 1) {
+          this.projectiles = this.projectiles.filter((p) => p.item);
+          this.setBanner('残土処分', '動くな。……均す。', c, 150);
+        }
+        if (T <= 22 && T % 4 === 0) {
+          this.shake = Math.max(this.shake, 3);
+          this.sfx('land');
+        }
+        if (T > 4 && T <= 56 && T % 3 === 0) {
+          this.spawnProj({
+            kind: 'gravel',
+            owner: f.idx,
+            x: 12 + this.rng() * (W - 24),
+            y: -8,
+            vx: (this.rng() - 0.5) * 0.6,
+            vy: 2.2 + this.rng() * 1.4,
+            w: 5,
+            h: 4,
+            dmg: 2,
+            hitstun: 10,
+            kbx: 0.7,
+            kby: 0,
+            life: 160,
+            ground: true,
+          });
+        }
+        if (T === 22) {
+          this.text('転圧機、入場', f.x, f.y - 64, { size: 9, color: '#fdba74', life: 60, vy: -0.2 });
+          this.sfx('special');
+        }
+        if (T === 28) {
+          // 起振ローラー：三重の背後から画面端まで、等高線ゼロへ均す
+          this.spawnProj({
+            kind: 'roller',
+            owner: f.idx,
+            x: clamp(f.x - f.facing * 36, -30, W + 30),
+            y: GROUND - 17,
+            vx: f.facing * 3.0,
+            vy: 0,
+            w: 50,
+            h: 34,
+            dmg: 24,
+            hitstun: 34,
+            kbx: 4.5,
+            kby: 3,
+            knockdown: true,
+            life: 400,
+            pierce: true,
+            ground: true,
+          });
+          this.shake = 10;
+          this.flash = 6;
+          this.sfx('heavy');
+        }
+        if (T === 46) this.text('等高線、ゼロ', W / 2, 92, { size: 10, color: '#fdba74', life: 60, vy: -0.15 });
+        if (T >= 66) this.setState(f, 'idle');
         break;
       }
     }
@@ -1990,6 +2159,11 @@ export class Battle {
     if (proj && grounded && this.rng() < projP) {
       // 三重は当身で跳ね返す
       if (f.id === 'mie' && f.cooldown <= 0 && f.silence <= 0 && this.rng() < 0.65) {
+        inp.special = true;
+        return inp;
+      }
+      // 覚醒三重は飛ばない。土嚢で壁を築く（現場の安全確保）
+      if (f.id === 'kakusei' && f.cooldown <= 0 && f.silence <= 0 && this.aiCanSpecial(f, dist, false, !!proj) && this.rng() < 0.7) {
         inp.special = true;
         return inp;
       }
@@ -2333,6 +2507,9 @@ export class Battle {
         return oppAttacking || projIncoming;
       case 'rei':
         return dist > 60;
+      case 'kakusei':
+        // 土嚢は中距離に置く（壁として機能する間合い）
+        return dist > 34 && dist < 190;
       case 'sakura': {
         // 未設置なら相手との間に置く。設置済みなら（相手が乗ったときだけ観測＝generalBrain側で判断）撃たない
         const trap = this.koiOf(f);

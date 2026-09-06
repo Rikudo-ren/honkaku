@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CHARS, DIFFICULTY_HINT, DIFFICULTY_LABELS, SAKURA_UNLOCK_HINT, rosterFor } from '@/game/characters';
+import { CHARS, DIFFICULTY_HINT, DIFFICULTY_LABELS, HIDDEN_HINTS, rosterFor } from '@/game/characters';
 import { Portrait } from '@/components/Portrait';
 import { drawTitleScene } from '@/game/render';
 import { H, W } from '@/game/engine';
@@ -17,6 +17,11 @@ interface Props {
   /** 直前の試合で櫻優が解禁された（演出を流す） */
   sakuraJustUnlocked?: boolean;
   onSakuraUnlockSeen?: () => void;
+  /** 隠しキャラ「覚醒三重」が解禁済みか */
+  kakuseiUnlocked?: boolean;
+  /** 直前の試合で覚醒三重が解禁された（演出を流す） */
+  kakuseiJustUnlocked?: boolean;
+  onKakuseiUnlockSeen?: () => void;
 }
 
 const MENU: { id: Mode | 'diff' | 'help' | 'what'; label: string; sub: string }[] = [
@@ -38,6 +43,9 @@ export default function TitleScreen({
   sakuraUnlocked = false,
   sakuraJustUnlocked,
   onSakuraUnlockSeen,
+  kakuseiUnlocked = false,
+  kakuseiJustUnlocked,
+  onKakuseiUnlockSeen,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cursor, setCursor] = useState(0);
@@ -47,10 +55,13 @@ export default function TitleScreen({
   const [showUnlock, setShowUnlock] = useState(!!justUnlocked);
   // 偏差値100と櫻優が同時に解禁されることはない（櫻優は偏差値100が必要）が、念のため偏差値100→櫻優の順に見せる
   const [showSakuraUnlock, setShowSakuraUnlock] = useState(!!sakuraJustUnlocked);
+  const [showKakuseiUnlock, setShowKakuseiUnlock] = useState(!!kakuseiJustUnlocked);
   const stateRef = useRef({ cursor, diff, modal, extremeUnlocked });
   stateRef.current = { cursor, diff, modal, extremeUnlocked };
   const sakuraRef = useRef(sakuraUnlocked);
   sakuraRef.current = sakuraUnlocked;
+  const kakuseiRef = useRef(kakuseiUnlocked);
+  kakuseiRef.current = kakuseiUnlocked;
 
   useEffect(() => {
     if (justUnlocked) {
@@ -68,9 +79,22 @@ export default function TitleScreen({
     }
   }, [sakuraJustUnlocked]);
 
+  useEffect(() => {
+    if (kakuseiJustUnlocked) {
+      setShowKakuseiUnlock(true);
+      audio.init();
+      audio.sfx('super');
+    }
+  }, [kakuseiJustUnlocked]);
+
   const closeSakuraUnlock = () => {
     setShowSakuraUnlock(false);
     onSakuraUnlockSeen?.();
+  };
+
+  const closeKakuseiUnlock = () => {
+    setShowKakuseiUnlock(false);
+    onKakuseiUnlockSeen?.();
   };
 
   useEffect(() => {
@@ -83,7 +107,7 @@ export default function TitleScreen({
     let t = 0;
     const loop = () => {
       t++;
-      drawTitleScene(g, t, rosterFor(sakuraRef.current));
+      drawTitleScene(g, t, rosterFor(sakuraRef.current, kakuseiRef.current));
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -196,8 +220,10 @@ export default function TitleScreen({
           <div className="pixel-text-shadow text-2xl font-bold md:text-3xl">{DIFFICULTY_LABELS[diff]}</div>
           <div className="mt-0.5 text-xs opacity-90">{DIFFICULTY_HINT[diff]}</div>
           {!extremeUnlocked && <div className="mt-1 text-[10px] text-slate-400">※偏差値85に勝つと偏差値100が解禁</div>}
-          {extremeUnlocked && !sakuraUnlocked && <div className="mt-1 text-[10px] text-fuchsia-300/80">※{SAKURA_UNLOCK_HINT.hint}</div>}
+          {extremeUnlocked && !sakuraUnlocked && <div className="mt-1 text-[10px] text-fuchsia-300/80">※{HIDDEN_HINTS.sakura.hint}</div>}
           {sakuraUnlocked && <div className="mt-1 text-[10px] text-pink-300/90">※隠しキャラ「櫻優」解禁済み（全モードで選択可）</div>}
+          {extremeUnlocked && !kakuseiUnlocked && <div className="mt-1 text-[10px] text-orange-300/80">※{HIDDEN_HINTS.kakusei.hint}</div>}
+          {kakuseiUnlocked && <div className="mt-1 text-[10px] text-orange-300/90">※隠しキャラ「覚醒三重」解禁済み（全モードで選択可・オンラインも可）</div>}
         </div>
 
         <div className="mt-6 w-full max-w-md rounded border-4 border-slate-200/80 bg-slate-950/85 p-3 shadow-[6px_6px_0_#000] md:p-4">
@@ -244,7 +270,7 @@ export default function TitleScreen({
       {modal && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4" onClick={() => setModal(null)}>
           <div className="animate-pop max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded border-4 border-slate-100 bg-slate-950 p-5 text-slate-100 shadow-[8px_8px_0_#000]" onClick={(e) => e.stopPropagation()}>
-            {modal === 'help' ? <HelpContent sakuraUnlocked={sakuraUnlocked} /> : <WhatContent />}
+            {modal === 'help' ? <HelpContent sakuraUnlocked={sakuraUnlocked} kakuseiUnlocked={kakuseiUnlocked} /> : <WhatContent />}
             <button className="mt-4 w-full border-2 border-amber-300 bg-amber-300 py-2 text-slate-950 hover:bg-amber-200" onClick={() => setModal(null)}>
               閉じる（Esc）
             </button>
@@ -285,6 +311,39 @@ export default function TitleScreen({
         </div>
       )}
 
+      {/* 覚醒三重解禁演出 */}
+      {showKakuseiUnlock && !showUnlock && !showSakuraUnlock && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={closeKakuseiUnlock}>
+          <div className="animate-pop relative w-full max-w-2xl overflow-hidden border-4 border-orange-400 bg-gradient-to-b from-orange-950 via-slate-950 to-black p-6 text-center shadow-[0_0_40px_#fb923c,12px_12px_0_#000] md:p-8">
+            <div className="grid items-center gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]">
+              <div className="relative mx-auto aspect-[3/4] w-40 overflow-hidden border-4 border-orange-400 md:w-52" style={{ background: `linear-gradient(180deg,#fff,${CHARS.kakusei.light})` }}>
+                <Portrait id="kakusei" alt={CHARS.kakusei.name} className="h-full w-full object-contain object-bottom p-1" />
+                <div className="absolute left-0 top-0 h-full w-1.5 bg-orange-500" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs tracking-[0.5em] text-orange-300">SECRET CHARACTER UNLOCKED</div>
+                <div className="mt-1 text-xs text-slate-400">{CHARS.kakusei.kana}</div>
+                <div className="pixel-text-shadow text-5xl text-orange-200 md:text-6xl">{CHARS.kakusei.name}</div>
+                <div className="mt-1 text-amber-200">{CHARS.kakusei.title}</div>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-300">
+                  <span className="inline-block h-3 w-3 border border-white/40" style={{ background: CHARS.kakusei.tieColor }} />
+                  {CHARS.kakusei.affiliation}（ネクタイ：{CHARS.kakusei.tie}）
+                </div>
+                <div className="mt-3 border-l-4 border-orange-400 bg-black/40 p-2 text-sm text-slate-100">
+                  「動くな。……均す。」
+                  <div className="mt-1 text-xs text-slate-400">── 一人で七人の最高偏差値を超えた者の前に、ヘルメットの男が現れた。</div>
+                </div>
+                <p className="mt-3 text-xs text-slate-300">
+                  必殺「土嚢堡」で飛び道具を止める壁を築き、超必殺「残土処分」で起振ローラーごと戦場を均す。1kgの片手ハンマーは、しゃがんだ相手まで掘る。
+                </p>
+                <p className="mt-1 text-[11px] text-slate-400">1P・2P・自己対話・チーム戦・オンライン、全モードで選択可能になりました。</p>
+              </div>
+            </div>
+            <div className="mt-5 animate-blink text-sm text-orange-200">Enter / クリックで閉じる（……完工。）</div>
+          </div>
+        </div>
+      )}
+
       {/* 偏差値100解禁演出 */}
       {showUnlock && (
         <div
@@ -308,7 +367,7 @@ export default function TitleScreen({
   );
 }
 
-function HelpContent({ sakuraUnlocked = false }: { sakuraUnlocked?: boolean }) {
+function HelpContent({ sakuraUnlocked = false, kakuseiUnlocked = false }: { sakuraUnlocked?: boolean; kakuseiUnlocked?: boolean }) {
   return (
     <div className="space-y-4 text-sm md:text-base">
       <h2 className="text-2xl text-amber-300">操作説明</h2>
@@ -342,7 +401,10 @@ function HelpContent({ sakuraUnlocked = false }: { sakuraUnlocked?: boolean }) {
         <li>試合中はランダムで✝本質✝イベントが発生する。ヘイカツが窓の外を見たら全員止まる。</li>
         <li>CPU偏差値はタイトルで変更。偏差値85に勝つと偏差値100が解禁。</li>
         <li>
-          隠しキャラ：{sakuraUnlocked ? `櫻優 ── 解禁済み。${SAKURA_UNLOCK_HINT.condition}（達成）。` : `${SAKURA_UNLOCK_HINT.sub} ${SAKURA_UNLOCK_HINT.hint}`}
+          隠しキャラ①：{sakuraUnlocked ? `櫻優 ── 解禁済み。${HIDDEN_HINTS.sakura.condition}（達成）。` : `${HIDDEN_HINTS.sakura.sub} ${HIDDEN_HINTS.sakura.hint}`}
+        </li>
+        <li>
+          隠しキャラ②：{kakuseiUnlocked ? `覚醒三重 ── 解禁済み。${HIDDEN_HINTS.kakusei.condition}（達成）。` : `${HIDDEN_HINTS.kakusei.sub} ${HIDDEN_HINTS.kakusei.hint}`}
         </li>
         <li>Esc / P でポーズ。M でミュート。スマホはタッチボタン対応（1Pのみ）。</li>
       </ul>

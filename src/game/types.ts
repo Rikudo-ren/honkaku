@@ -1,4 +1,4 @@
-export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura';
+export type CharId = 'mie' | 'ryoma' | 'naito' | 'mitsumine' | 'terachi' | 'rei' | 'sakura' | 'kakusei';
 export type Side = 0 | 1;
 /** チーム戦のチーム（0=青、1=赤）。Side と同じ 0|1。 */
 export type Team = 0 | 1;
@@ -64,7 +64,10 @@ export type PoseId =
   | 'grabbed'
   | 'paper'
   | 'penJab'
-  | 'confess';
+  | 'confess'
+  | 'pound'
+  | 'hammerSwing'
+  | 'hoist';
 
 export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult' | 'fluffy';
 
@@ -77,16 +80,20 @@ export interface Look {
   eyeColor: string;
   glasses?: boolean;
   gender: 'm' | 'f';
-  outfit: 'blazer' | 'vest' | 'suit';
+  outfit: 'blazer' | 'vest' | 'suit' | 'workgear';
   accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map' | 'loveNote';
-  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'none';
-  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug';
+  weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'hammer' | 'none';
+  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug' | 'shoulder';
   /** 男子ネクタイの色（未指定なら理数科のえんじ）。内進は紺。 */
   tieColor?: string;
   /** ネクタイに斜めストライプ風の明るいドットを入れる */
   tieStripe?: boolean;
   /** こめかみに汗マークを描く（緊張しがちな人） */
   sweat?: boolean;
+  /** ヘルメット（覚醒三重の土木用）。base=ドーム本色、band=帯の色 */
+  helmet?: { base: string; band: string };
+  /** 手袋（ワークグローブ）。色を指定すると手の描画色が変わる */
+  glove?: string;
 }
 
 export interface Box {
@@ -96,7 +103,7 @@ export interface Box {
   h: number;
 }
 
-export type MoveKind = 'melee' | 'projectile' | 'counter' | 'teleport' | 'trap';
+export type MoveKind = 'melee' | 'projectile' | 'counter' | 'teleport' | 'trap' | 'wall';
 export type ProjKind =
   | 'cross'
   | 'eraser'
@@ -110,7 +117,10 @@ export type ProjKind =
   | 'vending'
   | 'kuraishi'
   | 'qed'
-  | 'koi';
+  | 'koi'
+  | 'gravel'
+  | 'sandbag'
+  | 'roller';
 
 export interface ProjectileSpec {
   kind: ProjKind;

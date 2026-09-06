@@ -108,7 +108,7 @@ export class Renderer {
     this.drawStage(b.stage, b.t);
 
     // ground props (items) behind fighters
-    for (const p of b.projectiles) if (p.item || p.kind === 'vending') this.drawProjectile(p, b.t);
+    for (const p of b.projectiles) if (p.item || p.kind === 'vending' || p.kind === 'sandbag') this.drawProjectile(p, b.t);
 
     // fighters: draw the "active" ones last
     const isActive = (f: Fighter) => f.state === 'attack' || f.state === 'super' || f.state === 'launch';
@@ -320,6 +320,87 @@ export class Renderer {
           g.fillRect(x - 7, yy - 12, 14, 1);
           g.fillRect(x - 7, yy + 5, 14, 1);
         }
+        break;
+      }
+      case 'gravel': {
+        // 残土（がれき）：回転しながら落ちてくる小さな砕石
+        const spin = Math.floor(t / 5) % 4;
+        g.fillStyle = '#8d8d96';
+        g.fillRect(x - 2, y - 2, 4, 4);
+        g.fillStyle = '#6f6f78';
+        g.fillRect(x - 2 + (spin % 2), y - 2 + Math.floor(spin / 2), 2, 2);
+        g.fillStyle = '#b9b9c2';
+        g.fillRect(x + 1, y - 2, 1, 1);
+        g.fillStyle = 'rgba(141,141,150,0.4)';
+        g.fillRect(x - 3, y + (spin % 2 === 0 ? -3 : 3), 1, 1);
+        g.fillRect(x + 3, y + (spin % 2 === 0 ? 3 : -3), 1, 1);
+        break;
+      }
+      case 'sandbag': {
+        // 土嚢堡：二段積みの土嚢（麻色・縫い目と口を縛った紐）
+        drawShadow(g, p.x, GROUND, 0);
+        g.fillStyle = '#c9b287';
+        g.fillRect(x - 6, y + 3, 12, 6);
+        g.fillStyle = '#b09a6e';
+        g.fillRect(x - 6, y + 7, 12, 2);
+        g.fillStyle = '#8a7a52';
+        g.fillRect(x - 4, y + 5, 8, 1);
+        g.fillStyle = '#d6c39a';
+        g.fillRect(x - 5, y - 3, 10, 6);
+        g.fillStyle = '#b09a6e';
+        g.fillRect(x - 5, y + 1, 10, 2);
+        g.fillStyle = '#8a7a52';
+        g.fillRect(x - 3, y - 1, 6, 1);
+        // 口を縛った紐
+        g.fillStyle = '#e8dfc8';
+        g.fillRect(x - 1, y - 5, 2, 2);
+        g.fillStyle = '#c0392b';
+        g.fillRect(x - 2, y - 4, 4, 1);
+        break;
+      }
+      case 'roller': {
+        // 起振ローラー（転圧機）：鉄輪を回しながら戦場を均す
+        const d = p.vx >= 0 ? 1 : -1;
+        const R = (lx: number, ly: number, w: number, h: number, c: string) => {
+          g.fillStyle = c;
+          g.fillRect(d === 1 ? x + lx : x - lx - w, y + ly, w, h);
+        };
+        drawShadow(g, p.x, GROUND, 0);
+        // 土煙
+        g.fillStyle = 'rgba(201,194,180,0.5)';
+        const puff = Math.floor(t / 4) % 2;
+        g.fillRect(x - d * 24, GROUND - 3 - puff, 6, 3);
+        g.fillRect(x - d * 30, GROUND - 6 + puff, 4, 3);
+        // 車体（警示オレンジ＋黒の縞）
+        R(-22, -34, 34, 14, '#e8862e');
+        R(-22, -34, 34, 2, '#f5f0e1');
+        R(-22, -21, 34, 2, '#20242e');
+        R(-16, -30, 5, 9, '#20242e');
+        R(-6, -30, 5, 9, '#20242e');
+        R(4, -30, 5, 9, '#20242e');
+        // 運転席とマスト
+        R(-20, -44, 12, 10, '#f5f0e1');
+        R(-20, -44, 12, 2, '#e8862e');
+        R(-17, -41, 6, 5, '#26335f');
+        R(-15, -48, 2, 5, '#3a4358');
+        // 警示灯（点滅）
+        if (Math.floor(t / 6) % 2 === 0) {
+          R(-14, -50, 4, 2, '#fde047');
+          g.fillStyle = 'rgba(253,224,71,0.35)';
+          g.fillRect(x - d * 12, y - 52, 8, 6);
+        } else R(-14, -50, 4, 2, '#a16207');
+        // 鉄輪（回転する目盛りで表現）
+        R(12, -17, 18, 17, '#9aa3ad');
+        R(12, -17, 18, 2, '#c8d2dc');
+        R(12, -2, 18, 2, '#6e7780');
+        g.fillStyle = '#5c646e';
+        const roll = Math.floor(t / 2) % 5;
+        for (let i = 0; i < 5; i++) {
+          const ry = -15 + ((i * 4 + roll) % 5) * 3;
+          g.fillRect(d === 1 ? x + 14 : x - 14 - 14, y + ry, 14, 1);
+        }
+        // スクラバー（前の整流棒）
+        R(30, -8, 3, 8, '#3a4358');
         break;
       }
       case 'formula':
