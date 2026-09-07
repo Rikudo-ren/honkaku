@@ -93,6 +93,8 @@ export interface Look {
   glasses?: boolean;
   /** 眼鏡フレームの色（未指定なら濃いグレー）。レンズは塗らない（透明） */
   glassesColor?: string;
+  /** フレーム形状（未指定は 'rect' 細角。'round' は丸メガネ全周枠） */
+  glassesStyle?: 'rect' | 'round';
   /** 目の描き分け（未指定は 'round'） */
   eyeStyle?: EyeStyle;
   /** 眉（未指定は描かない） */

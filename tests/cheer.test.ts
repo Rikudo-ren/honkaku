@@ -321,7 +321,7 @@ test('折り返しは先に退き、接触判定なしで横切り、振り返�
   b.f[1].y = GROUND;
   b.f[1].vy = 0;
   step(b);
-  assert.ok(Math.abs(f.x - b.f[1].x) >= 23.9);
+  assert.ok(Math.abs(f.x - b.f[1].x) >= 13.9);
 });
 
 test('エコーは往復各1ヒット。復路は低く、1つが残る間は追加で出せない', () => {

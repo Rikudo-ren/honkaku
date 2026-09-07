@@ -7,7 +7,7 @@ import type { Box, CharDef, CharId, Difficulty, Facing, InputState, Look, MoveDe
 export const W = 384;
 export const H = 216;
 export const GROUND = 186;
-const GRAV = 0.55;
+const GRAV = 0.32;
 const ROUND_TIME = 99 * 60;
 
 export type FighterState =
@@ -236,9 +236,9 @@ const AIR_LIGHT: MoveDef = {
   recovery: 6,
   dmg: 6,
   hitstun: 14,
-  kbx: 2.6,
+  kbx: 1.5,
   kby: 0,
-  box: { x: 3, y: -51, w: 24, h: 20 },
+  box: { x: 2, y: -30, w: 14, h: 12 },
   kind: 'melee',
   pose: 'jab',
   sfx: 'hit',
@@ -251,9 +251,9 @@ const AIR_HEAVY: MoveDef = {
   recovery: 8,
   dmg: 9,
   hitstun: 18,
-  kbx: 4.3,
+  kbx: 2.5,
   kby: 0,
-  box: { x: 5, y: -41, w: 27, h: 20 },
+  box: { x: 3, y: -24, w: 16, h: 12 },
   kind: 'melee',
   pose: 'kick',
   sfx: 'heavy',
@@ -494,20 +494,20 @@ export class Battle {
     this.bubbles.push({ idx, text, t: 0, life });
   }
 
-  private spark(x: number, y: number, color = '#fff6a0', n = 8, size = 3) {
+  private spark(x: number, y: number, color = '#fff6a0', n = 8, size = 2) {
     for (let i = 0; i < n; i++) {
       const a = this.rng() * Math.PI * 2;
-      const sp = 1.7 + this.rng() * 3.4;
+      const sp = 1 + this.rng() * 2;
       this.fx.push({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 10 + this.rng() * 8, color, size });
     }
   }
 
-  private ring(x: number, y: number, color: string, size = 34) {
+  private ring(x: number, y: number, color: string, size = 20) {
     this.fx.push({ kind: 'ring', x, y, vx: 0, vy: 0, t: 0, life: 16, color, size });
   }
 
   private dust(x: number) {
-    for (let i = 0; i < 5; i++) this.fx.push({ kind: 'dust', x: x + (this.rng() - 0.5) * 17, y: GROUND - 1, vx: (this.rng() - 0.5) * 2, vy: -this.rng() * 1.4, t: 0, life: 14, color: '#c9c2b4', size: 1 });
+    for (let i = 0; i < 5; i++) this.fx.push({ kind: 'dust', x: x + (this.rng() - 0.5) * 10, y: GROUND - 1, vx: (this.rng() - 0.5) * 1.2, vy: -this.rng() * 0.8, t: 0, life: 14, color: '#c9c2b4', size: 1 });
   }
 
   /** 塀勝也：土砂の粒子（重力で落ちる） */
@@ -515,14 +515,14 @@ export class Battle {
     for (let i = 0; i < n; i++) {
       this.fx.push({
         kind: 'soil',
-        x: x + (this.rng() - 0.5) * 41,
-        y: GROUND - this.rng() * 5,
-        vx: (this.rng() - 0.5) * 4.1,
-        vy: -2.6 - this.rng() * 4.3,
+        x: x + (this.rng() - 0.5) * 24,
+        y: GROUND - this.rng() * 3,
+        vx: (this.rng() - 0.5) * 2.4,
+        vy: -1.5 - this.rng() * 2.5,
         t: 0,
         life: 26 + this.rng() * 18,
         color: this.rng() < 0.5 ? '#9a7b52' : '#7a5f3e',
-        size: this.rng() < 0.3 ? 3 : 2,
+        size: this.rng() < 0.3 ? 2 : 1,
       });
     }
   }
@@ -533,14 +533,14 @@ export class Battle {
     for (let i = 0; i < 4; i++) {
       this.fx.push({
         kind: 'soil',
-        x: x + (this.rng() - 0.5) * 10,
+        x: x + (this.rng() - 0.5) * 6,
         y: GROUND - 2,
-        vx: (this.rng() - 0.5) * 2.7,
-        vy: -3.4 - this.rng() * 5.1,
+        vx: (this.rng() - 0.5) * 1.6,
+        vy: -2 - this.rng() * 3,
         t: 0,
         life: 30 + this.rng() * 14,
         color: i % 2 ? '#b09264' : '#8a6c46',
-        size: i % 2 ? 3 : 2,
+        size: i % 2 ? 2 : 1,
       });
     }
   }
@@ -551,15 +551,15 @@ export class Battle {
   }
 
   private crossBurst(x: number, y: number, n = 6) {
-    for (let i = 0; i < n; i++) this.fx.push({ kind: 'crossburst', x, y, vx: (this.rng() - 0.5) * 5.1, vy: -1.7 - this.rng() * 3.4, t: 0, life: 30, color: '#fde68a', size: 3 });
+    for (let i = 0; i < n; i++) this.fx.push({ kind: 'crossburst', x, y, vx: (this.rng() - 0.5) * 3, vy: -1 - this.rng() * 2, t: 0, life: 30, color: '#fde68a', size: 3 });
   }
 
   private hearts(x: number, y: number) {
-    for (let i = 0; i < 6; i++) this.fx.push({ kind: 'heart', x: x + (this.rng() - 0.5) * 27, y, vx: (this.rng() - 0.5) * 1, vy: -1 - this.rng() * 1, t: 0, life: 40, color: '#f9a8d4', size: 3 });
+    for (let i = 0; i < 6; i++) this.fx.push({ kind: 'heart', x: x + (this.rng() - 0.5) * 16, y, vx: (this.rng() - 0.5) * 0.6, vy: -0.6 - this.rng() * 0.6, t: 0, life: 40, color: '#f9a8d4', size: 3 });
   }
 
   private sparkles(x: number, y: number, color: string) {
-    for (let i = 0; i < 10; i++) this.fx.push({ kind: 'sparkle', x: x + (this.rng() - 0.5) * 41, y: y + (this.rng() - 0.5) * 51, vx: 0, vy: -0.9 - this.rng() * 1.7, t: 0, life: 30 + this.rng() * 20, color, size: 2 });
+    for (let i = 0; i < 10; i++) this.fx.push({ kind: 'sparkle', x: x + (this.rng() - 0.5) * 24, y: y + (this.rng() - 0.5) * 30, vx: 0, vy: -0.5 - this.rng(), t: 0, life: 30 + this.rng() * 20, color, size: 2 });
   }
 
   private afterimage(f: Fighter) {
@@ -567,8 +567,8 @@ export class Battle {
   }
 
   hurtbox(f: Fighter): Box {
-    const h = f.state === 'crouch' || f.state === 'getup' || f.state === 'lose' ? 51 : f.state === 'down' ? 20 : 71;
-    return { x: f.x - 12, y: f.y - h, w: 24, h };
+    const h = f.state === 'crouch' || f.state === 'getup' || f.state === 'lose' ? 30 : f.state === 'down' ? 12 : 42;
+    return { x: f.x - 7, y: f.y - h, w: 14, h };
   }
 
   private worldBox(f: Fighter, b: Box): Box {
@@ -674,9 +674,9 @@ export class Battle {
   private addResearch(f: Fighter, why: string) {
     if (f.id !== 'sakura' || f.hp <= 0 || f.research >= 15) return;
     f.research++;
-    this.text(`n=${f.research} ${why}`, f.x, f.y - 112, { size: 6, color: '#f5d0fe', life: 30, vy: -0.5 });
-    if (f.research === 1) this.text('（n=1で統計的処理は不可能）', f.x, f.y - 126, { size: 5, color: '#e9d5ff', life: 34, vy: -0.4 });
-    if (f.research === 15) this.text('第十五法則、到達', f.x, f.y - 126, { size: 7, color: '#f9a8d4', life: 40, vy: -0.3, shake: true });
+    this.text(`n=${f.research} ${why}`, f.x, f.y - 66, { size: 6, color: '#f5d0fe', life: 30, vy: -0.5 });
+    if (f.research === 1) this.text('（n=1で統計的処理は不可能）', f.x, f.y - 74, { size: 5, color: '#e9d5ff', life: 34, vy: -0.4 });
+    if (f.research === 15) this.text('第十五法則、到達', f.x, f.y - 74, { size: 7, color: '#f9a8d4', life: 40, vy: -0.3, shake: true });
   }
 
   /** 描画用フェーズ */
@@ -705,9 +705,9 @@ export class Battle {
     const perTeam = [0, 0];
     for (const f of this.f) {
       const k = perTeam[f.team]++;
-      const spread = (k - (this.f.filter((e) => e.team === f.team).length - 1) / 2) * 58;
+      const spread = (k - (this.f.filter((e) => e.team === f.team).length - 1) / 2) * 34;
       f.x = f.team === 0 ? 108 + spread : W - 108 + spread;
-      f.x = clamp(f.x, 40, W - 40);
+      f.x = clamp(f.x, 24, W - 24);
       f.y = GROUND;
       f.vx = 0;
       f.vy = 0;
@@ -946,8 +946,8 @@ export class Battle {
         if (f.state === 'grabbed') f.grabbedBy = -1;
         if (f.state !== 'launch' && f.state !== 'down') {
           this.setState(f, 'launch');
-          f.vy = -7.7;
-          f.vx = -f.facing * 5.1;
+          f.vy = -4.5;
+          f.vx = -f.facing * 3;
           f.y -= 1;
         }
       }
@@ -1007,15 +1007,15 @@ export class Battle {
     if (f.rallyT > 0) f.rallyT--;
     if (f.readT > 0) {
       f.readT--;
-      if (f.readT === 0) this.text('地図から、外れた', f.x, f.y - 95, { size: 6, color: '#d6d3bc', life: 30, vy: -0.3 });
+      if (f.readT === 0) this.text('地図から、外れた', f.x, f.y - 56, { size: 6, color: '#d6d3bc', life: 30, vy: -0.3 });
     }
     if (f.loveT > 0) {
       f.loveT--;
       if (f.loveT === 0) {
         f.look = f.def.look;
-        this.text('理論、再構築中……', f.x, f.y - 99, { size: 7, color: '#e9d5ff', life: 40, vy: -0.3 });
+        this.text('理論、再構築中……', f.x, f.y - 58, { size: 7, color: '#e9d5ff', life: 40, vy: -0.3 });
       } else if (this.t % 18 === 0 && f.hp > 0) {
-        this.fx.push({ kind: 'heart', x: f.x + (this.rng() - 0.5) * 24, y: f.y - 82, vx: (this.rng() - 0.5) * 0.4, vy: -0.5, t: 0, life: 26, color: '#f9a8d4', size: 3 });
+        this.fx.push({ kind: 'heart', x: f.x + (this.rng() - 0.5) * 14, y: f.y - 48, vx: (this.rng() - 0.5) * 0.4, vy: -0.5, t: 0, life: 26, color: '#f9a8d4', size: 3 });
       }
     }
     if (f.comboTimer > 0) {
@@ -1116,7 +1116,7 @@ export class Battle {
       f.y = CHEER.airCeiling;
       f.vy = Math.max(0, f.vy);
     }
-    f.x = clamp(f.x, 18, W - 18);
+    f.x = clamp(f.x, 10, W - 10);
   }
 
   /** 離陸後に軌道を変えられるのは三峰瑠衣(応援)だけ。被弾・ダウン・超必殺中は使えない。 */
@@ -1128,9 +1128,9 @@ export class Battle {
     const dx = Number(inp.right) - Number(inp.left);
     const speed = air.speed * (f.readT > 0 ? 0.55 : 1) * (f.rallyT > 0 ? CHEER.rallySpeed : 1);
     f.vx = dx ? clamp(f.vx + dx * air.acceleration, -speed, speed) : f.vx * 0.65;
-    if (inp.down && !inp.up) f.vy = Math.min(12.8, f.vy + 1.2);
-    else if (inp.up && !inp.down && f.airLift > 0 && f.vy > -3.7) {
-      f.vy = Math.max(-3.7, f.vy - 0.92);
+    if (inp.down && !inp.up) f.vy = Math.min(7.5, f.vy + 0.7);
+    else if (inp.up && !inp.down && f.airLift > 0 && f.vy > -2.2) {
+      f.vy = Math.max(-2.2, f.vy - 0.54);
       f.airLift--;
       if (f.airLift % 5 === 0) this.afterimage(f);
     }
@@ -1214,8 +1214,8 @@ export class Battle {
     f.movePhase = 0;
     if (!air) f.vx = 0;
     const observing = m.kind === 'trap' && !!this.koiOf(f);
-    if (observing) this.text('観測します', f.x, f.y - 88, { size: 7, color: '#f5d0fe', life: 34, vy: -0.5 });
-    else if (m.callout && this.rng() < 0.7) this.text(this.pick(m.callout), f.x, f.y - 88, { size: 7, color: '#ffffff', life: 34, vy: -0.5 });
+    if (observing) this.text('観測します', f.x, f.y - 52, { size: 7, color: '#f5d0fe', life: 34, vy: -0.5 });
+    else if (m.callout && this.rng() < 0.7) this.text(this.pick(m.callout), f.x, f.y - 52, { size: 7, color: '#ffffff', life: 34, vy: -0.5 });
     this.sfx(m.kind === 'melee' ? 'swing' : m.kind === 'counter' ? 'ha' : 'special');
   }
 
@@ -1234,10 +1234,10 @@ export class Battle {
       if (m.kind === 'trap') this.placeOrObserveKoi(f, m);
       if (m.kind === 'teleport') {
         this.afterimage(f);
-        f.x = clamp(o.x - o.facing * 44, 20, W - 20);
+        f.x = clamp(o.x - o.facing * 26, 12, W - 12);
         f.facing = o.x >= f.x ? 1 : -1;
         f.invuln = Math.max(f.invuln, 8);
-        this.sparkles(f.x, f.y - 41, f.def.color);
+        this.sparkles(f.x, f.y - 24, f.def.color);
         this.sfx('special');
       }
     }
@@ -1249,9 +1249,9 @@ export class Battle {
     }
     // 塀勝也：強攻撃は空振りでも地面が隆起する（上から描く＝地面が先に動く）
     if (f.id === 'heikatsu' && m.key === 'heavy' && f.movePhase === 1 && f.moveFrame % 3 === 0) {
-      const gx = f.x + f.facing * 34;
-      this.crack(gx, 27 + Math.floor(f.moveFrame / 3));
-      this.geyser(gx, 22 + (f.moveFrame % 3));
+      const gx = f.x + f.facing * 20;
+      this.crack(gx, 16 + Math.floor(f.moveFrame / 3));
+      this.geyser(gx, 13 + (f.moveFrame % 3));
       this.soilBurst(gx, 2);
     }
     if (f.moveFrame >= total) {
@@ -1260,8 +1260,8 @@ export class Battle {
     }
   }
 
-  private soundArc(f: Fighter, size = 41) {
-    this.fx.push({ kind: 'sound', x: f.x + f.facing * 20, y: f.y - 51, vx: 0, vy: 0, t: 0, life: 14, color: f.def.color, size, facing: f.facing });
+  private soundArc(f: Fighter, size = 24) {
+    this.fx.push({ kind: 'sound', x: f.x + f.facing * 12, y: f.y - 30, vx: 0, vy: 0, t: 0, life: 14, color: f.def.color, size, facing: f.facing });
   }
 
   private cheerDashing(f: Fighter): boolean {
@@ -1273,35 +1273,35 @@ export class Battle {
     const frame = f.moveFrame;
     if (m.pose === 'cheerClap' && (frame === m.startup + 1 || frame === CHEER.secondClap)) {
       f.moveHit = false;
-      this.soundArc(f, frame === CHEER.secondClap ? 48 : 37);
+      this.soundArc(f, frame === CHEER.secondClap ? 28 : 22);
       this.sfx('clap');
     }
     if (m.pose === 'cheerTurn') {
-      if (frame <= 3) f.x -= f.facing * 2;
+      if (frame <= 3) f.x -= f.facing * 1.2;
       if (this.cheerDashing(f)) {
-        f.x = clamp(f.x + f.facing * (m.moveX ?? 0), 18, W - 18);
+        f.x = clamp(f.x + f.facing * (m.moveX ?? 0), 10, W - 10);
         if (frame % 2 === 0) this.afterimage(f);
       }
       if (frame === CHEER.turnPivot) {
         f.facing = o.x >= f.x ? 1 : -1;
         this.dust(f.x);
-        this.soundArc(f, 51);
+        this.soundArc(f, 30);
         this.sfx('squeak');
       }
     }
     if (m.pose === 'airClap' && frame === m.startup + 1) {
-      f.vy = Math.min(f.vy, -4.1);
-      f.vx -= f.facing * 1.4;
-      this.soundArc(f, 41);
+      f.vy = Math.min(f.vy, -2.4);
+      f.vx -= f.facing * 0.8;
+      this.soundArc(f, 24);
       this.sfx('clap');
     }
     if (m.pose === 'airDive' && f.movePhase === 1 && !f.moveHit) {
-      f.vy = 9.7;
-      f.vx = f.facing * 2.9;
+      f.vy = 5.7;
+      f.vx = f.facing * 1.7;
       if (frame % 3 === 0) this.afterimage(f);
     }
     if (m.pose === 'cheerCall' && frame === m.startup + 1) {
-      this.soundArc(f, 54);
+      this.soundArc(f, 32);
       this.sfx('cheer');
     }
   }
@@ -1311,18 +1311,18 @@ export class Battle {
     const w = spec.w ?? 8;
     const h = spec.h ?? 8;
     if (spec.fromTop) {
-      this.spawnProj({ kind: spec.kind, owner: f.idx, x: o.x + o.vx * 10, y: -10, vx: 0, vy: spec.vy ?? 5.1, w, h, dmg: m.dmg * this.dmgMulOf(f), hitstun: m.hitstun, kbx: m.kbx, kby: m.kby, knockdown: m.knockdown, life: spec.life });
+      this.spawnProj({ kind: spec.kind, owner: f.idx, x: o.x + o.vx * 6, y: -10, vx: 0, vy: spec.vy ?? 3, w, h, dmg: m.dmg * this.dmgMulOf(f), hitstun: m.hitstun, kbx: m.kbx, kby: m.kby, knockdown: m.knockdown, life: spec.life });
       this.text('★', o.x, 12, { size: 8, color: '#fde68a', life: 20, vy: 0 });
     } else {
       const ground = !!spec.ground;
       // 防災マップは「相手の今いる場所」に広げる（予報は立っている場所に書く）
-      const x = spec.kind === 'chisen' ? clamp(o.x + o.vx * 7, 40, W - 40) : f.x + f.facing * 24;
+      const x = spec.kind === 'chisen' ? clamp(o.x + o.vx * 4, 16, W - 16) : f.x + f.facing * 14;
       this.spawnProj({
         kind: spec.kind,
         owner: f.idx,
         x,
-        y: ground ? GROUND - h / 2 : f.y - 51,
-        vx: f.facing * (spec.vx ?? 5.1),
+        y: ground ? GROUND - h / 2 : f.y - 30,
+        vx: f.facing * (spec.vx ?? 3),
         vy: spec.vy ?? 0,
         w,
         h,
@@ -1337,7 +1337,7 @@ export class Battle {
         pierce: spec.kind === 'cheerEcho',
       });
     }
-    if (spec.kind === 'cross') this.crossBurst(f.x + f.facing * 20, f.y - 51, 3);
+    if (spec.kind === 'cross') this.crossBurst(f.x + f.facing * 12, f.y - 30, 3);
   }
 
   // ───────────────────────── 櫻優：シュレディンガーの好意 ─────────────────────────
@@ -1345,21 +1345,21 @@ export class Battle {
   private placeOrObserveKoi(f: Fighter, m: MoveDef) {
     const trap = this.koiOf(f);
     if (trap) {
-      this.text('観測', trap.x, trap.y - 37, { size: 10, color: '#f5d0fe', life: 34, vy: -0.4 });
-      this.collapseKoi(trap, f, 65);
+      this.text('観測', trap.x, trap.y - 22, { size: 10, color: '#f5d0fe', life: 34, vy: -0.4 });
+      this.collapseKoi(trap, f, 38);
       trap.life = 0;
       return;
     }
-    const x = clamp(f.x + f.facing * 78, 40, W - 40);
+    const x = clamp(f.x + f.facing * 46, 16, W - 16);
     this.spawnProj({
       kind: 'koi',
       owner: f.idx,
       x,
-      y: GROUND - 14,
+      y: GROUND - 9,
       vx: 0,
       vy: 0,
-      w: 24,
-      h: 27,
+      w: 14,
+      h: 16,
       dmg: m.dmg * this.dmgMulOf(f),
       hitstun: m.hitstun,
       kbx: m.kbx,
@@ -1368,27 +1368,27 @@ export class Battle {
       life: 600,
       pierce: true,
     });
-    this.hearts(x, GROUND - 24);
-    this.text('♡？', x, GROUND - 48, { size: 9, color: '#f9a8d4', life: 34, vy: -0.4 });
+    this.hearts(x, GROUND - 14);
+    this.text('♡？', x, GROUND - 28, { size: 9, color: '#f9a8d4', life: 34, vy: -0.4 });
   }
 
   /** 波動関数の崩壊：周囲の敵にヒット。三重の「は？」構え中は否定されて不発 */
   private collapseKoi(p: Projectile, owner: Fighter | null, radius: number) {
-    this.ring(p.x, p.y - 2, '#f9a8d4', radius + 20);
-    this.hearts(p.x, p.y - 14);
-    this.spark(p.x, p.y - 7, '#fbcfe8', 12, 3);
-    this.text('波動関数、崩壊', p.x, p.y - 58, { size: 8, color: '#f5d0fe', life: 42, vy: -0.4, shake: true });
+    this.ring(p.x, p.y - 2, '#f9a8d4', radius + 12);
+    this.hearts(p.x, p.y - 8);
+    this.spark(p.x, p.y - 4, '#fbcfe8', 12, 2);
+    this.text('波動関数、崩壊', p.x, p.y - 34, { size: 8, color: '#f5d0fe', life: 42, vy: -0.4, shake: true });
     this.flash = Math.max(this.flash, 4);
     this.shake = Math.max(this.shake, 5);
     this.sfx('special');
     const ownerTeam = owner?.team ?? -1;
     for (const e of this.f) {
       if (e.team === ownerTeam || e.hp <= 0) continue;
-      if (Math.abs(e.x - p.x) > radius || e.y < GROUND - 68) continue;
+      if (Math.abs(e.x - p.x) > radius || e.y < GROUND - 40) continue;
       if (!this.hittable(e)) continue;
       const dir: Facing = e.x >= p.x ? 1 : -1;
       if (e.countering) {
-        this.text('は？（否定）', e.x, e.y - 102, { size: 12, color: '#7dd3fc', life: 40, vy: -0.4, shake: true });
+        this.text('は？（否定）', e.x, e.y - 60, { size: 12, color: '#7dd3fc', life: 40, vy: -0.4, shake: true });
         e.meter = Math.min(100, e.meter + 8);
         continue;
       }
@@ -1405,11 +1405,11 @@ export class Battle {
       if (!e) continue;
       const dx = e.x - f.x;
       const adx = Math.abs(dx);
-      if (adx > 255 || adx < 41) continue;
+      if (adx > 150 || adx < 24) continue;
       if (!this.canBeAffected(e) || e.y < GROUND || e.state === 'attack') continue;
       const dir = dx > 0 ? 1 : -1;
-      e.x = clamp(e.x - dir * 0.54, 18, W - 18);
-      if (this.t % 14 === 0) this.fx.push({ kind: 'heart', x: e.x - dir * 10, y: e.y - 51, vx: -dir * 0.8, vy: -0.2, t: 0, life: 24, color: '#f9a8d4', size: 3 });
+      e.x = clamp(e.x - dir * 0.32, 10, W - 10);
+      if (this.t % 14 === 0) this.fx.push({ kind: 'heart', x: e.x - dir * 6, y: e.y - 30, vx: -dir * 0.8, vy: -0.2, t: 0, life: 24, color: '#f9a8d4', size: 3 });
     }
   }
 
@@ -1423,15 +1423,15 @@ export class Battle {
         if (a.state === 'grabbed' || b.state === 'grabbed') continue;
         if (a.team !== b.team && (this.cheerDashing(a) || this.cheerDashing(b))) continue;
         if (a.state === 'down' || b.state === 'down') continue;
-        if (Math.abs(a.y - b.y) > 58) continue;
+        if (Math.abs(a.y - b.y) > 34) continue;
         const dx = b.x - a.x;
-        const ov = 24 - Math.abs(dx);
+        const ov = 14 - Math.abs(dx);
         if (ov > 0) {
           const dir = dx === 0 ? a.facing : dx > 0 ? 1 : -1;
           a.x -= (ov / 2) * dir;
           b.x += (ov / 2) * dir;
-          a.x = clamp(a.x, 18, W - 18);
-          b.x = clamp(b.x, 18, W - 18);
+          a.x = clamp(a.x, 10, W - 10);
+          b.x = clamp(b.x, 10, W - 10);
         }
       }
     }
@@ -1473,31 +1473,31 @@ export class Battle {
           this.applyHit(f, o, m.dmg * this.dmgMulOf(f), m, f.facing, m.sfx);
           if (m.pose === 'airDive') {
             // 直撃時だけリバウンド。AIR・空中技回数はそのまま、もう一度潜ることはできない。
-            f.vy = -7.8;
-            f.vx = -f.facing * 2.4;
+            f.vy = -4.6;
+            f.vx = -f.facing * 1.4;
             f.moveFrame = m.startup + m.active;
             f.movePhase = 2;
-            this.soundArc(f, 54);
-            this.text('もう一歩！', f.x, f.y - 88, { size: 8, color: '#fda4af', life: 32 });
+            this.soundArc(f, 32);
+            this.text('もう一歩！', f.x, f.y - 52, { size: 8, color: '#fda4af', life: 32 });
           }
           if (f.id === 'sakura') {
             if (m.key === 'light') this.addResearch(f, 'メモ');
             if (m.key === 'heavy') {
               // 第一法則：近接性——引き寄せた証にハートが飛ぶ
-              this.fx.push({ kind: 'heart', x: o.x, y: o.y - 61, vx: -f.facing * 0.6, vy: -0.4, t: 0, life: 22, color: '#f9a8d4', size: 3 });
-              this.text('近接性', o.x, o.y - 105, { size: 7, color: '#f5d0fe', life: 30, vy: -0.4 });
+              this.fx.push({ kind: 'heart', x: o.x, y: o.y - 36, vx: -f.facing * 0.6, vy: -0.4, t: 0, life: 22, color: '#f9a8d4', size: 3 });
+              this.text('近接性', o.x, o.y - 62, { size: 7, color: '#f5d0fe', life: 30, vy: -0.4 });
             }
           }
           if (f.id === 'heikatsu') {
             if (m.key === 'light') {
               // 等高線：指先でなぞった線が一瞬浮かぶ
-              this.text('〰︎', o.x, o.y - 58, { size: 8, color: '#d9dcc0', life: 22, vy: -0.6 });
+              this.text('〰︎', o.x, o.y - 34, { size: 8, color: '#d9dcc0', life: 22, vy: -0.6 });
             }
             if (m.key === 'heavy') {
               // 地図を上から描く：足元が隆起して跳ね上げる
-              this.ring(o.x, GROUND - 4, '#b8c4a0', 58);
-              this.crack(o.x, 41);
-              this.geyser(o.x - f.facing * 7, 37);
+              this.ring(o.x, GROUND - 4, '#b8c4a0', 34);
+              this.crack(o.x, 24);
+              this.geyser(o.x - f.facing * 4, 22);
               this.soilBurst(o.x, 6);
               this.shake = Math.max(this.shake, 7);
             }
@@ -1514,8 +1514,8 @@ export class Battle {
     mie.moveFrame = m.startup + m.active;
     mie.invuln = Math.max(mie.invuln, 20);
     this.applyHit(mie, att, m.dmg, m, mie.facing, 'ha');
-    this.text('は？', mie.x, mie.y - 105, { size: 20, color: '#7dd3fc', life: 45, vy: -0.3, shake: true });
-    this.ring(mie.x, mie.y - 43, '#7dd3fc', 51);
+    this.text('は？', mie.x, mie.y - 62, { size: 20, color: '#7dd3fc', life: 45, vy: -0.3, shake: true });
+    this.ring(mie.x, mie.y - 25, '#7dd3fc', 30);
     this.flash = 6;
     this.shake = Math.max(this.shake, 8);
     mie.meter = Math.min(100, mie.meter + 15);
@@ -1532,15 +1532,15 @@ export class Battle {
     if (vic.state !== 'grabbed') {
       if (armored && !lethal) {
         // 超アーマー（覚醒三重）：体勢は崩れず振り続ける。ダメージは食らう＝殴り合いに持ち込む
-        if (!wasCombo && this.t % 3 === 0) this.text('崩れねェ', vic.x, vic.y - 102, { size: 7, color: '#fdba74', life: 24, vy: -0.3 });
+        if (!wasCombo && this.t % 3 === 0) this.text('崩れねェ', vic.x, vic.y - 60, { size: 7, color: '#fdba74', life: 24, vy: -0.3 });
       } else if (kd) {
         this.setState(vic, 'launch');
-        vic.vy = -(m.kby || 5.1) - (lethal ? 2.6 : 0);
-        vic.vx = dir * ((m.kbx || 3.4) + (lethal ? 2.6 : 0));
+        vic.vy = -(m.kby || 3) - (lethal ? 1.5 : 0);
+        vic.vx = dir * ((m.kbx || 2) + (lethal ? 1.5 : 0));
         vic.y -= 1;
       } else {
         this.setState(vic, 'hurt', m.hitstun);
-        vic.vx = dir * (m.kbx || 2.6);
+        vic.vx = dir * (m.kbx || 1.5);
       }
     }
     if (att) {
@@ -1554,12 +1554,12 @@ export class Battle {
     vic.hitstop = dmg >= 10 ? 7 : 4;
     if (vic.id === 'sakura' && att && att.idx !== vic.idx) this.addResearch(vic, '実測');
     this.shake = Math.max(this.shake, dmg >= 10 ? 5 : 2);
-    const hx = vic.x - dir * 7;
-    const hy = vic.y - 48;
-    this.spark(hx, hy, dmg >= 10 ? '#fca5a5' : '#fff6a0', dmg >= 10 ? 12 : 7, dmg >= 10 ? 3 : 2);
+    const hx = vic.x - dir * 4;
+    const hy = vic.y - 28;
+    this.spark(hx, hy, dmg >= 10 ? '#fca5a5' : '#fff6a0', dmg >= 10 ? 12 : 7, dmg >= 10 ? 2 : 1);
     if (att?.id === 'ryoma') this.crossBurst(hx, hy, 3);
     const label = att?.combo && att.combo >= 2 ? undefined : this.pick(HIT_TEXTS);
-    if (label) this.text(label, hx, hy - 17, { size: dmg >= 10 ? 11 : 8, color: dmg >= 10 ? '#fecaca' : '#ffffff', life: 30, vy: -0.7 });
+    if (label) this.text(label, hx, hy - 10, { size: dmg >= 10 ? 11 : 8, color: dmg >= 10 ? '#fecaca' : '#ffffff', life: 30, vy: -0.7 });
     if (att && att.combo >= 2) {
       const c = [...COMBO_COMMENTS].reverse().find(([n]) => att.combo >= n);
       this.text(`${att.combo} HIT ${c ? c[1] : ''}`, att.side === 0 ? 70 : W - 70, 84, { size: 9, color: att.def.color, life: 45, vy: -0.15 });
@@ -1571,17 +1571,17 @@ export class Battle {
     const chip = dmg * 0.1;
     vic.hp = Math.max(1, vic.hp - chip);
     this.setState(vic, 'block', Math.max(8, hitstun * 0.6));
-    vic.vx = -vic.facing * 3.4;
+    vic.vx = -vic.facing * 2;
     vic.hitstop = 3;
     if (att) {
       att.hitstop = 3;
       att.meter = Math.min(100, att.meter + 2);
-      if (vic.x <= 18 || vic.x >= W - 18) att.vx = -att.facing * 3.4;
+      if (vic.x <= 10 || vic.x >= W - 10) att.vx = -att.facing * 2;
     }
     vic.meter = Math.min(100, vic.meter + 3);
     if (vic.id === 'sakura') this.addResearch(vic, '観察');
-    this.fx.push({ kind: 'guard', x: vic.x + vic.facing * 14, y: vic.y - 48, vx: 0, vy: 0, t: 0, life: 12, color: '#93c5fd', size: 17 });
-    this.text(vic.def.blockText, vic.x, vic.y - 88, { size: 8, color: '#bfdbfe', life: 26, vy: -0.5 });
+    this.fx.push({ kind: 'guard', x: vic.x + vic.facing * 8, y: vic.y - 28, vx: 0, vy: 0, t: 0, life: 12, color: '#93c5fd', size: 10 });
+    this.text(vic.def.blockText, vic.x, vic.y - 52, { size: 8, color: '#bfdbfe', life: 26, vy: -0.5 });
     this.sfx('guard');
   }
 
@@ -1600,7 +1600,7 @@ export class Battle {
         p.t++;
         p.life--;
         if (p.life <= 0) {
-          this.text('減衰（第四法則）', p.x, p.y - 34, { size: 6, color: '#cbd5e1', life: 36, vy: -0.3 });
+          this.text('減衰（第四法則）', p.x, p.y - 20, { size: 6, color: '#cbd5e1', life: 36, vy: -0.3 });
           continue;
         }
         if (this.phase === 'fight') {
@@ -1609,7 +1609,7 @@ export class Battle {
           const box = this.projBox(p);
           const toucher = this.f.find((e) => e.team !== ownerTeam && e.hp > 0 && this.hittable(e) && overlap(box, this.hurtbox(e)));
           if (toucher) {
-            this.collapseKoi(p, owner, 51);
+            this.collapseKoi(p, owner, 30);
             continue;
           }
         }
@@ -1623,7 +1623,7 @@ export class Battle {
         p.life--;
         p.charge ??= 0;
         if (p.life <= 0) {
-          this.text('防災マップは、予報だけだった', p.x, p.y - 24, { size: 6, color: '#c9c9a8', life: 36, vy: -0.3 });
+          this.text('防災マップは、予報だけだった', p.x, p.y - 14, { size: 6, color: '#c9c9a8', life: 36, vy: -0.3 });
           continue;
         }
         if (this.phase === 'fight') {
@@ -1639,20 +1639,20 @@ export class Battle {
             const wasRead = f.readT > 0;
             f.readT = Math.max(f.readT, 40);
             if (!wasRead) {
-              this.text('動きを、読まれてる', f.x, f.y - 95, { size: 6, color: '#d6d3bc', life: 40, vy: -0.3 });
-              this.text('防災マップは、「なぜ」を描く', p.x, p.y - 37, { size: 6, color: '#b8c4a0', life: 40, vy: -0.2 });
+              this.text('動きを、読まれてる', f.x, f.y - 56, { size: 6, color: '#d6d3bc', life: 40, vy: -0.3 });
+              this.text('防災マップは、「なぜ」を描く', p.x, p.y - 22, { size: 6, color: '#b8c4a0', life: 40, vy: -0.2 });
             }
           }
           // フューズは常に進む（時限）。図の上に立っている間は倍速。
           p.charge += standing ? 2 : 1;
-          if (p.charge === 30) this.text('……そろそろ、だ', p.x, p.y - 58, { size: 6, color: '#e9a23b', life: 34, vy: -0.3, shake: true });
+          if (p.charge === 30) this.text('……そろそろ、だ', p.x, p.y - 34, { size: 6, color: '#e9a23b', life: 34, vy: -0.3, shake: true });
           if (p.charge >= 60) {
             // 発災：その場にいる全員が隆起に呑まれる（乗っていなければ巻き込まれない）
-            this.text('発災！！', p.x, GROUND - 88, { size: 18, color: '#fbbf24', life: 46, vy: -0.4, shake: true });
+            this.text('発災！！', p.x, GROUND - 52, { size: 18, color: '#fbbf24', life: 46, vy: -0.4, shake: true });
             this.sfx('heavy');
-            this.ring(p.x, GROUND - 4, '#e9a23b', 95);
-            this.crack(p.x, 78);
-            this.geyser(p.x, 44);
+            this.ring(p.x, GROUND - 4, '#e9a23b', 56);
+            this.crack(p.x, 46);
+            this.geyser(p.x, 26);
             this.soilBurst(p.x, 12);
             this.shake = Math.max(this.shake, 9);
             this.flash = Math.max(this.flash, 5);
@@ -1675,13 +1675,13 @@ export class Battle {
       }
       p.t++;
       p.life--;
-      if (p.kind === 'cheerEcho' && !p.echoReturned && (p.t >= CHEER.echoTurn || p.x + p.vx < 18 || p.x + p.vx > W - 18)) {
+      if (p.kind === 'cheerEcho' && !p.echoReturned && (p.t >= CHEER.echoTurn || p.x + p.vx < 10 || p.x + p.vx > W - 10)) {
         p.echoReturned = true;
         p.vx = -Math.sign(p.vx) * CHEER.echoReturnSpeed;
         p.y = Math.min(GROUND - 7, p.y + CHEER.echoDrop);
         p.hitMask = 0;
-        this.ring(p.x, p.y, '#bae6fd', 34);
-        this.text('反響', p.x, p.y - 27, { size: 6, color: '#bae6fd', life: 25 });
+        this.ring(p.x, p.y, '#bae6fd', 20);
+        this.text('反響', p.x, p.y - 16, { size: 6, color: '#bae6fd', life: 25 });
         this.sfx('clap');
       }
       if (p.homing !== undefined) {
@@ -1689,12 +1689,12 @@ export class Battle {
         // NOTE: atan2/cos/sin はブラウザ間で結果が一致する保証がないため、
         // オンライン同期（決定論）のためベクトル正規化で代用する
         const dx = tg.x - p.x;
-        const dy = tg.y - 44 - p.y;
+        const dy = tg.y - 26 - p.y;
         const dl = Math.sqrt(dx * dx + dy * dy) || 1;
-        p.vx += (dx / dl) * 0.68;
-        p.vy += (dy / dl) * 0.68;
+        p.vx += (dx / dl) * 0.4;
+        p.vy += (dy / dl) * 0.4;
         const sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-        const max = p.kind === 'qed' ? 9.4 : 7.1;
+        const max = p.kind === 'qed' ? 5.5 : 4.2;
         if (sp > max) {
           p.vx = (p.vx / sp) * max;
           p.vy = (p.vy / sp) * max;
@@ -1707,17 +1707,17 @@ export class Battle {
         const floor = GROUND - p.h / 2;
         if (p.y > floor) {
           p.y = floor;
-          if (p.kind === 'cat') p.vy = -2.9;
+          if (p.kind === 'cat') p.vy = -1.7;
           else if (p.kind === 'basketball') p.vy = -Math.abs(p.vy) * 0.72;
-          else if (p.kind === 'vending' && p.vy > 1.7) {
+          else if (p.kind === 'vending' && p.vy > 1) {
             p.vy = 0;
             this.shake = Math.max(this.shake, 8);
-            this.dust(p.x - 10);
-            this.dust(p.x + 10);
+            this.dust(p.x - 6);
+            this.dust(p.x + 6);
             this.sfx('heavy');
           } else p.vy = 0;
-        } else if (p.kind === 'cat' && p.vy === 0) p.vy = -2.9;
-        if (p.kind === 'cat' && p.y < floor) p.vy += 0.43;
+        } else if (p.kind === 'cat' && p.vy === 0) p.vy = -1.7;
+        if (p.kind === 'cat' && p.y < floor) p.vy += 0.25;
       }
       let dead = p.life <= 0 || p.x < -40 || p.x > W + 40 || p.y > H + 40 || (p.y < -60 && p.vy < 0);
       if (!dead && this.phase === 'fight') {
@@ -1731,9 +1731,9 @@ export class Battle {
           if (p.item) {
             if (f.state === 'down') continue;
             f.hp = Math.min(f.def.hp, f.hp + (p.heal ?? 10));
-            this.text(`+${p.heal ?? 10}`, f.x, f.y - 95, { size: 10, color: '#86efac', life: 40, vy: -0.6 });
-            this.text(p.kind === 'soup' ? '六ヶ月ぶり' : '白い筋は取る派', f.x, f.y - 112, { size: 7, color: '#fde68a', life: 40, vy: -0.4 });
-            this.sparkles(f.x, f.y - 41, '#86efac');
+            this.text(`+${p.heal ?? 10}`, f.x, f.y - 56, { size: 10, color: '#86efac', life: 40, vy: -0.6 });
+            this.text(p.kind === 'soup' ? '六ヶ月ぶり' : '白い筋は取る派', f.x, f.y - 66, { size: 7, color: '#fde68a', life: 40, vy: -0.4 });
+            this.sparkles(f.x, f.y - 24, '#86efac');
             this.sfx('heal');
             dead = true;
             break;
@@ -1744,9 +1744,9 @@ export class Battle {
             const sdir: Facing = p.vx !== 0 ? (p.vx > 0 ? 1 : -1) : 1;
             dead = true;
             f.meter = Math.min(100, f.meter + 6);
-            this.dust(f.x - sdir * 10);
-            this.dust(f.x + sdir * 3);
-            this.text('砕いた', f.x - sdir * 10, f.y - 99, { size: 7, color: '#fdba74', life: 26, vy: -0.3 });
+            this.dust(f.x - sdir * 6);
+            this.dust(f.x + sdir * 2);
+            this.text('砕いた', f.x - sdir * 6, f.y - 58, { size: 7, color: '#fdba74', life: 26, vy: -0.3 });
             this.sfx('heavy');
             break;
           }
@@ -1755,15 +1755,15 @@ export class Battle {
             p.vx = -p.vx * 1.25;
             p.vy = p.kind === 'star' || p.kind === 'cross' ? -Math.abs(p.vy) * 0.6 : p.vy;
             if (p.kind === 'star') {
-              p.vx = f.facing * 6;
-              p.vy = -1.7;
+              p.vx = f.facing * 3.5;
+              p.vy = -1;
             }
             p.dmg *= 1.5;
             p.hitMask = 0;
             p.homing = undefined;
             p.life = Math.max(p.life, 120);
-            this.text('は？', f.x, f.y - 102, { size: 16, color: '#7dd3fc', life: 40, vy: -0.4, shake: true });
-            this.ring(p.x, p.y, '#7dd3fc', 27);
+            this.text('は？', f.x, f.y - 60, { size: 16, color: '#7dd3fc', life: 40, vy: -0.4, shake: true });
+            this.ring(p.x, p.y, '#7dd3fc', 16);
             f.meter = Math.min(100, f.meter + 10);
             this.sfx('ha');
             p.hitMask |= 1 << f.idx;
@@ -1781,10 +1781,10 @@ export class Battle {
             this.applyBlock(att, f, p.dmg, p.hitstun);
           } else {
             this.applyHit(att, f, p.dmg, { hitstun: p.hitstun, kbx: p.kbx, kby: p.kby, knockdown: p.knockdown }, dir, p.kind === 'cross' ? 'cross' : 'hit');
-            if (p.kind === 'cross') this.crossBurst(f.x, f.y - 51, 4);
-            if (p.kind === 'kuraishi') this.text('✝✝✝', f.x, f.y - 105, { size: 12, color: '#f8fafc', life: 40, vy: -0.5 });
-            if (p.kind === 'basketball') this.text('用は済んだ', p.x, p.y - 24, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
-            if (p.kind === 'kusa') this.text('草', f.x + (this.rng() - 0.5) * 34, f.y - 68 - this.rng() * 34, { size: 8, color: '#4ade80', life: 30, vy: -0.8 });
+            if (p.kind === 'cross') this.crossBurst(f.x, f.y - 30, 4);
+            if (p.kind === 'kuraishi') this.text('✝✝✝', f.x, f.y - 62, { size: 12, color: '#f8fafc', life: 40, vy: -0.5 });
+            if (p.kind === 'basketball') this.text('用は済んだ', p.x, p.y - 14, { size: 8, color: '#fdba74', life: 40, vy: -0.4 });
+            if (p.kind === 'kusa') this.text('草', f.x + (this.rng() - 0.5) * 20, f.y - 40 - this.rng() * 20, { size: 8, color: '#4ade80', life: 30, vy: -0.8 });
           }
           p.hitMask |= 1 << f.idx;
           if (!p.pierce) dead = true;
@@ -1799,7 +1799,7 @@ export class Battle {
   /** 伸びる音の輪の「先端」だけに判定。すでに通り過ぎた内側には当てない。 */
   private cheerWaveTouches(p: Projectile, box: Box): boolean {
     const radius = p.t * CHEER.waveSpeed;
-    const inner = Math.max(0, radius - CHEER.waveSpeed - 5);
+    const inner = Math.max(0, radius - CHEER.waveSpeed - 3);
     const minX = Math.max(box.x - p.x, p.x - box.x - box.w, 0);
     const minY = Math.max(box.y - p.y, p.y - box.y - box.h, 0);
     const maxX = Math.max(Math.abs(box.x - p.x), Math.abs(box.x + box.w - p.x));
@@ -1818,7 +1818,7 @@ export class Battle {
       if (other.owner >= 0 && this.f[other.owner]?.team === owner.team) continue;
       if (!this.cheerWaveTouches(p, this.projBox(other))) continue;
       other.life = 0;
-      this.ring(other.x, other.y, '#fecdd3', 20);
+      this.ring(other.x, other.y, '#fecdd3', 12);
     }
     for (const e of this.aliveEnemies(owner)) {
       if ((p.hitMask & (1 << e.idx)) || !this.hittable(e) || !this.cheerWaveTouches(p, this.hurtbox(e))) continue;
@@ -1827,10 +1827,10 @@ export class Battle {
       if (this.armorActive(e)) {
         // ハンマーの対飛び道具アーマーを尊重。他の敵への波まで消しはしない。
         e.meter = Math.min(100, e.meter + 6);
-        this.text('声まで、砕いた', e.x, e.y - 99, { size: 7, color: '#fdba74', life: 26 });
+        this.text('声まで、砕いた', e.x, e.y - 58, { size: 7, color: '#fdba74', life: 26 });
         this.sfx('heavy');
       } else if (e.countering) {
-        this.text('は？（聞こえてる）', e.x, e.y - 102, { size: 8, color: '#7dd3fc', life: 32 });
+        this.text('は？（聞こえてる）', e.x, e.y - 60, { size: 8, color: '#7dd3fc', life: 32 });
         e.meter = Math.min(100, e.meter + 5);
       } else if (this.isBlocking(e)) this.applyBlock(owner, e, p.dmg, p.hitstun);
       else this.applyHit(owner, e, p.dmg * this.dmgMulOf(owner), p, e.x >= p.x ? 1 : -1, 'cheer');
@@ -1886,14 +1886,14 @@ export class Battle {
           this.sfx('ha');
         }
         if (T === 12) {
-          this.ring(f.x, f.y - 43, '#7dd3fc', 102);
+          this.ring(f.x, f.y - 25, '#7dd3fc', 60);
           // 画面中の✝本質✝を全否定：敵全員にヒット（チーム戦対応）
           for (const e of this.aliveEnemies(f)) {
             if (!this.hittable(e)) continue;
             const dir: Facing = e.x >= f.x ? 1 : -1;
-            this.applyHit(f, e, 30, { hitstun: 30, kbx: 7.7, kby: 8.5, knockdown: true }, dir, 'ha');
+            this.applyHit(f, e, 30, { hitstun: 30, kbx: 4.5, kby: 5, knockdown: true }, dir, 'ha');
             e.meter = Math.max(0, e.meter - 30);
-            this.text('否定', e.x, e.y - 102, { size: 16, color: '#7dd3fc', life: 50, vy: -0.3 });
+            this.text('否定', e.x, e.y - 60, { size: 16, color: '#7dd3fc', life: 50, vy: -0.3 });
           }
         }
         if (T === 24 || T === 36) this.sfx('ha');
@@ -1905,10 +1905,10 @@ export class Battle {
         if (T <= 66 && T % 3 === 0) {
           const near = this.rng() < 0.6;
           const tgt = this.randomEnemy(f) ?? o;
-          this.spawnProj({ kind: 'cross', owner: f.idx, x: clamp(near ? tgt.x + (this.rng() - 0.5) * 153 : this.rng() * W, 14, W - 14), y: -12 - this.rng() * 20, vx: (this.rng() - 0.5) * 1, vy: 4.4 + this.rng() * 2, w: 15, h: 19, dmg: 4, hitstun: 12, kbx: 1.7, kby: 0, life: 220 });
+          this.spawnProj({ kind: 'cross', owner: f.idx, x: clamp(near ? tgt.x + (this.rng() - 0.5) * 90 : this.rng() * W, 8, W - 8), y: -12 - this.rng() * 20, vx: (this.rng() - 0.5) * 0.6, vy: 2.6 + this.rng() * 1.2, w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 220 });
           if (T % 9 === 0) this.sfx('cross');
         }
-        if (T === 30) this.text('✝本質✝は止まらない', f.x, f.y - 102, { size: 9, color: '#fde68a', life: 50, vy: -0.3 });
+        if (T === 30) this.text('✝本質✝は止まらない', f.x, f.y - 60, { size: 9, color: '#fde68a', life: 50, vy: -0.3 });
         if (T >= 82) this.setState(f, 'idle');
         break;
       }
@@ -1921,13 +1921,13 @@ export class Battle {
             this.setState(o, 'stun', 135);
             o.vx = 0;
             o.meter = 0;
-            for (let i = 0; i < 6; i++) this.text('？', o.x + (this.rng() - 0.5) * 41, o.y - 85 - this.rng() * 27, { size: 10 + this.rng() * 8, color: '#c4b5fd', life: 60, vy: -0.3 });
-            this.text('分類できない', o.x, o.y - 119, { size: 8, color: '#e9d5ff', life: 60, vy: -0.2 });
+            for (let i = 0; i < 6; i++) this.text('？', o.x + (this.rng() - 0.5) * 24, o.y - 50 - this.rng() * 16, { size: 10 + this.rng() * 8, color: '#c4b5fd', life: 60, vy: -0.3 });
+            this.text('分類できない', o.x, o.y - 70, { size: 8, color: '#e9d5ff', life: 60, vy: -0.2 });
           }
           f.hp = Math.min(f.def.hp, f.hp + 25);
-          this.text('+25 安心', f.x, f.y - 99, { size: 10, color: '#86efac', life: 50, vy: -0.5 });
-          this.sparkles(f.x, f.y - 44, '#c4b5fd');
-          this.hearts(o.x, o.y - 68);
+          this.text('+25 安心', f.x, f.y - 58, { size: 10, color: '#86efac', life: 50, vy: -0.5 });
+          this.sparkles(f.x, f.y - 26, '#c4b5fd');
+          this.hearts(o.x, o.y - 40);
           this.sfx('heal');
         }
         if (T >= 46) this.setState(f, 'idle');
@@ -1938,14 +1938,14 @@ export class Battle {
         if (T === 1) this.setBanner('理論はいい！！', '突進', c, 60);
         if (!d.grabbed) {
           if (T <= 34) {
-            f.x = clamp(f.x + f.facing * 12, 18, W - 18);
+            f.x = clamp(f.x + f.facing * 7, 10, W - 10);
             if (T % 3 === 0) this.afterimage(f);
             // 突進中に触れた敵のうち最も近い1人を掴む
             let victim: Fighter | null = null;
             let bestD = Infinity;
             for (const e of this.aliveEnemies(f)) {
               const dd = Math.abs(e.x - f.x);
-              if (dd < 51 && e.y > GROUND - 44 && this.hittable(e) && dd < bestD) {
+              if (dd < 30 && e.y > GROUND - 26 && this.hittable(e) && dd < bestD) {
                 bestD = dd;
                 victim = e;
               }
@@ -1965,7 +1965,7 @@ export class Battle {
               this.shake = 6;
             }
           } else {
-            this.text('は？', f.x, f.y - 94, { size: 12, color: '#f9a8d4', life: 40 });
+            this.text('は？', f.x, f.y - 55, { size: 12, color: '#f9a8d4', life: 40 });
             this.setState(f, 'idle');
             f.cooldown = 20;
           }
@@ -1977,7 +1977,7 @@ export class Battle {
             break;
           }
           d.gt = (d.gt ?? 0) + 1;
-          v.x = clamp(f.x + f.facing * 22, 18, W - 18);
+          v.x = clamp(f.x + f.facing * 13, 10, W - 10);
           v.y = GROUND - 4;
           v.facing = f.facing === 1 ? -1 : 1;
           const hits: [number, string, number][] = [
@@ -1990,8 +1990,8 @@ export class Battle {
               v.hp = Math.max(0, v.hp - dmg * f.def.dmgMul);
               v.flash = 3;
               this.shake = 6;
-              this.spark(v.x, v.y - 48, '#f9a8d4', 10, 3);
-              this.text(txt, v.x, v.y - 102, { size: dmg > 10 ? 14 : 11, color: '#fbcfe8', life: 45, vy: -0.4, shake: dmg > 10 });
+              this.spark(v.x, v.y - 28, '#f9a8d4', 10, 2);
+              this.text(txt, v.x, v.y - 60, { size: dmg > 10 ? 14 : 11, color: '#fbcfe8', life: 45, vy: -0.4, shake: dmg > 10 });
               this.sfx(dmg > 10 ? 'heavy' : 'hit');
               f.combo = hits.findIndex((h) => h[0] === at) + 1;
               f.comboTimer = 40;
@@ -2000,9 +2000,9 @@ export class Battle {
           if (d.gt === 58) {
             v.grabbedBy = -1;
             this.setState(v, 'launch');
-            v.vx = f.facing * 8.5;
-            v.vy = -9.4;
-            v.y -= 3;
+            v.vx = f.facing * 5;
+            v.vy = -5.5;
+            v.y -= 2;
             this.setState(f, 'idle');
           }
         }
@@ -2017,9 +2017,9 @@ export class Battle {
         ];
         for (const [at, words, dmg] of beats) {
           if (T !== at) continue;
-          this.spawnProj({ kind: 'cheerWave', owner: f.idx, x: f.x, y: f.y - 51, vx: 0, vy: 0, w: 2, h: 2, dmg, hitstun: 25, kbx: dmg > 10 ? 6.5 : 1.4, kby: dmg > 10 ? 7.7 : 0, knockdown: dmg > 10, life: CHEER.waveLife, pierce: true });
+          this.spawnProj({ kind: 'cheerWave', owner: f.idx, x: f.x, y: f.y - 30, vx: 0, vy: 0, w: 2, h: 2, dmg, hitstun: 25, kbx: dmg > 10 ? 3.8 : 0.8, kby: dmg > 10 ? 4.5 : 0, knockdown: dmg > 10, life: CHEER.waveLife, pierce: true });
           this.text(words, W / 2, 92, { size: dmg > 10 ? 16 : 11, color: dmg > 10 ? '#fff1f2' : '#fda4af', life: 34, vy: -0.12, shake: true });
-          this.soundArc(f, dmg > 10 ? 102 : 68);
+          this.soundArc(f, dmg > 10 ? 60 : 40);
           this.shake = Math.max(this.shake, dmg > 10 ? 9 : 4);
           this.sfx('cheer');
         }
@@ -2027,8 +2027,8 @@ export class Battle {
           for (const ally of this.f) {
             if (ally.team !== f.team || ally.hp <= 0) continue;
             ally.rallyT = Math.max(ally.rallyT, CHEER.rallyFrames);
-            this.sparkles(ally.x, ally.y - 41, '#bae6fd');
-            this.text('もう一本！ SPEED↑', ally.x, ally.y - 112, { size: 6, color: '#bae6fd', life: 45 });
+            this.sparkles(ally.x, ally.y - 24, '#bae6fd');
+            this.text('もう一本！ SPEED↑', ally.x, ally.y - 66, { size: 6, color: '#bae6fd', life: 45 });
           }
           const mie = this.f.find((e) => e.id === 'mie' && e.team === f.team && e.hp > 0);
           if (mie) this.bubble(mie.idx, '……聞こえてる。最後まで走る', 95);
@@ -2050,11 +2050,11 @@ export class Battle {
       case 'rei': {
         if (T === 1) this.setBanner('面白いデータが出たので見てください', '全科目学年首席', c, 110);
         if (T <= 36 && T % 3 === 0) {
-          this.spawnProj({ kind: 'formula', owner: f.idx, x: f.x + f.facing * 14, y: f.y - 58, vx: f.facing * (2.6 + this.rng() * 3.4), vy: -5.1 + this.rng() * 10.2, w: 14, h: 14, dmg: 3, hitstun: 12, kbx: 1.4, kby: 0, life: 160, homing: o.idx, text: this.pick(FORMULAS) });
+          this.spawnProj({ kind: 'formula', owner: f.idx, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * (1.5 + this.rng() * 2), vy: -3 + this.rng() * 6, w: 8, h: 8, dmg: 3, hitstun: 12, kbx: 0.8, kby: 0, life: 160, homing: o.idx, text: this.pick(FORMULAS) });
           if (T % 9 === 0) this.sfx('special');
         }
         if (T === 50) {
-          this.spawnProj({ kind: 'qed', owner: f.idx, x: f.x + f.facing * 14, y: f.y - 58, vx: f.facing * 5.1, vy: 0, w: 37, h: 17, dmg: 12, hitstun: 30, kbx: 6.8, kby: 7.7, knockdown: true, life: 160, homing: o.idx, text: 'Q.E.D.' });
+          this.spawnProj({ kind: 'qed', owner: f.idx, x: f.x + f.facing * 8, y: f.y - 34, vx: f.facing * 3, vy: 0, w: 22, h: 10, dmg: 12, hitstun: 30, kbx: 4, kby: 4.5, knockdown: true, life: 160, homing: o.idx, text: 'Q.E.D.' });
           this.sfx('cross');
         }
         if (T >= 64) this.setState(f, 'idle');
@@ -2079,7 +2079,7 @@ export class Battle {
                 }),
             });
           });
-          this.hearts(f.x, f.y - 68);
+          this.hearts(f.x, f.y - 40);
           this.sfx('special');
         }
         if (T === 22) {
@@ -2088,19 +2088,19 @@ export class Battle {
           const tgt = this.nearestEnemy(f);
           const n = d.n ?? 0;
           const dmg = (14 + 2.5 * n) * f.def.dmgMul;
-          if (tgt && Math.abs(tgt.x - f.x) < 221 && this.hittable(tgt)) {
+          if (tgt && Math.abs(tgt.x - f.x) < 130 && this.hittable(tgt)) {
             d.hit = true;
             const dir: Facing = tgt.x >= f.x ? 1 : -1;
-            this.ring(tgt.x, tgt.y - 41, '#f9a8d4', 88);
-            this.applyHit(f, tgt, dmg, { hitstun: 30, kbx: 7.1, kby: 8.8, knockdown: true }, dir, 'heavy');
-            this.text('観測', tgt.x, tgt.y - 112, { size: 18, color: '#f5d0fe', life: 50, vy: -0.3, shake: true });
-            this.text(`n=${n} → 波動関数、崩壊`, tgt.x, tgt.y - 139, { size: 8, color: '#fbcfe8', life: 50, vy: -0.2 });
-            this.hearts(tgt.x, tgt.y - 68);
+            this.ring(tgt.x, tgt.y - 24, '#f9a8d4', 52);
+            this.applyHit(f, tgt, dmg, { hitstun: 30, kbx: 4.2, kby: 5.2, knockdown: true }, dir, 'heavy');
+            this.text('観測', tgt.x, tgt.y - 66, { size: 18, color: '#f5d0fe', life: 50, vy: -0.3, shake: true });
+            this.text(`n=${n} → 波動関数、崩壊`, tgt.x, tgt.y - 82, { size: 8, color: '#fbcfe8', life: 50, vy: -0.2 });
+            this.hearts(tgt.x, tgt.y - 40);
             this.flash = 10;
             this.shake = 10;
           } else {
-            this.text('……観測、失敗', f.x, f.y - 102, { size: 9, color: '#e2e8f0', life: 50, vy: -0.2 });
-            this.text('（波動関数は崩壊しなかった。でも恋はした）', f.x, f.y - 119, { size: 6, color: '#cbd5e1', life: 50, vy: -0.2 });
+            this.text('……観測、失敗', f.x, f.y - 60, { size: 9, color: '#e2e8f0', life: 50, vy: -0.2 });
+            this.text('（波動関数は崩壊しなかった。でも恋はした）', f.x, f.y - 70, { size: 6, color: '#cbd5e1', life: 50, vy: -0.2 });
           }
           f.research = 0;
           this.sfx('heavy');
@@ -2110,8 +2110,8 @@ export class Battle {
           f.loveT = 600;
           f.look = SAKURA_LOVE_LOOK;
           this.setBanner('理論のない状態の恋', '第七法則：不理解の引力 ── 相手を引き寄せ続ける（10秒・攻撃力↑）', '#f9a8d4', 110);
-          this.sparkles(f.x, f.y - 44, '#f9a8d4');
-          this.text('ノートを手放した', f.x, f.y - 99, { size: 7, color: '#fbcfe8', life: 46, vy: -0.3 });
+          this.sparkles(f.x, f.y - 26, '#f9a8d4');
+          this.text('ノートを手放した', f.x, f.y - 58, { size: 7, color: '#fbcfe8', life: 46, vy: -0.3 });
           this.sfx('heal');
         }
         if (T >= 54) this.setState(f, 'idle');
@@ -2128,19 +2128,19 @@ export class Battle {
         if (T >= 4 && T < 14) {
           if (T % 2 === 0) {
             this.shake = Math.max(this.shake, T * 0.8);
-            this.crack(f.x + (T - 4) * 37, 31 + T);
-            this.dust(f.x + (T - 4) * 37);
+            this.crack(f.x + (T - 4) * 22, 18 + T);
+            this.dust(f.x + (T - 4) * 22);
           }
         }
         if (T === 14) {
           this.flash = 14;
           this.shake = 26;
-          this.ring(f.x, GROUND - 4, '#a3b18a', 129);
+          this.ring(f.x, GROUND - 4, '#a3b18a', 76);
           this.text('発災！！', W / 2, H / 2 - 30, { size: 26, color: '#fbbf24', life: 50, vy: -0.3, shake: true });
           // 画面全体の地面が一斉に隆起する（土砂が舞い上がる）
-          for (let x = 20; x < W - 8; x += 58) {
-            this.crack(x + (this.rng() - 0.5) * 20, 34 + this.rng() * 41);
-            if (this.rng() < 0.8) this.geyser(x + (this.rng() - 0.5) * 14, 31 + this.rng() * 37);
+          for (let x = 20; x < W - 8; x += 34) {
+            this.crack(x + (this.rng() - 0.5) * 12, 20 + this.rng() * 24);
+            if (this.rng() < 0.8) this.geyser(x + (this.rng() - 0.5) * 8, 18 + this.rng() * 22);
           }
           this.soilBurst(f.x, 16);
           // 地面を走っていた飛び道具は隆起に呑み込まれる
@@ -2150,16 +2150,16 @@ export class Battle {
           for (const e of this.aliveEnemies(f)) {
             if (!this.hittable(e)) continue;
             if (e.y < GROUND) {
-              this.text('（空中は、まだ地図に載っていない）', e.x, e.y - 109, { size: 6, color: '#cbd5e1', life: 42, vy: -0.3 });
+              this.text('（空中は、まだ地図に載っていない）', e.x, e.y - 64, { size: 6, color: '#cbd5e1', life: 42, vy: -0.3 });
               continue;
             }
             const dir: Facing = e.x >= f.x ? 1 : -1;
-            this.ring(e.x, GROUND - 4, '#b8c4a0', 75);
-            this.crack(e.x, 44);
-            this.geyser(e.x, 58);
+            this.ring(e.x, GROUND - 4, '#b8c4a0', 44);
+            this.crack(e.x, 26);
+            this.geyser(e.x, 34);
             this.soilBurst(e.x, 12);
-            this.applyHit(f, e, 26 * this.dmgMulOf(f), { hitstun: 34, kbx: 2.6, kby: 11.1, knockdown: true }, dir, 'heavy');
-            this.text('地面は忘れない', e.x, e.y - 116, { size: 11, color: '#d9dcc0', life: 46, vy: -0.4, shake: true });
+            this.applyHit(f, e, 26 * this.dmgMulOf(f), { hitstun: 34, kbx: 1.5, kby: 6.5, knockdown: true }, dir, 'heavy');
+            this.text('地面は忘れない', e.x, e.y - 68, { size: 11, color: '#d9dcc0', life: 46, vy: -0.4, shake: true });
           }
         }
         // 余震（T=26〜38）：降り積もった土がまだ落ちてくる
@@ -2169,7 +2169,7 @@ export class Battle {
         }
         if (T === 26) {
           for (const e of this.aliveEnemies(f)) {
-            if (e.y < GROUND && this.hittable(e)) this.text('飛んでる間は、安全だ', e.x, e.y - 82, { size: 6, color: '#cbd5e1', life: 34, vy: -0.3 });
+            if (e.y < GROUND && this.hittable(e)) this.text('飛んでる間は、安全だ', e.x, e.y - 48, { size: 6, color: '#cbd5e1', life: 34, vy: -0.3 });
           }
         }
         if (T >= 60) this.setState(f, 'idle');
@@ -2184,29 +2184,29 @@ export class Battle {
         }
         // 前進（ハンマーを振りかぶりながら）
         if (T >= 2 && T <= 30) {
-          f.x = clamp(f.x + f.facing * 5.3, 18, W - 18);
+          f.x = clamp(f.x + f.facing * 3.1, 10, W - 10);
           if (T % 2 === 0) this.afterimage(f);
         }
         const impact = (x: number, txt: string, big: boolean) => {
-          this.ring(x, GROUND - 6, '#fdba74', big ? 75 : 51);
-          this.dust(x - 14);
-          this.dust(x + 14);
+          this.ring(x, GROUND - 6, '#fdba74', big ? 44 : 30);
+          this.dust(x - 8);
+          this.dust(x + 8);
           this.shake = Math.max(this.shake, big ? 12 : 7);
           this.flash = Math.max(this.flash, big ? 7 : 4);
-          this.text(txt, x, GROUND - 88, { size: big ? 16 : 12, color: '#fdba74', life: 40, vy: -0.3, shake: big });
+          this.text(txt, x, GROUND - 52, { size: big ? 16 : 12, color: '#fdba74', life: 40, vy: -0.3, shake: big });
           this.sfx('heavy');
         };
         // その場に立ち止まって叩き込む
         if (T === 34) {
-          impact(f.x + f.facing * 34, '解体！', false);
+          impact(f.x + f.facing * 20, '解体！', false);
           this.spawnShockSuper(f, 34, 10);
         }
         if (T === 48) {
-          impact(f.x + f.facing * 34, '排除！', false);
+          impact(f.x + f.facing * 20, '排除！', false);
           this.spawnShockSuper(f, 48, 10);
         }
         if (T === 64) {
-          impact(f.x + f.facing * 34, '更地！', true);
+          impact(f.x + f.facing * 20, '更地！', true);
           this.spawnShockSuper(f, 64, 16);
         }
         if (T >= 86) this.setState(f, 'idle');
@@ -2220,25 +2220,25 @@ export class Battle {
     void at;
     // 至近（ハンマーで直接叩く範囲）の生存敵を直撃
     for (const e of this.aliveEnemies(f)) {
-      if (Math.abs(e.x - f.x) < 75 && e.y > GROUND - 102 && this.hittable(e)) {
+      if (Math.abs(e.x - f.x) < 44 && e.y > GROUND - 60 && this.hittable(e)) {
         const dir: Facing = e.x >= f.x ? 1 : -1;
-        this.applyHit(f, e, dmg * this.dmgMulOf(f), { hitstun: 28, kbx: 6, kby: 7.8, knockdown: true }, dir, 'heavy');
+        this.applyHit(f, e, dmg * this.dmgMulOf(f), { hitstun: 28, kbx: 3.5, kby: 4.6, knockdown: true }, dir, 'heavy');
       }
     }
     // 画面の端まで走る貫通の地面震撃（ジャンプで飛び越え可能）
     this.spawnProj({
       kind: 'shock',
       owner: f.idx,
-      x: f.x + f.facing * 31,
+      x: f.x + f.facing * 18,
       y: GROUND - 7,
-      vx: f.facing * 7.8,
+      vx: f.facing * 4.6,
       vy: 0,
-      w: 20,
-      h: 24,
+      w: 12,
+      h: 14,
       dmg: dmg * this.dmgMulOf(f) * 0.8,
       hitstun: 22,
-      kbx: 4.4,
-      kby: 5.8,
+      kbx: 2.6,
+      kby: 3.4,
       knockdown: true,
       life: 150,
       ground: true,
@@ -2251,8 +2251,8 @@ export class Battle {
     switch (oc.id) {
       case 'silence':
         o.silence = 600;
-        if (can) this.applyHit(f, o, 15, { hitstun: 24, kbx: 3.4, kby: 0 }, f.facing);
-        this.text('沈黙', o.x, o.y - 102, { size: 12, color: '#e2e8f0', life: 60 });
+        if (can) this.applyHit(f, o, 15, { hitstun: 24, kbx: 2, kby: 0 }, f.facing);
+        this.text('沈黙', o.x, o.y - 60, { size: 12, color: '#e2e8f0', life: 60 });
         break;
       case 'kusa':
         for (let i = 0; i < 30; i++) {
@@ -2260,38 +2260,38 @@ export class Battle {
             at: this.t + i * 2,
             fn: () => {
               const tgt = this.randomEnemy(f) ?? o;
-              this.spawnProj({ kind: 'kusa', owner: f.idx, x: clamp(tgt.x + (this.rng() - 0.5) * 119, 14, W - 14), y: -10, vx: 0, vy: 5.1 + this.rng() * 3.4, w: 14, h: 14, dmg: 1.2, hitstun: 8, kbx: 0.7, kby: 0, life: 120 });
+              this.spawnProj({ kind: 'kusa', owner: f.idx, x: clamp(tgt.x + (this.rng() - 0.5) * 70, 8, W - 8), y: -10, vx: 0, vy: 3 + this.rng() * 2, w: 8, h: 8, dmg: 1.2, hitstun: 8, kbx: 0.4, kby: 0, life: 120 });
             },
           });
         }
         break;
       case 'soup':
         f.hp = Math.min(f.def.hp, f.hp + 30);
-        this.text('+30 不在感', f.x, f.y - 99, { size: 10, color: '#86efac', life: 50, vy: -0.5 });
-        this.sparkles(f.x, f.y - 44, '#fde68a');
+        this.text('+30 不在感', f.x, f.y - 58, { size: 10, color: '#86efac', life: 50, vy: -0.5 });
+        this.sparkles(f.x, f.y - 26, '#fde68a');
         this.sfx('heal');
-        if (can) this.applyHit(f, o, 10, { hitstun: 20, kbx: 3.4, kby: 0 }, f.facing);
+        if (can) this.applyHit(f, o, 10, { hitstun: 20, kbx: 2, kby: 0 }, f.facing);
         break;
       case 'night':
         this.darkness = 480;
-        if (can) this.applyHit(f, o, 18, { hitstun: 24, kbx: 5.1, kby: 6.8, knockdown: true }, f.facing);
+        if (can) this.applyHit(f, o, 18, { hitstun: 24, kbx: 3, kby: 4, knockdown: true }, f.facing);
         break;
       case 'freeze':
-        if (can) this.applyHit(f, o, 22, { hitstun: 24, kbx: 6, kby: 7.7, knockdown: true }, f.facing);
-        this.text('六秒固まった', f.x, f.y - 99, { size: 9, color: '#e2e8f0', life: 80, vy: -0.1 });
+        if (can) this.applyHit(f, o, 22, { hitstun: 24, kbx: 3.5, kby: 4.5, knockdown: true }, f.facing);
+        this.text('六秒固まった', f.x, f.y - 58, { size: 9, color: '#e2e8f0', life: 80, vy: -0.1 });
         this.setState(f, 'frozen', 120);
         f.invuln = 125;
         break;
       case 'truth':
-        if (can) this.applyHit(f, o, 35, { hitstun: 30, kbx: 7.7, kby: 9.4, knockdown: true }, f.facing, 'heavy');
-        this.text('本当のこと', o.x, o.y - 105, { size: 14, color: '#fecaca', life: 60, vy: -0.3, shake: true });
+        if (can) this.applyHit(f, o, 35, { hitstun: 30, kbx: 4.5, kby: 5.5, knockdown: true }, f.facing, 'heavy');
+        this.text('本当のこと', o.x, o.y - 62, { size: 14, color: '#fecaca', life: 60, vy: -0.3, shake: true });
         this.flash = 10;
         break;
       case 'nothing':
         f.meter = 50;
-        this.text('……', f.x, f.y - 99, { size: 12, color: '#e2e8f0', life: 60, vy: -0.1 });
-        if (can) this.applyHit(f, o, 5, { hitstun: 12, kbx: 1.7, kby: 0 }, f.facing);
-        this.text('草', o.x, o.y - 94, { size: 10, color: '#4ade80', life: 50 });
+        this.text('……', f.x, f.y - 58, { size: 12, color: '#e2e8f0', life: 60, vy: -0.1 });
+        if (can) this.applyHit(f, o, 5, { hitstun: 12, kbx: 1, kby: 0 }, f.facing);
+        this.text('草', o.x, o.y - 55, { size: 10, color: '#4ade80', life: 50 });
         break;
     }
   }
@@ -2323,19 +2323,19 @@ export class Battle {
         for (let i = 0; i < 12; i++) {
           this.queue.push({
             at: this.t + i * 6,
-            fn: () => this.spawnProj({ kind: 'cross', owner: -1, x: 20 + this.rng() * (W - 40), y: -12, vx: 0, vy: 3.7 + this.rng() * 1.7, w: 15, h: 19, dmg: 4, hitstun: 12, kbx: 1.7, kby: 0, life: 200 }),
+            fn: () => this.spawnProj({ kind: 'cross', owner: -1, x: 20 + this.rng() * (W - 40), y: -12, vx: 0, vy: 2.2 + this.rng(), w: 9, h: 11, dmg: 4, hitstun: 12, kbx: 1, kby: 0, life: 200 }),
           });
         }
         break;
       case 'soupBack':
         this.setBanner('コーンスープ、六ヶ月ぶりに補充', '取った方が回復する', '#fde68a');
-        this.spawnProj({ kind: 'soup', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 2.6, w: 14, h: 20, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 18 });
+        this.spawnProj({ kind: 'soup', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 1.5, w: 8, h: 12, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 18 });
         break;
       case 'soupGone': {
         const tgt = pickAlive() ?? this.f[0];
         this.setBanner('コーンスープの不在', '業者が忘れている（自販機が降ってくる）', '#94a3b8');
         this.text('！', tgt.x, 30, { size: 14, color: '#fca5a5', life: 60, vy: 0 });
-        this.spawnProj({ kind: 'vending', owner: -1, x: clamp(tgt.x + (this.rng() - 0.5) * 41, 34, W - 34), y: -40, vx: 0, vy: 0, grav: 0.37, w: 27, h: 44, dmg: 16, hitstun: 30, kbx: 3.4, kby: 6.8, knockdown: true, life: 420, ground: true, pierce: true });
+        this.spawnProj({ kind: 'vending', owner: -1, x: clamp(tgt.x + (this.rng() - 0.5) * 24, 20, W - 20), y: -40, vx: 0, vy: 0, grav: 0.22, w: 16, h: 26, dmg: 16, hitstun: 30, kbx: 2, kby: 4, knockdown: true, life: 420, ground: true, pierce: true });
         break;
       }
       case 'matome':
@@ -2353,8 +2353,8 @@ export class Battle {
       case 'kuraishi': {
         const fromLeft = this.rng() < 0.5;
         this.setBanner('倉石暁、乱入', '✝✝✝は重い', '#f8fafc');
-        this.spawnProj({ kind: 'kuraishi', owner: -1, x: fromLeft ? -20 : W + 20, y: GROUND - 34, vx: fromLeft ? 5.4 : -5.4, vy: 0, w: 24, h: 68, dmg: 8, hitstun: 24, kbx: 5.1, kby: 6, knockdown: true, life: 230, pierce: true });
-        this.text('教祖に会えた', fromLeft ? 60 : W - 60, GROUND - 102, { size: 8, color: '#f8fafc', life: 60, vy: -0.2 });
+        this.spawnProj({ kind: 'kuraishi', owner: -1, x: fromLeft ? -20 : W + 20, y: GROUND - 20, vx: fromLeft ? 3.2 : -3.2, vy: 0, w: 14, h: 40, dmg: 8, hitstun: 24, kbx: 3, kby: 3.5, knockdown: true, life: 230, pierce: true });
+        this.text('教祖に会えた', fromLeft ? 60 : W - 60, GROUND - 60, { size: 8, color: '#f8fafc', life: 60, vy: -0.2 });
         break;
       }
       case 'ring':
@@ -2363,13 +2363,13 @@ export class Battle {
         for (const f of this.f)
           if (this.canBeAffected(f) && f.y >= GROUND) {
             this.setState(f, 'stun', 70);
-            this.hearts(f.x, f.y - 77);
+            this.hearts(f.x, f.y - 45);
           }
         break;
       case 'threepoint': {
         const fromLeft = this.rng() < 0.5;
         this.setBanner('砂糖のスリーポイント', '用は済んだ', '#fb923c');
-        this.spawnProj({ kind: 'basketball', owner: -1, x: fromLeft ? -8 : W + 8, y: 120, vx: fromLeft ? 4.8 : -4.8, vy: -5.8, grav: 0.19, w: 14, h: 14, dmg: 10, hitstun: 20, kbx: 3.4, kby: 3.4, life: 280 });
+        this.spawnProj({ kind: 'basketball', owner: -1, x: fromLeft ? -8 : W + 8, y: 120, vx: fromLeft ? 2.8 : -2.8, vy: -3.4, grav: 0.11, w: 8, h: 8, dmg: 10, hitstun: 20, kbx: 2, kby: 2, life: 280 });
         break;
       }
       case 'observe': {
@@ -2388,8 +2388,8 @@ export class Battle {
           const ax = pa.x;
           pa.x = pb.x;
           pb.x = ax;
-          this.sparkles(pa.x, pa.y - 41, '#c4b5fd');
-          this.sparkles(pb.x, pb.y - 41, '#c4b5fd');
+          this.sparkles(pa.x, pa.y - 24, '#c4b5fd');
+          this.sparkles(pb.x, pb.y - 24, '#c4b5fd');
         }
         this.sfx('special');
         break;
@@ -2400,7 +2400,7 @@ export class Battle {
         break;
       case 'mikan':
         this.setBanner('三重県産みかん、臣下が剥く', '白い筋の境界線（回復）', '#fdba74');
-        this.spawnProj({ kind: 'mikan', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 2.4, w: 14, h: 14, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 12 });
+        this.spawnProj({ kind: 'mikan', owner: -1, x: 60 + this.rng() * (W - 120), y: -10, vx: 0, vy: 1.4, w: 8, h: 8, dmg: 0, hitstun: 0, kbx: 0, kby: 0, life: 900, ground: true, item: 'heal', heal: 12 });
         break;
     }
   }
@@ -2409,12 +2409,12 @@ export class Battle {
   /** 通常攻撃の実効リーチ（box + 少しのマージン）。これより遠いと空振り確定なので撃たない */
   private aiLightReach(f: Fighter): number {
     const b = f.def.moves.light.box;
-    return b ? b.x + b.w + 10 : 41;
+    return b ? b.x + b.w + 6 : 24;
   }
   private aiHeavyReach(f: Fighter): number {
     const m = f.def.moves.heavy;
     const b = m.box;
-    const base = b ? b.x + b.w + 7 : 48;
+    const base = b ? b.x + b.w + 4 : 28;
     return base + (m.moveX ?? 0) * 2.5;
   }
 
@@ -2492,7 +2492,7 @@ export class Battle {
 
     // ── 1. 超必殺（ダウン中は撃たない）──
     // 櫻の告白（観測）は射程130なので、届く距離でだけ撃つ
-    const superRange = f.id === 'sakura' ? 196 : 272;
+    const superRange = f.id === 'sakura' ? 115 : 160;
     if (
       f.meter >= 100 &&
       f.silence <= 0 &&
@@ -2512,7 +2512,7 @@ export class Battle {
       if (p.owner >= 0 && this.f[p.owner]?.team === f.team) return false;
       const dx = f.x - p.x;
       const closing = p.homing === f.idx || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
-      return closing && Math.abs(dx) < 187 && Math.abs(p.y - (f.y - 37)) < 85;
+      return closing && Math.abs(dx) < 110 && Math.abs(p.y - (f.y - 22)) < 50;
     });
     if (proj && grounded && this.rng() < projP) {
       // 三重は当身で跳ね返す
@@ -2533,7 +2533,7 @@ export class Battle {
     // ── 2.5 櫻優：シュレディンガーの好意の「観測」／相手の好意を飛び越える ──
     if (f.id === 'sakura' && grounded && f.cooldown <= 0 && f.silence <= 0) {
       const trap = this.koiOf(f);
-      if (trap && Math.abs(o.x - trap.x) < 51 && o.y >= GROUND - 34 && o.state !== 'down' && o.state !== 'getup' && this.rng() < (d === 'extreme' ? 0.9 : d === 'hard' ? 0.75 : 0.5)) {
+      if (trap && Math.abs(o.x - trap.x) < 30 && o.y >= GROUND - 20 && o.state !== 'down' && o.state !== 'getup' && this.rng() < (d === 'extreme' ? 0.9 : d === 'hard' ? 0.75 : 0.5)) {
         inp.special = true;
         return inp;
       }
@@ -2544,7 +2544,7 @@ export class Battle {
         const dx = koi.x - f.x;
         const ahead = Math.sign(dx) === (fwd === 'right' ? 1 : -1);
         // 低偏差値ほど踏みやすい（極端に賢いと罠の意味がなくなるので確率は控えめ）
-        if (ahead && Math.abs(dx) < 41 && this.rng() < projP * 0.12) {
+        if (ahead && Math.abs(dx) < 24 && this.rng() < projP * 0.12) {
           inp.up = true;
           inp[fwd] = true;
           return inp;
@@ -2558,9 +2558,9 @@ export class Battle {
       !!o.move &&
       o.move.kind === 'melee' &&
       (o.movePhase === 0 || o.movePhase === 1);
-    const oGrabThreat = o.state === 'super' && o.id === 'mitsumine' && dist < 145;
-    const jumpInThreat = o.y < GROUND - 14 && dist < 94 && o.vy > -2.6;
-    const threat = (oMelee && dist < 105 && Math.abs(o.y - f.y) < 68) || oGrabThreat || jumpInThreat;
+    const oGrabThreat = o.state === 'super' && o.id === 'mitsumine' && dist < 85;
+    const jumpInThreat = o.y < GROUND - 8 && dist < 55 && o.vy > -1.5;
+    const threat = (oMelee && dist < 62 && Math.abs(o.y - f.y) < 40) || oGrabThreat || jumpInThreat;
 
     if (threat && grounded) {
       if (this.rng() < blockP) {
@@ -2581,8 +2581,8 @@ export class Battle {
 
     // ── 4. カウンター立ち（三重の「は？」）には触らない ──
     if (o.countering) {
-      if (dist < 119) inp[back] = true;
-      else if (f.cooldown <= 0 && dist < 187 && this.aiCanSpecial(f, dist, false, !!proj) && this.rng() < 0.35) {
+      if (dist < 70) inp[back] = true;
+      else if (f.cooldown <= 0 && dist < 110 && this.aiCanSpecial(f, dist, false, !!proj) && this.rng() < 0.35) {
         inp.special = true;
       } else inp[fwd] = true;
       return inp;
@@ -2597,7 +2597,7 @@ export class Battle {
       (o.state === 'hurt' && o.stateT > 2);
 
     if (oVuln && grounded) {
-      if (dist > heavyR + 7) {
+      if (dist > heavyR + 4) {
         inp[fwd] = true;
       } else if (inHeavy && this.rng() < 0.7) {
         inp.heavy = true;
@@ -2610,35 +2610,35 @@ export class Battle {
     }
 
     // ── 6. 対空 ──
-    if (o.y < GROUND - 17 && dist < 88 && o.vy > -2 && grounded && inHeavy) {
+    if (o.y < GROUND - 10 && dist < 52 && o.vy > -1.2 && grounded && inHeavy) {
       inp.heavy = true;
       return inp;
     }
 
     // ── 7. 起き攻め / ダウン待ち ──
     if (o.state === 'getup' && grounded) {
-      if (dist > 82) inp[fwd] = true;
+      if (dist > 48) inp[fwd] = true;
       else if (o.stateT >= 6 && inHeavy) inp.heavy = true;
       else if (o.stateT >= 6 && inLight) inp.light = true;
       else inp[back] = true;
       return inp;
     }
     if (o.state === 'down') {
-      if (dist > 94) inp[fwd] = true;
-      else if (dist < 51) inp[back] = true;
+      if (dist > 55) inp[fwd] = true;
+      else if (dist < 30) inp[back] = true;
       // 適度な距離で待つ（起き上がりを狙う）
       return inp;
     }
 
     // 体育着の三峰は、走るだけでなく空中ルートで二階席の高さを取りに行く。
-    if (f.def.airControl && grounded && dist > 61 && dist < 238 && this.rng() < (d === 'easy' ? 0.04 : 0.13)) {
+    if (f.def.airControl && grounded && dist > 36 && dist < 140 && this.rng() < (d === 'easy' ? 0.04 : 0.13)) {
       inp.up = true;
       inp[fwd] = true;
       return inp;
     }
 
     // ── 8. 遠距離：接近 or 飛び道具・必殺 ──
-    if (dist > 170) {
+    if (dist > 100) {
       if (
         this.aiCanSpecial(f, dist, false, !!proj) &&
         this.rng() < specialP * 0.7
@@ -2656,7 +2656,7 @@ export class Battle {
     }
 
     // ── 9. 中距離：接近してリーチ内に入る、たまに必殺 ──
-    if (dist > heavyR + 10) {
+    if (dist > heavyR + 6) {
       if (
         this.aiCanSpecial(f, dist, false, !!proj) &&
         this.rng() < specialP * 0.35
@@ -2675,7 +2675,7 @@ export class Battle {
 
     // ── 10. 攻撃距離内：リーチを見てから撃つ（ここが一番重要）──
     // 近すぎるときは軽攻撃 or 下がる
-    if (dist < 31) {
+    if (dist < 18) {
       if (this.rng() < 0.35) {
         inp[back] = true;
       } else if (this.rng() < agg) {
@@ -2712,15 +2712,15 @@ export class Battle {
     const inp = { ...EMPTY_INPUT };
     const dist = Math.abs(o.x - f.x);
     const fwd = o.x > f.x ? 'right' : 'left';
-    if (dist > 29) inp[fwd] = true;
+    if (dist > 17) inp[fwd] = true;
     const high = o.y - f.y;
     if (f.state !== 'attack') {
-      if (!(f.airUsed & 2) && dist < 49 && high > 24 && o.state !== 'down' && o.state !== 'getup') inp.heavy = true;
-      else if (!(f.airUsed & 1) && dist < 170 && high > 37) inp.light = true;
+      if (!(f.airUsed & 2) && dist < 29 && high > 14 && o.state !== 'down' && o.state !== 'getup') inp.heavy = true;
+      else if (!(f.airUsed & 1) && dist < 100 && high > 22) inp.light = true;
     }
     const d = this.aiDifficultyOf(f);
-    if ((d === 'hard' || d === 'extreme') && f.airLift > 0 && dist > 75 && f.vy > -1.7) inp.up = true;
-    if (f.airUsed === 3 || (dist < 34 && high > 34 && o.state === 'down')) inp.down = true;
+    if ((d === 'hard' || d === 'extreme') && f.airLift > 0 && dist > 44 && f.vy > -1) inp.up = true;
+    if (f.airUsed === 3 || (dist < 20 && high > 20 && o.state === 'down')) inp.down = true;
     return inp;
   }
 
@@ -2759,19 +2759,19 @@ export class Battle {
     const heavyR = this.aiHeavyReach(f);
 
     // 超必殺：ゲージが溜まった瞬間に起動（ダウン中の相手には撃たない）
-    if (f.meter >= 100 && f.silence <= 0 && o.state !== 'down' && o.state !== 'getup' && dist < 315) {
+    if (f.meter >= 100 && f.silence <= 0 && o.state !== 'down' && o.state !== 'getup' && dist < 185) {
       inp.super = true;
       return inp;
     }
     // 三峰の超必殺掴みは位相幾何学で抜けて背後から懲罰
-    if (o.state === 'super' && o.id === 'mitsumine' && dist < 153 && f.cooldown <= 0 && grounded) {
+    if (o.state === 'super' && o.id === 'mitsumine' && dist < 90 && f.cooldown <= 0 && grounded) {
       inp.special = true;
       return inp;
     }
     // 三重の「は？」構えには絶対に触らない
     if (o.countering) {
-      if (dist < 116) inp[back] = true;
-      else if (f.cooldown <= 0 && dist < 170 && this.rng() < 0.4) inp.special = true;
+      if (dist < 68) inp[back] = true;
+      else if (f.cooldown <= 0 && dist < 100 && this.rng() < 0.4) inp.special = true;
       else inp[fwd] = true;
       return inp;
     }
@@ -2782,7 +2782,7 @@ export class Battle {
       if (p.owner >= 0 && this.f[p.owner]?.team === f.team) return false;
       const dx = f.x - p.x;
       const closing = p.homing === f.idx || (p.vx !== 0 && Math.sign(p.vx) === Math.sign(dx));
-      return closing && Math.abs(dx) < 204 && Math.abs(p.y - (f.y - 37)) < 94;
+      return closing && Math.abs(dx) < 120 && Math.abs(p.y - (f.y - 22)) < 55;
     });
     if (proj && grounded) {
       if (proj.ground) {
@@ -2801,7 +2801,7 @@ export class Battle {
       if (koi) {
         const dx = koi.x - f.x;
         const ahead = Math.sign(dx) === (fwd === 'right' ? 1 : -1);
-        if (ahead && Math.abs(dx) < 44 && this.rng() < (d === 'extreme' ? 0.5 : 0.3)) {
+        if (ahead && Math.abs(dx) < 26 && this.rng() < (d === 'extreme' ? 0.5 : 0.3)) {
           inp.up = true;
           inp[fwd] = true;
           return inp;
@@ -2811,8 +2811,8 @@ export class Battle {
     // 防御：相手の打撃発生を読み切ってガード
     const oMelee = o.state === 'attack' && !!o.move && o.move.kind === 'melee';
     const oThreat =
-      (oMelee && dist < 95 && Math.abs(o.y - f.y) < 61) ||
-      (o.y < GROUND - 14 && dist < 99 && o.vy > -2);
+      (oMelee && dist < 56 && Math.abs(o.y - f.y) < 36) ||
+      (o.y < GROUND - 8 && dist < 58 && o.vy > -1.2);
     if (oThreat && grounded) {
       if (this.rng() > blockP) return inp;
       if (f.cooldown <= 0 && this.rng() < teleP) inp.special = true;
@@ -2820,7 +2820,7 @@ export class Battle {
       return inp;
     }
     // punish
-    if (o.state === 'hurt' && dist < 78 && grounded) {
+    if (o.state === 'hurt' && dist < 46 && grounded) {
       if (o.stateT <= 6) inp.light = true;
       else if (dist <= heavyR) inp.heavy = true;
       else if (dist <= lightR) inp.light = true;
@@ -2830,40 +2830,40 @@ export class Battle {
     const oWhiff = o.state === 'attack' && o.movePhase === 2;
     const oVuln = oWhiff || o.state === 'stun' || o.state === 'frozen';
     if (oVuln && grounded) {
-      if (dist > heavyR + 7) inp[fwd] = true;
-      else if (dist >= 44 && dist <= heavyR) inp.heavy = true;
+      if (dist > heavyR + 4) inp[fwd] = true;
+      else if (dist >= 26 && dist <= heavyR) inp.heavy = true;
       else if (dist <= lightR) inp.light = true;
       else inp[fwd] = true;
       return inp;
     }
     // 対空
-    if (o.y < GROUND - 17 && dist < 92 && o.vy > -1.7 && grounded && dist <= heavyR) {
+    if (o.y < GROUND - 10 && dist < 54 && o.vy > -1 && grounded && dist <= heavyR) {
       inp.heavy = true;
       return inp;
     }
     // 起こし攻め
     if (o.state === 'getup' && grounded) {
-      if (dist > 78) inp[fwd] = true;
+      if (dist > 46) inp[fwd] = true;
       else if (o.stateT >= 5 && dist <= heavyR) inp.heavy = true;
       else inp[back] = true;
       return inp;
     }
     if (o.state === 'down') {
-      if (dist > 88) inp[fwd] = true;
-      else if (dist < 58) inp[back] = true;
+      if (dist > 52) inp[fwd] = true;
+      else if (dist < 34) inp[back] = true;
       return inp;
     }
     // 攻め：間合いを維持して poke（リーチ外では撃たない）
-    if (dist > heavyR + 7) {
-      if (dist > 179 && f.cooldown <= 0 && this.rng() < (d === 'extreme' ? 0.12 : 0.06)) {
+    if (dist > heavyR + 4) {
+      if (dist > 105 && f.cooldown <= 0 && this.rng() < (d === 'extreme' ? 0.12 : 0.06)) {
         inp.special = true;
-      } else if (dist > 187 && this.rng() < 0.06) {
+      } else if (dist > 110 && this.rng() < 0.06) {
         inp.up = true;
         inp[fwd] = true;
       } else inp[fwd] = true;
       return inp;
     }
-    if (dist < 34) {
+    if (dist < 20) {
       if (f.cooldown <= 0 && this.rng() < (d === 'extreme' ? 0.22 : 0.14)) inp.special = true;
       else if (dist <= lightR) inp.light = true;
       else inp[back] = true;
@@ -2883,18 +2883,18 @@ export class Battle {
       case 'mie':
         return oppAttacking || projIncoming;
       case 'rei':
-        return dist > 102;
+        return dist > 60;
       case 'sakura': {
         // 未設置なら相手との間に置く。設置済みなら（相手が乗ったときだけ観測＝generalBrain側で判断）撃たない
         const trap = this.koiOf(f);
         if (trap) return false;
-        return dist > 88 && dist < 255;
+        return dist > 52 && dist < 150;
       }
       case 'mitsumine_cheer':
-        return dist > 60 && dist < 221 && this.canSpecial(f);
+        return dist > 35 && dist < 130 && this.canSpecial(f);
       case 'heikatsu':
         // 地形図：相手が歩いてくる経路（30px先）に広げる。相手との距離が近すぎず遠すぎずのとき
-        return dist > 68 && dist < 289;
+        return dist > 40 && dist < 170;
       default:
         return this.canSpecial(f);
     }
