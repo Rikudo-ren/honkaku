@@ -50,7 +50,7 @@ export const MITSUMINE_CHEER: CharDef = {
     gender: 'f',
     outfit: 'gym',
     weapon: 'none',
-    winPose: 'tsundere',
+    winPose: 'mitsumine_cheer',
   },
   airControl: { speed: 11.6, acceleration: 2.8, liftFrames: 28 },
   passive: {

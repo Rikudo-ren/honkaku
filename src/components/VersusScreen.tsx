@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CHARS, DIFFICULTY_LABELS, INTRO_PAIRS, MIRROR_INTROS, STAGES, pairKey } from '@/game/characters';
+import { CHARS, DIFFICULTY_LABELS, STAGES } from '@/game/characters';
 import { LOADING_TIPS } from '@/game/quotes';
 import { Portrait } from '@/components/Portrait';
 import type { Setup } from '@/game/types';
@@ -20,15 +20,7 @@ export function DuelVersus({ setup, onDone }: Props) {
   const b = CHARS[setup.p2];
   const st = STAGES.find((s) => s.id === setup.stage) ?? STAGES[0];
   const [tip] = useState(() => LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]);
-  // 掛け合いは候補から1つ（試合中はエンジンが決定論rngで別に選ぶ。ここは予告）
-  const [pair] = useState(() => {
-    const list = INTRO_PAIRS[pairKey(a.id, b.id)];
-    if (!list || !list.length) return undefined;
-    // オンラインでは両者で同じ予告が出るようにシードから選ぶ
-    const r = setup.seed !== undefined ? (setup.seed >>> 0) % list.length : Math.floor(Math.random() * list.length);
-    return list[r];
-  });
-  const mirror = a.id === b.id ? MIRROR_INTROS[a.id] : undefined;
+  // 掛け合いは対戦開始後のお楽しみ。VSでは内容を先に見せない。
   const online = setup.mode === 'online';
   // オンライン対戦ではプレイヤー名を表示（自分には「あなた」を添える）
   const onlineLabel = (side: 0 | 1) => {
@@ -90,18 +82,6 @@ export function DuelVersus({ setup, onDone }: Props) {
         {showDiff && (
           <div className={`mx-auto mt-1 w-fit border-2 bg-black/85 px-3 py-1 text-center text-sm font-bold md:text-lg ${diffColor}`}>
             CPU {DIFFICULTY_LABELS[setup.difficulty]}
-          </div>
-        )}
-        {pair && (
-          <div className="mt-2 w-[min(90vw,52rem)] whitespace-normal break-words bg-black/85 px-3 py-2 text-center text-xs leading-relaxed text-amber-100 md:text-base">
-            <div>{CHARS[pair.first].name}「{pair.a}」</div>
-            <div>{pair.first === a.id ? b.name : a.name}「{pair.b}」</div>
-            {pair.note && <div className="text-xs text-slate-400">{pair.note}</div>}
-          </div>
-        )}
-        {a.id === b.id && (
-          <div className="mt-2 w-[min(90vw,52rem)] whitespace-normal break-words bg-black/85 px-3 py-2 text-center text-xs text-amber-100 md:text-base">
-            {mirror ? `「${mirror.a}」「${mirror.b}」` : '自演じゃなくて自己対話だよ'}
           </div>
         )}
       </div>

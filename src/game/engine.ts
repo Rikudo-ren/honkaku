@@ -637,7 +637,7 @@ export class Battle {
       case 'ryoma':
         return 'spread';
       case 'naito':
-        return 'win';
+        return 'observe';
       case 'mitsumine':
         return (f.superData as { grabbed?: boolean })?.grabbed ? 'grab' : 'walk';
       case 'mitsumine_cheer':

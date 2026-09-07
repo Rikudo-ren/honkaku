@@ -1,4 +1,5 @@
-import type { Facing, IdleArm, Look, PoseId } from './types';
+import { SpriteSheetCache, type PixelPaintContext } from './spriteSheet';
+import type { BrowStyle, CharId, EyeStyle, Facing, IdleArm, Look, MouthIdle, PoseId } from './types';
 
 type ArmPose =
   | 'down'
@@ -7,7 +8,13 @@ type ArmPose =
   | 'walkF'
   | 'walkB'
   | 'crossed'
-  | 'peace'
+  | 'dismiss'
+  | 'present'
+  | 'penReady'
+  | 'write'
+  | 'trace'
+  | 'chest'
+  | 'cheerFist'
   | 'punch'
   | 'forward'
   | 'chamber'
@@ -35,6 +42,18 @@ interface PoseParams {
   legs: LegPose;
   legFrame: number;
   face: Face;
+  /** 目を閉じた共通の笑顔ではなく、目の形と口元を独立させる。 */
+  mouth?: MouthIdle | 'subtleSmile' | 'exhale';
+  /** 勝利時だけの表情差分。通常立ち・他のキャラの見た目は変えない。 */
+  eyeStyle?: EyeStyle;
+  brows?: BrowStyle;
+  blush?: 'flustered';
+  /** 勝利専用の小物・手元。すべて解決済みの状態としてシートのキーに入る。 */
+  victory?: CharId;
+  propFrame?: number;
+  headDy?: number;
+  /** 体の向きは変えずに、頭だけそっぽを向く。 */
+  headFacing?: Facing;
   lying?: boolean;
   weapon?: boolean;
   paper?: boolean;
@@ -49,6 +68,8 @@ export interface DrawOpts {
   phase?: 0 | 1 | 2;
   facing: Facing;
   t: number;
+  /** 勝利状態に入ってからのフレーム数。対戦の絶対時刻と分け、決め動作を一度だけ行う。 */
+  poseT?: number;
   flash?: boolean;
   alpha?: number;
 }
@@ -67,7 +88,61 @@ function idleArm(look: Look, side: 'F' | 'B'): ArmPose {
   return 'down';
 }
 
-function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): PoseParams {
+/**
+ * motoneta1.md の人物像に基づく専用の決め動作 → 保持ポーズ。
+ * 数理の「誇示しない」、内藤の「少し笑った」などを共通 smile に丸めない。
+ * 根拠とキャラごとの仕様は docs/victory-poses.md。時刻ではなく有限の状態だけを返す。
+ */
+function resolveVictoryPose(look: Look, elapsed: number, base: PoseParams): PoseParams {
+  const id = look.winPose;
+  const neutral: PoseParams = { ...base, armF: idleArm(look, 'F'), armB: idleArm(look, 'B'), mouth: 'flat' };
+  if (!id) return neutral;
+  const t = Math.max(0, Math.floor(elapsed));
+  const p: PoseParams = { ...base, victory: id, mouth: 'flat' };
+  switch (id) {
+    case 'mie':
+      // 「……まあ」「俺に✝本質✝をつけるな」。ポケットに片手、もう片手で軽く制する。
+      return { ...p, lean: -4, armF: t < 10 ? 'down' : 'dismiss', armB: 'pocket' };
+    case 'ryoma':
+      // 小物は出さず、全力で拳を突き上げる。もう片方の拳も握って喜ぶ。
+      return { ...p, dy: (Math.floor(t / 12) % 2) * 2, armF: t < 10 ? 'fist' : 'raise', armB: 'fist', legs: 'wide', mouth: 'grin' };
+    case 'naito':
+      // 読んでいた本を閉じ、相手を見る。笑うのは口元だけで、観察する目は開いたまま。
+      return { ...p, dy: (Math.floor(t / 40) % 2) * 2, armF: 'hold', armB: 'hold', headDy: t < 16 ? 2 : 0, propFrame: t < 16 ? 1 : 0, mouth: t < 16 ? 'flat' : 'subtleSmile' };
+    case 'mitsumine':
+      // ツンと腕を組んでから、赤くなった頬を隠すように顔をそらす。ノートは出さない。
+      return {
+        ...p, dy: (Math.floor(t / 36) % 2) * 2, lean: -4,
+        armF: t < 16 ? 'hip' : 'crossed', armB: t < 16 ? 'hip' : 'crossed',
+        headFacing: t < 24 ? 1 : -1, headDy: t < 24 ? 0 : 2,
+        eyeStyle: 'tsun', brows: 'angry', mouth: 'flat', blush: t < 24 ? undefined : 'flustered',
+      };
+    case 'terachi':
+      // 紙とマジックとカメラ。読み終わって固まるので、両馬と同じ万歳にはしない。
+      return { ...p, armF: t < 16 ? 'penReady' : 'present', armB: 'pocket', headDy: t < 16 ? 4 : 0, propFrame: t < 16 ? 0 : 1, mouth: t < 16 ? 'open' : 'flat' };
+    case 'rei':
+      // 「普通に」「特に強調もなく」。ピース・笑い目・得意顔は使わず、ペン回しに戻る。
+      return { ...p, armF: t < 12 ? 'down' : 'penReady', armB: 'down', propFrame: Math.floor(Math.max(0, t - 12) / 6) % 4 };
+    case 'sakura':
+      // 通常は結果まで「要検証」。理論を手放した変身中はノートを勝手に復活させない。
+      return look.accessory === 'loveNote'
+        ? { ...p, lean: 8, headDy: 4, armF: 'write', armB: 'hold', propFrame: Math.floor(t / 8) % 4 }
+        : { ...p, dy: (Math.floor(t / 30) % 2) * 2, headDy: t < 20 ? 4 : 0, armF: 'chest', armB: 'down', mouth: t < 20 ? 'exhale' : 'flat' };
+    case 'heikatsu':
+      // 等高線をなぞり、地図の向こう側へ目を向ける。腕組みで勝ち誇る人ではない。
+      return { ...p, armF: t < 36 ? 'trace' : 'hold', armB: 'hold', headDy: t < 36 ? 4 : -4, propFrame: t < 36 ? Math.floor(t / 10) % 2 : 0 };
+    case 'mitsumine_cheer':
+      // 一瞬だけ小さなガッツポーズ。そのあと「こっちの方が面白いから」と照れ隠し。
+      return { ...p, dy: (Math.floor(t / 36) % 2) * 2, lean: -4, armF: t < 24 ? 'cheerFist' : 'behind', armB: 'behind', headFacing: t < 24 ? 1 : -1, mouth: t < 24 ? 'subtleSmile' : 'flat' };
+    case 'kakusei':
+      // motoneta2.md の葬儀場：下げたハンマーと荒い息。満足げに笑ったり腕組みしたりしない。
+      return { ...p, dy: (Math.floor(t / 20) % 2) * 2, lean: 8, headDy: 4, armF: 'fist', armB: 'fist', legs: 'wide', mouth: Math.floor(t / 20) % 2 ? 'exhale' : 'gritted' };
+  }
+  // HMR等で古いLookが残っても、汎用の笑顔に戻したり描画を落としたりしない。
+  return neutral;
+}
+
+function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look, poseT = t): PoseParams {
   const base: PoseParams = { dy: 0, lean: 0, armF: 'down', armB: 'down', legs: 'stand', legFrame: 0, face: 'normal' };
   const bob = Math.floor(t / 24) % 2;
   const hug = isHug(look);
@@ -176,18 +251,11 @@ function resolvePose(pose: PoseId, phase: 0 | 1 | 2, t: number, look: Look): Pos
       return { ...base, lean: -8, legs: 'dangle', armF: 'flail', armB: 'flail', face: 'hurt' };
     case 'paper':
       return { ...base, armF: 'raise', face: 'normal', paper: true };
-    case 'win': {
-      const wp = look.winPose ?? 'cheer';
-      if (wp === 'tsundere') return { ...base, dy: bob * 4, lean: -4, armF: 'behind', armB: 'behind', face: 'closed' };
-      if (wp === 'cool') {
-        const crossed = look.outfit === 'suit' || look.outfit === 'kensetsu';
-        return { ...base, dy: bob * 4, face: 'closed', armF: crossed ? 'crossed' : 'hip', armB: crossed ? 'crossed' : 'hip' };
-      }
-      if (wp === 'shy') return { ...base, dy: bob * 4, face: 'smile', armF: 'block', armB: hug ? 'hold' : 'down' };
-      if (wp === 'peace') return { ...base, dy: bob * 4, face: 'smile', armF: 'peace' };
-      if (wp === 'hug') return { ...base, dy: bob * 4, face: 'smile', armF: 'hold', armB: 'hold' };
-      return { ...base, dy: bob * 4, face: 'smile', armF: 'up', armB: 'up', legs: bob ? 'wide' : 'stand' };
-    }
+    case 'win':
+      return resolveVictoryPose(look, poseT, base);
+    case 'observe':
+      // 内藤の超必殺用。勝利モーションの開始・本を閉じる仕草とは独立させる。
+      return { ...base, armF: 'hold', armB: 'hold', mouth: 'subtleSmile' };
   }
   return base;
 }
@@ -200,10 +268,63 @@ function seedOf(look: Look): number {
   return Math.abs(h);
 }
 
+/** 時刻そのものではなく、実際に描く有限の状態をキャッシュキーに使う。 */
+export function resolveFighterFrame(look: Look, o: Pick<DrawOpts, 'pose' | 'phase' | 't' | 'poseT'>) {
+  const phase = o.phase ?? 0;
+  const pose = resolvePose(o.pose, phase, o.t, look, o.poseT);
+  const upright = !pose.lying;
+  const seed = seedOf(look);
+  const movingHair = upright && (look.hair === 'long' || look.hair === 'adult');
+  const movingTie = upright && look.gender === 'm' && (look.outfit === 'blazer' || look.outfit === 'vest');
+  const sway = movingHair || movingTie ? Math.round(Math.sin((o.t + seed) / 9) * 4) : 0;
+  const dropped = o.pose === 'hurt' || o.pose === 'launch' || o.pose === 'grabbed';
+  const idleHammer = look.outfit === 'kensetsu' && !pose.weapon && upright && !dropped;
+  const calm = o.pose === 'idle' || o.pose === 'walk' || o.pose === 'win' || o.pose === 'observe' || o.pose === 'frozen'
+    || o.pose === 'crouch' || o.pose === 'block' || o.pose === 'stun' || (o.pose === 'penJab' && phase === 2);
+  return {
+    pose,
+    accessory: upright && calm && !pose.victory,
+    jabWind: !pose.weapon && !idleHammer && (o.pose === 'jab' || o.pose === 'penJab') && phase === 1 && look.weapon === 'none',
+    slash: !!pose.weapon && !idleHammer && (o.pose === 'swing' || o.pose === 'lash') && phase === 1,
+    sway: movingHair ? sway : 0,
+    tieSway: movingTie ? (pose.legs === 'walk' ? Math.round(Math.sin(o.t / 4 + seed) * 4.8) : sway) : 0,
+    blink: upright && pose.face === 'normal' && (o.t + seed) % 200 < 5,
+    sweatDrip: upright && look.sweat && pose.face !== 'smile' && pose.face !== 'shout' ? (Math.floor(o.t / 20) % 3) * 4 : 0,
+    headbandFlap: upright && look.outfit === 'gym' && o.pose !== 'idle' && o.pose !== 'win' ? (Math.floor(o.t / 4) % 3) * 4 : 0,
+    idleHammer,
+    pythonWave: upright && look.weapon === 'python' && (pose.weapon || idleHammer)
+      ? Array.from({ length: 11 }, (_, i) => Math.round(Math.sin(i * 1.1 + o.t * 0.6) * 6))
+      : [],
+  };
+}
+
+type FighterFrame = ReturnType<typeof resolveFighterFrame>;
+const fighterSheets = new SpriteSheetCache();
+
+/** 開発・検証用。Canvasの確保は最初にキャラを描くまで行わない。 */
+export const getSpriteSheetStats = () => fighterSheets.getStats();
+export const clearSpriteSheets = () => fighterSheets.clear();
+
 /**
- * ドット絵ファイターを描画する。(x, y) は足元中央。HD版：1単位=旧1pxの4倍。
+ * 既存のドット絵から必要なコマだけシートを生成し、以後は drawImage で描く。
+ * 足元中央の原点は従来通り。向き・位置・透明度はシートを増やさず描画時に適用する。
  */
 export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number, look: Look, o: DrawOpts) {
+  const frame = resolveFighterFrame(look, o);
+  // Look 全体を含めるので変身・色替え・同じオブジェクトの編集も古い絵にならない。
+  // 生の t を含めないため、同じ髪の揺れや瞬きのコマは時刻を跨いで再利用できる。
+  const key = JSON.stringify([look, frame, !!o.flash]);
+  const drawn = fighterSheets.draw(ctx, x, y, key, (g) => {
+    drawFighterPixels(g, 0, 0, look, { ...o, facing: 1, alpha: 1 }, frame);
+  }, { flipX: o.facing === -1, alpha: o.alpha });
+  if (!drawn) drawFighterPixels(ctx, x, y, look, o, frame);
+}
+
+/**
+ * シート生成元と、Canvas確保失敗時のフォールバック。絵柄の変更はここで行う。
+ * (x, y) は足元中央。HD版：1単位=旧1pxの4倍。
+ */
+export function drawFighterPixels(ctx: PixelPaintContext, x: number, y: number, look: Look, o: DrawOpts, frame: FighterFrame = resolveFighterFrame(look, o)) {
   const F = o.facing;
   x = Math.round(x);
   y = Math.round(y);
@@ -216,8 +337,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     ctx.fillRect(F === 1 ? x + lx : x - lx - w, y + ly, w, h);
   };
 
-  const P = resolvePose(o.pose, o.phase ?? 0, o.t, look);
-  const seed = seedOf(look);
+  const P = frame.pose;
   const skin = look.skin ?? '#f3d4b4';
   const skinD = look.skinDark ?? '#d9a986';
   const isF = look.gender === 'f';
@@ -256,12 +376,10 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   const hd = look.hairDark ?? hc;
   const hl = look.hairLight ?? hc;
   const eye = look.eyeColor;
-  const eyeStyle = look.eyeStyle ?? 'round';
-  // 髪・ネクタイの揺れ（-4〜4）。瞬きは約3.3秒に1回、6フレームだけ閉じる。
-  const sway = Math.round(Math.sin((o.t + seed) / 9) * 4);
+  const eyeStyle = P.eyeStyle ?? look.eyeStyle ?? 'round';
+  // 髪・ネクタイの揺れ。瞬きは約3.3秒に1回、5フレームだけ閉じる。
+  const { sway, tieSway, blink } = frame;
   const walking = P.legs === 'walk';
-  const tieSway = walking ? Math.round(Math.sin(o.t / 4 + seed) * 4.8) : sway;
-  const blink = P.face === 'normal' && (o.t + seed) % 200 < 5;
   let hand = { x: 16, y: -72 + dy };
 
   if (P.lying) {
@@ -501,6 +619,13 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       const front = side === 'F';
       const b = front ? 20 : -32;
       switch (p) {
+        case 'cheerFist':
+          // 胸元の小さな拳。半袖と素肌を保ち、万歳の腕にはしない。
+          S(b, -120);
+          A(20, -108, 12, 20);
+          A(8, -116, 24, 12);
+          H(4 + ln, -132 + dy, 12, 16);
+          return;
         case 'none': return;
         case 'pocket':
         case 'fist':
@@ -567,7 +692,6 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
           H(-20 + ln, -112 + dy, 12, 16);
           return;
         case 'up':
-        case 'peace':
         case 'raise':
         case 'block':
           S(b, -132, 16, 20);
@@ -597,6 +721,51 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(lx + ln + w - 4, ly + dy + 2, 4, h - 4, skinD);
     };
     switch (p) {
+      case 'dismiss':
+        R(20 + ln, -116 + dy, 12, 28, c);
+        R(28 + ln, -100 + dy, 20, 12, c);
+        R(28 + ln, -92 + dy, 20, 4, sleeveD);
+        CU(36, -104);
+        H(44 + ln, -116 + dy, 16, 20);
+        for (const dx of [0, 5, 10]) R(44 + dx + ln, -124 + dy, 3, 12, handC);
+        R(57 + ln, -114 + dy, 4, 12, handD);
+        break;
+      case 'present': {
+        const grip = side === 'F' ? 32 : -48;
+        R(bx + ln, -116 + dy, 12, 28, c);
+        R(Math.min(bx, grip) + ln, -100 + dy, 28, 12, c);
+        R(grip + ln, -124 + dy, 12, 28, c);
+        R(grip + ln, -124 + dy, 3, 28, sleeveD);
+        CU(grip, -128);
+        H(grip + ln, -132 + dy, 12, 16);
+        break;
+      }
+      case 'penReady':
+        R(20 + ln, -116 + dy, 12, 28, c);
+        R(24 + ln, -100 + dy, 24, 12, c);
+        R(24 + ln, -92 + dy, 24, 4, sleeveD);
+        CU(36, -100);
+        H(36 + ln, -112 + dy);
+        break;
+      case 'write':
+      case 'trace': {
+        const shift = ((P.propFrame ?? 0) % 2) * 2;
+        R(20 + ln, -116 + dy, 12, 28, c);
+        R(12 + ln, -100 + dy, 24, 12, c);
+        R(12 + ln, -92 + dy, 24, 4, sleeveD);
+        CU(12, -100, 8);
+        H((p === 'write' ? 0 : 8) + shift + ln, -104 + dy, 16, 12);
+        if (p === 'trace') R(shift + ln, -98 + dy, 12, 4, handC);
+        break;
+      }
+      case 'chest':
+      case 'cheerFist':
+        R(16 + ln, -116 + dy, 12, 28, c);
+        R(4 + ln, -104 + dy, 28, 12, c);
+        R(4 + ln, -96 + dy, 28, 4, sleeveD);
+        CU(4, -104, 8);
+        H(-12 + ln, -112 + dy, 16, 12);
+        break;
       case 'none':
         break;
       case 'down':
@@ -623,9 +792,15 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         break;
       case 'fist':
         // 少し握りしめた拳。小刻みに上下する。
-        R(bx + ln, -116 + dy, 12, 40, c);
-        R(bx + (side === 'F' ? 8 : 0) + ln, -116 + dy, 4, 40, sleeveD);
-        CU(bx, -80);
+        if (isWork) {
+          R(bx + ln, -116 + dy, 12, 20, c);
+          R(bx + ln, -96 + dy, 12, 4, '#3d4a68');
+          rolled(bx, -92, 12, 16);
+        } else {
+          R(bx + ln, -116 + dy, 12, 40, c);
+          R(bx + (side === 'F' ? 8 : 0) + ln, -116 + dy, 4, 40, sleeveD);
+          CU(bx, -80);
+        }
         H(bx + ln, -76 + dy, 12, 16);
         break;
       case 'walkF':
@@ -652,21 +827,53 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         }
         H(bx - 4 + ln, -88 + dy);
         break;
-      case 'crossed':
-        // 腕組み（大人の勝ちポーズ）
+      case 'crossed': {
+        // 前腕は同じ高さに寄せて重ねる。斜めの腕や、上下に離れた二本の帯にはしない。
+        const foldY = -98 + dy;
         if (side === 'B') {
-          R(-20 + ln, -96 + dy, 40, 12, c);
-          R(-20 + ln, -96 + dy, 40, 4, sleeveD);
-          CU(12, -96, 8);
-          R(20 + ln, -96 + dy, 12, 12, handC);
-        } else {
-          R(8 + ln, -116 + dy, 16, 12, c);
-          R(-16 + ln, -112 + dy, 40, 12, c);
-          R(-16 + ln, -104 + dy, 40, 4, sleeveD);
-          CU(-24, -112, 8);
-          H(-32 + ln, -112 + dy);
+          // 奥の肩〜肘。肘も前腕の重なる高さに合わせて体へ寄せる。
+          R(-28 + ln, -116 + dy, 12, 18, c);
+          R(-27 + ln, -104 + dy, 13, 16, c);
+          R(-24 + ln, -94 + dy, 12, 10, c);
+          R(-28 + ln, -112 + dy, 3, 12, sleeveD);
+          R(-27 + ln, -101 + dy, 3, 11, sleeveD);
+          R(-24 + ln, -86 + dy, 10, 2, sleeveD);
+          break;
         }
+        // 奥の肘から前腕へ、胴体の手前でつなぐ。
+        R(-26 + ln, foldY, 12, 12, c);
+        R(-24 + ln, foldY + 10, 10, 4, sleeveD);
+        // 奥の前腕は手前より3pxだけ下。大半を重ね、下端の影だけをのぞかせる。
+        for (let i = 0; i < 9; i++) {
+          const x = -20 + i * 4 + ln;
+          R(x, foldY + 3, 4, 10, sleeveD);
+          R(x, foldY + 3, 4, 2, c);
+        }
+        R(14 + ln, foldY + 3, 8, 8, handC);
+        // 奥の手は反対の上腕の下に収める。
+        R(18 + ln, -118 + dy, 12, 18, c);
+        R(16 + ln, -104 + dy, 12, 16, c);
+        R(14 + ln, foldY + 2, 14, 12, c);
+        R(27 + ln, -114 + dy, 3, 12, sleeveD);
+        R(25 + ln, -101 + dy, 3, 14, sleeveD);
+        R(18 + ln, foldY + 12, 8, 2, sleeveD);
+        // 手前の前腕も水平。端を1pxだけ丸め、薄い袖の影で前後を描き分ける。
+        for (let i = 0; i < 9; i++) {
+          const x = -12 + i * 4 + ln;
+          const inset = i === 0 || i === 8 ? 1 : 0;
+          R(x, foldY + inset, 4, 10 - inset * 2, c);
+          R(x, foldY + 8 - inset, 4, 2, sleeveD);
+        }
+        // もう片方も指先だけ。握り拳を左右に突き出さない。
+        R(-20 + ln, foldY - 1, 7, 8, handC);
+        R(-17 + ln, foldY + 4, 4, 2, handD);
+        R(-14 + ln, foldY + 1, 4, 8, '#f4f4f8');
+        R(-14 + ln, foldY + 8, 4, 2, '#c9c9d4');
+        R(-24 + ln, foldY - 4, 6, 12, c);
+        R(-24 + ln, foldY - 4, 2, 10, sleeveD);
+        hand = { x: -17 + ln, y: foldY + 1 };
         break;
+      }
       case 'hip':
         R(bx + ln, -116 + dy, 12, 32, c);
         R(bx + ln, -116 + dy, 4, 32, sleeveD);
@@ -701,15 +908,6 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(bx + (side === 'F' ? 8 : 0) + ln, -164 + dy, 4, 48, sleeveD);
         CU(bx, -132, 12);
         H(bx + ln, -176 + dy);
-        break;
-      case 'peace':
-        // ピースサイン（数理零の勝ちポーズ）
-        R(bx + ln, -164 + dy, 12, 48, c);
-        R(bx + ln, -176 + dy, 12, 8, handC);
-        R(bx + ln, -188 + dy, 4, 12, handC);
-        R(bx + 8 + ln, -188 + dy, 4, 12, handC);
-        R(bx + 4 + ln, -184 + dy, 4, 6, handD);
-        if (side === 'F') hand = { x: bx + ln, y: -176 + dy };
         break;
       case 'block':
         R(16 + ln, -116 + dy, 16, 12, c);
@@ -991,17 +1189,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     }
   };
 
-  const calm =
-    o.pose === 'idle' ||
-    o.pose === 'walk' ||
-    o.pose === 'win' ||
-    o.pose === 'frozen' ||
-    o.pose === 'crouch' ||
-    o.pose === 'block' ||
-    o.pose === 'stun' ||
-    (o.pose === 'penJab' && (o.phase ?? 0) === 2); // 突いたあとノートにメモ
   const accessory = () => {
-    if (!calm) return;
+    if (!frame.accessory) return;
     switch (look.accessory) {
       case 'bookFront':
         // 夏目漱石「こころ」（生成り表紙＋青い挿絵）
@@ -1064,7 +1253,12 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     }
   };
 
+  const headPixel = (lx: number, ly: number, w: number, h: number, color: string) => {
+    R(P.headFacing === -1 ? 2 * ln - lx - w : lx, ly + (P.headDy ?? 0), w, h, color);
+  };
+
   const head = () => {
+    const R = headPixel;
     const hx = ln;
     const hy = dy;
     const lash = '#2e2226';
@@ -1153,8 +1347,9 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     };
     // ── 眉（y-164付近。怒りは内側が下がり、困りは内側が上がる） ──
     const brows = () => {
-      const bc = look.brows === 'flat' ? '#3a3430' : hd;
-      switch (look.brows) {
+      const style = P.brows ?? look.brows;
+      const bc = style === 'flat' ? '#3a3430' : hd;
+      switch (style) {
         case 'angry':
           R(-3 + hx, -164 + hy, 12, 3, bc);
           R(4 + hx, -161 + hy, 6, 3, bc);
@@ -1187,14 +1382,23 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     const tongue = '#e06a6a';
     const teeth = '#f4f4f8';
     const mouthIdle = () => {
-      switch (look.mouthIdle ?? 'flat') {
+      switch (P.mouth ?? look.mouthIdle ?? 'flat') {
         case 'smile':
           R(4 + hx, -136 + hy, 3, 3, mc);
           R(7 + hx, -134 + hy, 6, 2, mc);
           R(13 + hx, -136 + hy, 3, 3, mc);
           break;
+        case 'subtleSmile':
+          // 内藤の『少し笑った』。口角だけ上げ、共通の閉じた笑い目にはしない。
+          R(7 + hx, -135 + hy, 7, 2, mc);
+          R(14 + hx, -136 + hy, 2, 2, mc);
+          break;
+        case 'exhale':
+          R(7 + hx, -136 + hy, 7, 4, deep);
+          R(8 + hx, -136 + hy, 5, 1, mc);
+          break;
         case 'grin':
-          // 歯見せ笑い（現在は未使用）
+          // 両馬の歯を見せた大きな笑い。
           R(4 + hx, -138 + hy, 12, 6, deep);
           R(4 + hx, -138 + hy, 12, 3, teeth);
           R(9 + hx, -138 + hy, 2, 3, '#c9c9d4');
@@ -1274,7 +1478,13 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         break;
     }
     R(9 + hx, -142 + hy, 3, 3, skinD); // 鼻（小さな影）
-    if (look.blush) {
+    if (P.blush === 'flustered') {
+      // そっぽを向いても隠しきれない赤面。頭と一緒に反転し、怒り顔だけにはしない。
+      R(-12 + hx, -143 + hy, 12, 6, '#ed9aa7');
+      R(-12 + hx, -143 + hy, 12, 2, '#f5bcc6');
+      R(17 + hx, -142 + hy, 7, 6, '#ed9aa7');
+      for (const dx of [-10, -6, -2, 19, 22]) R(dx + hx, -141 + hy, 2, 4, '#d46d83');
+    } else if (look.blush) {
       R(-10 + hx, -142 + hy, 8, 5, '#e89b9f');
       R(-10 + hx, -142 + hy, 8, 2, '#f6c0c2');
       R(19 + hx, -142 + hy, 5, 5, '#e89b9f');
@@ -1287,7 +1497,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     }
     if (look.sweat && P.face !== 'smile' && P.face !== 'shout') {
       // こめかみの汗（緊張）。垂れて落ちる。
-      const drip = (Math.floor(o.t / 20) % 3) * 4;
+      const drip = frame.sweatDrip;
       R(22 + hx, -156 + hy + drip, 4, 8, '#a8dcff');
       R(20 + hx, -150 + hy + drip, 8, 6, '#a8dcff');
       R(22 + hx, -156 + hy + drip, 4, 3, '#e6f6ff');
@@ -1514,8 +1724,9 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   /** 白い鉢巻と後ろの結び目。動くと二本の端がなびく。 */
   const headband = () => {
+    const R = headPixel;
     if (!isGym) return;
-    const flap = o.pose === 'idle' || o.pose === 'win' ? 0 : (Math.floor(o.t / 4) % 3) * 4;
+    const flap = frame.headbandFlap;
     R(-28 + ln, -172 + dy, 56, 12, '#f7f7fc');
     R(-28 + ln, -172 + dy, 56, 3, '#ffffff');
     R(-28 + ln, -164 + dy, 56, 4, '#dedbe5');
@@ -1536,6 +1747,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   /** 工事ヘルメット。緑のライン＋安全第一の十字。 */
   const helmet = () => {
+    const R = headPixel;
     if (outfit !== 'kensetsu') return;
     const hx = ln;
     const hy = dy;
@@ -1559,11 +1771,10 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   const weapon = () => {
     // 覚醒三重は振り回す瞬間と吹き飛ばされているとき以外、常にハンマーを持つ
-    const dropped = o.pose === 'hurt' || o.pose === 'launch' || o.pose === 'grabbed';
-    const showIdleHammer = isWork && !P.weapon && !P.lying && !dropped;
+    const showIdleHammer = frame.idleHammer;
     if (!P.weapon && !showIdleHammer) {
       // 素手の打撃にも小さな風切りを添える
-      if ((o.pose === 'jab' || o.pose === 'penJab') && (o.phase ?? 0) === 1 && look.weapon === 'none') {
+      if (frame.jabWind) {
         R(hand.x + 12, hand.y - 4, 8, 4, '#e8ecf0');
         R(hand.x + 16, hand.y + 4, 8, 4, '#e8ecf0');
       }
@@ -1572,7 +1783,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     const hx = hand.x;
     const hy = hand.y;
     // 振り抜きの斬撃線
-    if (!showIdleHammer && (o.pose === 'swing' || o.pose === 'lash') && (o.phase ?? 0) === 1) {
+    if (frame.slash) {
       R(hx + 12, hy - 28, 4, 12, '#e8ecf0');
       R(hx + 16, hy - 16, 4, 12, '#e8ecf0');
       R(hx + 16, hy - 4, 4, 8, '#e8ecf0');
@@ -1624,7 +1835,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         break;
       case 'python':
         for (let i = 0; i < 11; i++) {
-          const wy = Math.round(Math.sin(i * 1.1 + o.t * 0.6) * 6);
+          const wy = frame.pythonWave[i];
           R(hx + 12 + i * 8, hy + wy, 8, 8, i % 2 ? '#3776ab' : '#ffd43b');
           R(hx + 12 + i * 8, hy + wy + 6, 8, 2, i % 2 ? '#2a5a88' : '#d8a800');
         }
@@ -1729,12 +1940,123 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
     R(hx + 26, hy - 14, 6, 6, '#ffffff');
   };
 
+  /** 勝利時の本は腕の後ろに置く。両手を上げても本が胸に浮く、といった流用を避ける。 */
+  const victoryBehind = () => {
+    const V = (x: number, y: number, w: number, h: number, c: string) => R(x + ln, y + dy, w, h, c);
+    if (P.victory === 'rei') {
+      // 量子力学の本を脇に残す。右手だけがシャーペンを回す。
+      V(-44, -112, 28, 40, '#1c2340');
+      V(-44, -112, 4, 40, '#0e1230');
+      V(-20, -112, 4, 40, '#e9dfcc');
+      V(-40, -104, 16, 4, '#c9a86a');
+      V(-40, -96, 12, 3, '#c9a86a');
+      V(-40, -88, 16, 3, '#c9a86a');
+    }
+  };
+
+  /** キャラ専用の持ち物。通常待機のアクセサリーとは別配置にし、前腕より先に描く。 */
+  const victoryProps = () => {
+    const V = (x: number, y: number, w: number, h: number, c: string) => R(x + ln, y + dy, w, h, c);
+    switch (P.victory) {
+      case 'naito':
+        if (P.propFrame === 1) {
+          V(-16, -116, 44, 32, '#e9dfcc');
+          V(-12, -112, 16, 24, '#f4efe0');
+          V(8, -112, 16, 24, '#f4efe0');
+          V(4, -116, 4, 32, '#7a5a3a');
+          for (const y of [-108, -100, -92]) {
+            V(-8, y, 10, 2, '#b4a78c');
+            V(12, y, 10, 2, '#b4a78c');
+          }
+        } else {
+          // 閉じた『こころ』。本を盾のように顔の前に掲げず、胸元で落ち着かせる。
+          V(-12, -112, 36, 28, '#e9dfcc');
+          V(-12, -112, 4, 28, '#7a5a3a');
+          V(-12, -112, 36, 4, '#f4efe0');
+          V(-12, -88, 36, 4, '#d4c8a8');
+          V(0, -104, 12, 12, '#8fa3c8');
+          V(4, -100, 4, 4, '#e9dfcc');
+          V(-4, -104, 4, 12, '#5a6a8a');
+          V(-4, -91, 8, 3, '#7a5a3a');
+        }
+        break;
+      case 'terachi': {
+        const y = P.propFrame === 0 ? -160 : -180;
+        V(36, y, 40, 52, '#ffffff');
+        V(36, y, 40, 4, '#2c4a8a');
+        V(68, y + 4, 8, 8, '#dbe0e6');
+        V(53, y + 10, 4, 24, '#20202a');
+        V(45, y + 17, 20, 4, '#20202a');
+        V(42, y + 40, 26, 3, '#555555');
+        V(42, y + 46, 18, 2, '#99a0aa');
+        break;
+      }
+      case 'sakura':
+        if (look.accessory !== 'loveNote') break;
+        V(-20, -108, 56, 38, '#f3b3c6');
+        V(-16, -105, 23, 30, '#fde2ea');
+        V(11, -105, 21, 30, '#fff1f5');
+        V(7, -108, 4, 38, '#c9748f');
+        for (const y of [-100, -92, -84]) V(-12, y, 14, 2, '#a34d6b');
+        V(15, -100, 8, 3, '#a34d6b');
+        V(15, -92, 4 + (P.propFrame ?? 0) * 3, 2, '#a34d6b');
+        break;
+      case 'heikatsu':
+        // 広げた地形図。指先はこの等高線に届く位置にある。
+        V(-32, -116, 64, 44, '#e6dcc0');
+        V(-32, -116, 64, 4, '#f4efe0');
+        V(-32, -116, 4, 44, '#c9bd98');
+        V(-4, -116, 3, 44, '#c9bd98');
+        V(20, -116, 3, 44, '#c9bd98');
+        V(-20, -108, 16, 3, '#7a9a6a');
+        V(-24, -100, 28, 3, '#7a9a6a');
+        V(-20, -92, 20, 3, '#7a9a6a');
+        V(4, -108, 16, 3, '#7a9a6a');
+        V(0, -100, 24, 3, '#7a9a6a');
+        V(4, -92, 20, 3, '#7a9a6a');
+        V(12, -108, 4, 12, '#5a7a4a');
+        V(-20, -80, 40, 3, '#7ab3d4');
+        V(4, -84, 4, 8, '#7ab3d4');
+        break;
+    }
+  };
+
+  /** 手を描いた後にペンを重ねる。手の座標を使うので、呼吸・左右反転でも握りが外れない。 */
+  const victoryForeground = () => {
+    if (P.victory === 'rei' && P.armF === 'penReady') {
+      const x = hand.x + 6;
+      const y = hand.y + 4;
+      const f = P.propFrame ?? 0;
+      if (f === 0) {
+        R(x - 16, y - 1, 32, 3, '#cbd5e1');
+        R(x - 16, y - 1, 5, 3, '#64748b');
+        R(x + 14, y - 1, 4, 3, '#94a3b8');
+      } else if (f === 2) {
+        R(x - 1, y - 16, 3, 32, '#cbd5e1');
+        R(x - 1, y - 16, 3, 5, '#64748b');
+        R(x - 1, y + 14, 3, 4, '#94a3b8');
+      } else {
+        for (let i = 0; i < 7; i++) {
+          R(x - 12 + i * 4, y + (f === 1 ? 12 - i * 4 : -12 + i * 4), 5, 3, i === 0 ? '#64748b' : '#cbd5e1');
+        }
+      }
+      R(hand.x + 4, hand.y + 3, 4, 4, skin); // 回している指
+    } else if (P.victory === 'sakura' && P.armF === 'write' && look.accessory === 'loveNote') {
+      R(hand.x + 6, hand.y - 12, 3, 24, '#1f2937');
+      R(hand.x + 6, hand.y - 12, 3, 4, '#e5e7eb');
+      R(hand.x + 6, hand.y + 12, 3, 3, '#9ca3af');
+      R(hand.x + 3, hand.y + 2, 5, 4, skin);
+    }
+  };
+
+  victoryBehind();
   arm('B', P.armB);
   legs();
   if (isGym) shorts();
   else if (isF) skirt();
   torso();
   accessory();
+  victoryProps();
   head();
   helmet();
   headband();
@@ -1743,6 +2065,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
   paper();
   pen();
   openNote();
+  victoryForeground();
   ctx.globalAlpha = prevAlpha;
 }
 
