@@ -56,6 +56,7 @@ export type PoseId =
   | 'down'
   | 'getup'
   | 'win'
+  | 'observe'
   | 'lose'
   | 'stun'
   | 'frozen'
@@ -111,7 +112,8 @@ export interface Look {
   outfit: 'blazer' | 'vest' | 'suit' | 'kensetsu' | 'gym';
   accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map' | 'loveNote';
   weapon?: 'bowl' | 'book' | 'binder' | 'paper' | 'python' | 'lovenote' | 'hammer' | 'map' | 'none';
-  winPose?: 'cheer' | 'cool' | 'shy' | 'peace' | 'hug' | 'tsundere';
+  /** キャラ固有の勝利ポーズ。未指定の背景人物は平静な待機に戻る。 */
+  winPose?: CharId;
   /** 男子ネクタイの色（未指定なら理数科のえんじ）。内進は紺。 */
   tieColor?: string;
   /** ネクタイに斜めストライプ風の明るいドットを入れる */
@@ -236,7 +238,8 @@ export interface CharDef {
   speed: number;
   jump: number;
   dmgMul: number;
-  look: Look;
+  /** プレイアブルキャラには専用の勝利ポーズを必ず割り当てる。 */
+  look: Look & { winPose: CharId };
   moves: { light: MoveDef; heavy: MoveDef; special: MoveDef };
   /** 未指定のキャラは共通の空中弱・強を使う。 */
   airMoves?: { light: MoveDef; heavy: MoveDef };

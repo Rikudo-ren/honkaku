@@ -131,7 +131,7 @@ export class Renderer {
     const g = this.g;
     drawShadow(g, f.x, GROUND, GROUND - f.y);
     const alpha = f.state === 'getup' ? 0.65 : f.invuln > 0 && f.state !== 'win' && f.state !== 'super' && f.state !== 'frozen' && b.t % 4 < 2 ? 0.55 : 1;
-    drawFighter(g, f.x, f.y, f.look, { pose: b.poseOf(f), phase: b.phaseOf(f), facing: f.facing, t: b.t, flash: f.flash > 0, alpha });
+    drawFighter(g, f.x, f.y, f.look, { pose: b.poseOf(f), phase: b.phaseOf(f), facing: f.facing, t: b.t, poseT: f.stateT, flash: f.flash > 0, alpha });
     // status marks
     if (f.state === 'frozen') {
       g.fillStyle = 'rgba(147,197,253,0.55)';
@@ -1317,7 +1317,8 @@ export function drawTitleScene(g: CanvasRenderingContext2D, t: number, ids: Char
     const x = Math.round(W / 2 + (i - (n - 1) / 2) * 176);
     const def = CHARS[id];
     drawShadow(g, x, GROUND, 0);
-    const pose = Math.floor((t + i * 60) / 240) % 4 === 0 ? 'win' : 'idle';
-    drawFighter(g, x, GROUND, def.look, { pose, facing: i < n / 2 ? 1 : -1, t: t + i * 13 });
+    const cycleT = (t + i * 60) % 960;
+    const pose = cycleT < 240 ? 'win' : 'idle';
+    drawFighter(g, x, GROUND, def.look, { pose, facing: i < n / 2 ? 1 : -1, t: t + i * 13, poseT: cycleT });
   });
 }
