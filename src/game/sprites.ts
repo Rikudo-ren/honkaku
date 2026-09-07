@@ -1296,7 +1296,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       // 細枠メガネ。rect=上枠＋下隅のみのリムレス風。round=丸メガネ全周枠。
       const g = look.glassesColor ?? '#2a2a30';
       const isRound = look.glassesStyle === 'round';
-      const lens = (ex: number, ey: number, w: number) => {
+      const lens = (ex: number, ey: number, w: number, noBot = false) => {
         if (isRound) {
           R(ex - 4 + hx, ey - 8 + hy, 4, 4, g);
           R(ex + hx, ey - 4 + hy, w, 3, g);
@@ -1306,13 +1306,17 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
           R(ex + hx, ey + 8 + hy, w, 3, g);
         } else {
           R(ex - 4 + hx, ey - 4 + hy, w + 8, 3, g);
-          R(ex - 4 + hx, ey + 8 + hy, 4, 4, g);
-          R(ex + w + hx, ey + 8 + hy, 4, 4, g);
+          // 下隅の点は弓形の位置によっては鼻の孔のように見えるので、塀のような小さめレンズでは描かない
+          if (!noBot) {
+            R(ex - 4 + hx, ey + 8 + hy, 4, 4, g);
+            R(ex + w + hx, ey + 8 + hy, 4, 4, g);
+          }
         }
       };
       if (eyeStyle === 'calm') {
-        lens(4, -152, 4);
-        lens(12, -152, 4);
+        // 塀のリムレスメガネ：上枠＋ブリッジのみ（下隅の点を置くと鼻の孔に見える）
+        lens(4, -152, 4, true);
+        lens(12, -152, 4, true);
         R(-24 + hx, -152 + hy, 24, 4, g); // テンプル
       } else {
         lens(0, -152, 8);
@@ -1407,8 +1411,6 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(-10 + hx, -159 + hy, 14, 3, hl); // 前髪の艶バンド
         R(-6 + hx, -159 + hy, 2, 5, hd); // 束の分かれ目
         R(2 + hx, -159 + hy, 2, 6, hd);
-        R(6 + hx, -143 + hy, 2, 3, '#2e2226'); // 下まつげ
-        R(18 + hx, -143 + hy, 2, 3, '#2e2226');
         R(-30 + hx, -150 + hy, 3, 20, hl); // サイドの艶
         break;
       case 'straight':
