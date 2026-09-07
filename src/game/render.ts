@@ -137,20 +137,20 @@ export class Renderer {
       g.fillStyle = 'rgba(147,197,253,0.55)';
       for (let i = 0; i < 6; i++) {
         const ang = (i / 6) * Math.PI * 2 + b.t * 0.03;
-        g.fillRect(Math.round(f.x + Math.cos(ang) * 12), Math.round(f.y - 24 + Math.sin(ang) * 16), 2, 2);
+        g.fillRect(Math.round(f.x + Math.cos(ang) * 20), Math.round(f.y - 41 + Math.sin(ang) * 27), 2, 2);
       }
     }
     if (f.state === 'stun') {
       g.fillStyle = '#fde047';
       for (let i = 0; i < 3; i++) {
         const ang = (i / 3) * Math.PI * 2 + b.t * 0.12;
-        g.fillRect(Math.round(f.x + Math.cos(ang) * 9), Math.round(f.y - 50 + Math.sin(ang) * 3), 2, 2);
+        g.fillRect(Math.round(f.x + Math.cos(ang) * 15), Math.round(f.y - 85 + Math.sin(ang) * 5), 2, 2);
       }
     }
     if (f.countering) {
       g.fillStyle = `rgba(125,211,252,${0.35 + 0.25 * Math.sin(b.t * 0.6)})`;
-      g.fillRect(Math.round(f.x - 12), f.y - 46, 24, 1);
-      g.fillRect(Math.round(f.x - 12), f.y - 1, 24, 1);
+      g.fillRect(Math.round(f.x - 20), f.y - 78, 40, 1);
+      g.fillRect(Math.round(f.x - 20), f.y - 1, 40, 1);
     }
   }
 
@@ -165,17 +165,17 @@ export class Renderer {
         const color = p.echoReturned ? '#7dd3fc' : '#fb7185';
         // 声は弾丸ではなく、三本の括弧型の音圧。復路は水色かつ低い位置。
         for (let i = 0; i < 3; i++) {
-          const xx = x + d * (i * 4 - 5);
-          const h = 3 + i * 2;
+          const xx = x + d * (i * 7 - 9);
+          const h = 5 + i * 3;
           g.fillStyle = i === 1 ? '#fff1f2' : color;
-          g.fillRect(xx, y - h, 2, h * 2);
-          g.fillRect(xx - d * 2, y - h - 1, 2, 2);
-          g.fillRect(xx - d * 2, y + h - 1, 2, 2);
+          g.fillRect(xx, y - h, 3, h * 2);
+          g.fillRect(xx - d * 3, y - h - 2, 3, 3);
+          g.fillRect(xx - d * 3, y + h - 2, 3, 3);
         }
         if (p.kind === 'cheerNote') {
           g.fillStyle = '#ffffff';
-          g.fillRect(x - d * 8, y - 6, 2, 2);
-          g.fillRect(x - d * 11, y - 9, 1, 1);
+          g.fillRect(x - d * 14, y - 10, 3, 3);
+          g.fillRect(x - d * 19, y - 15, 2, 2);
         }
         break;
       }
@@ -188,26 +188,31 @@ export class Renderer {
           for (const xx of [x - dx, x + dx]) {
             if (xx < -4 || xx > W + 4) continue;
             g.fillStyle = strong ? '#fb7185' : '#7dd3fc';
-            g.fillRect(xx - 2, yy, strong ? 5 : 3, 1);
+            g.fillRect(xx - 3, yy, strong ? 9 : 5, 2);
             g.fillStyle = '#fff1f2';
-            g.fillRect(xx, yy, 1, 1);
+            g.fillRect(xx - 1, yy, 3, 2);
           }
         }
         break;
       }
       case 'cross': {
         const pulse = Math.floor(t / 6) % 2 === 0;
-        drawCross(g, x, y, p.owner === -1 ? '#fbbf24' : '#fde68a', pulse ? '#ffffff' : '#fff7cc');
+        g.fillStyle = p.owner === -1 ? '#fbbf24' : '#fde68a';
+        g.fillRect(x - 2, y - 9, 5, 19);
+        g.fillRect(x - 7, y - 3, 15, 5);
+        g.fillStyle = pulse ? '#ffffff' : '#fff7cc';
+        g.fillRect(x - 1, y - 8, 2, 16);
+        g.fillRect(x - 6, y - 2, 12, 2);
         break;
       }
       case 'eraser': {
         const roll = Math.floor(t / 4) % 2;
         g.fillStyle = '#f8fafc';
-        g.fillRect(x - 3, y - 2 + roll, 7, 4);
+        g.fillRect(x - 6, y - 4 + roll, 12, 7);
         g.fillStyle = '#2563eb';
-        g.fillRect(x - 3, y - 2 + roll, 2, 4);
+        g.fillRect(x - 6, y - 4 + roll, 3, 7);
         g.fillStyle = '#cbd5e1';
-        g.fillRect(x + 2, y - 2 + roll, 2, 1);
+        g.fillRect(x + 3, y - 4 + roll, 3, 2);
         break;
       }
       case 'cat': {
@@ -217,109 +222,109 @@ export class Renderer {
           g.fillRect(d === 1 ? x + lx : x - lx - w, y + ly, w, h);
         };
         const step = Math.floor(t / 4) % 2;
-        R(-5, -2, 8, 4, '#a3a3ad');
-        R(1, -5, 5, 5, '#b4b4bd');
-        R(1, -6, 1, 1, '#b4b4bd');
-        R(4, -6, 1, 1, '#b4b4bd');
-        R(4, -4, 1, 1, '#facc15');
-        R(-7, -4, 2, 1, '#a3a3ad');
-        R(-8, -5, 1, 1, '#a3a3ad');
-        R(-4 + step, 2, 2, 2, '#8a8a94');
-        R(1 - step, 2, 2, 2, '#8a8a94');
+        R(-9, -3, 14, 7, '#a3a3ad');
+        R(2, -9, 9, 9, '#b4b4bd');
+        R(2, -10, 2, 2, '#b4b4bd');
+        R(7, -10, 2, 2, '#b4b4bd');
+        R(7, -7, 2, 2, '#facc15');
+        R(-12, -7, 3, 2, '#a3a3ad');
+        R(-14, -9, 2, 2, '#a3a3ad');
+        R(-7 + step, 4, 3, 3, '#8a8a94');
+        R(2 - step, 4, 3, 3, '#8a8a94');
         break;
       }
       case 'star': {
         g.fillStyle = 'rgba(254,243,199,0.5)';
-        g.fillRect(x - 1, y - 16, 3, 12);
+        g.fillRect(x - 2, y - 27, 5, 20);
         g.fillStyle = '#fde68a';
-        g.fillRect(x - 1, y - 4, 3, 9);
-        g.fillRect(x - 4, y - 1, 9, 3);
-        g.fillRect(x - 3, y - 3, 1, 1);
-        g.fillRect(x + 3, y - 3, 1, 1);
-        g.fillRect(x - 3, y + 3, 1, 1);
-        g.fillRect(x + 3, y + 3, 1, 1);
+        g.fillRect(x - 2, y - 7, 5, 15);
+        g.fillRect(x - 7, y - 2, 15, 5);
+        g.fillRect(x - 5, y - 5, 2, 2);
+        g.fillRect(x + 4, y - 5, 2, 2);
+        g.fillRect(x - 5, y + 4, 2, 2);
+        g.fillRect(x + 4, y + 4, 2, 2);
         g.fillStyle = '#ffffff';
-        g.fillRect(x, y, 1, 1);
+        g.fillRect(x - 1, y - 1, 2, 2);
         break;
       }
       case 'basketball': {
-        pixCircle(g, x, y, 4, '#f97316');
+        pixCircle(g, x, y, 7, '#f97316');
         g.fillStyle = '#7c2d12';
         const r = Math.floor(t / 5) % 2;
         if (r) {
-          g.fillRect(x - 3, y, 7, 1);
-          g.fillRect(x, y - 3, 1, 7);
+          g.fillRect(x - 5, y, 11, 2);
+          g.fillRect(x - 1, y - 5, 2, 11);
         } else {
-          g.fillRect(x - 2, y - 2, 1, 1);
-          g.fillRect(x + 2, y + 2, 1, 1);
-          g.fillRect(x - 2, y + 2, 1, 1);
-          g.fillRect(x + 2, y - 2, 1, 1);
-          g.fillRect(x - 1, y - 1, 3, 3);
+          g.fillRect(x - 4, y - 4, 2, 2);
+          g.fillRect(x + 3, y + 3, 2, 2);
+          g.fillRect(x - 4, y + 3, 2, 2);
+          g.fillRect(x + 3, y - 4, 2, 2);
+          g.fillRect(x - 2, y - 2, 5, 5);
           g.fillStyle = '#f97316';
-          g.fillRect(x, y, 1, 1);
+          g.fillRect(x - 1, y - 1, 2, 2);
         }
         break;
       }
       case 'soup': {
         g.fillStyle = '#fde68a';
-        g.fillRect(x - 4, y - 6, 8, 12);
+        g.fillRect(x - 7, y - 10, 14, 20);
         g.fillStyle = '#dc2626';
-        g.fillRect(x - 4, y - 3, 8, 5);
+        g.fillRect(x - 7, y - 5, 14, 9);
         g.fillStyle = '#ffffff';
-        g.fillRect(x - 2, y - 2, 4, 1);
-        g.fillRect(x - 2, y, 4, 1);
+        g.fillRect(x - 4, y - 3, 7, 2);
+        g.fillRect(x - 4, y + 1, 7, 2);
         g.fillStyle = '#d4d4d8';
-        g.fillRect(x - 4, y - 6, 8, 1);
-        g.fillRect(x - 4, y + 5, 8, 1);
+        g.fillRect(x - 7, y - 10, 14, 2);
+        g.fillRect(x - 7, y + 8, 14, 2);
         if (Math.floor(t / 10) % 2 === 0) {
           g.fillStyle = '#fff';
-          g.fillRect(x - 5, y - 9, 1, 1);
-          g.fillRect(x + 5, y - 9, 1, 1);
+          g.fillRect(x - 8, y - 15, 2, 2);
+          g.fillRect(x + 7, y - 15, 2, 2);
         }
         break;
       }
       case 'mikan': {
-        pixCircle(g, x, y, 4, '#fb923c');
+        pixCircle(g, x, y, 7, '#fb923c');
         g.fillStyle = '#65a30d';
-        g.fillRect(x, y - 5, 2, 1);
-        g.fillRect(x - 1, y - 6, 1, 1);
+        g.fillRect(x - 1, y - 9, 3, 2);
+        g.fillRect(x - 2, y - 10, 2, 2);
         g.fillStyle = '#fdba74';
-        g.fillRect(x - 2, y - 2, 1, 1);
+        g.fillRect(x - 3, y - 3, 2, 2);
         break;
       }
       case 'vending': {
         g.fillStyle = '#d23c3c';
-        g.fillRect(x - 8, y - 13, 16, 26);
+        g.fillRect(x - 14, y - 22, 27, 44);
         g.fillStyle = '#a82a2a';
-        g.fillRect(x - 8, y - 13, 16, 2);
+        g.fillRect(x - 14, y - 22, 27, 3);
         g.fillStyle = '#20263a';
-        g.fillRect(x - 6, y - 10, 12, 10);
+        g.fillRect(x - 10, y - 17, 20, 17);
         const cans = ['#fde68a', '#60a5fa', '#f87171', '#a3e635'];
         for (let i = 0; i < 4; i++) {
           g.fillStyle = cans[i];
-          g.fillRect(x - 5 + i * 3, y - 8, 2, 3);
-          g.fillRect(x - 5 + i * 3, y - 4, 2, 3);
+          g.fillRect(x - 9 + i * 5, y - 14, 3, 5);
+          g.fillRect(x - 9 + i * 5, y - 7, 3, 5);
         }
         g.fillStyle = '#fef3c7';
-        g.fillRect(x - 6, y + 2, 12, 4);
+        g.fillRect(x - 10, y + 3, 20, 7);
         g.fillStyle = '#dc2626';
-        g.fillRect(x - 4, y + 3, 8, 2);
+        g.fillRect(x - 7, y + 5, 14, 3);
         g.fillStyle = '#111';
-        g.fillRect(x - 6, y + 8, 12, 3);
-        if (p.vy > 1) {
+        g.fillRect(x - 10, y + 14, 20, 5);
+        if (p.vy > 1.7) {
           g.fillStyle = 'rgba(255,255,255,0.5)';
-          g.fillRect(x - 11, y - 20, 1, 10);
-          g.fillRect(x + 10, y - 24, 1, 10);
+          g.fillRect(x - 19, y - 34, 2, 17);
+          g.fillRect(x + 17, y - 41, 2, 17);
         }
         break;
       }
       case 'kuraishi': {
         drawShadow(g, p.x, GROUND, 0);
-        drawFighter(g, p.x, p.y + 20, EXTRA_LOOKS.kuraishi, { pose: 'walk', facing: p.vx >= 0 ? 1 : -1, t });
+        drawFighter(g, p.x, p.y + 34, EXTRA_LOOKS.kuraishi, { pose: 'walk', facing: p.vx >= 0 ? 1 : -1, t });
         const bob = Math.floor(t / 8) % 2;
-        drawCross(g, x - 10, y - 30 + bob, '#f8fafc', '#e2e8f0');
-        drawCross(g, x, y - 36 - bob, '#f8fafc', '#e2e8f0');
-        drawCross(g, x + 10, y - 30 + bob, '#f8fafc', '#e2e8f0');
+        drawCross(g, x - 17, y - 51 + bob, '#f8fafc', '#e2e8f0', 2);
+        drawCross(g, x, y - 61 - bob, '#f8fafc', '#e2e8f0', 2);
+        drawCross(g, x + 17, y - 51 + bob, '#f8fafc', '#e2e8f0', 2);
         break;
       }
       case 'koi': {
@@ -327,36 +332,36 @@ export class Renderer {
         const ph = Math.floor(t / 5) % 4;
         const alive = ph !== 3; // 4フレームに1回だけ消える（重ね合わせ）
         const bob = Math.floor(t / 12) % 2;
-        const yy = y - 2 - bob;
+        const yy = y - 3 - bob;
         const dying = p.life < 90 && Math.floor(t / 3) % 2 === 0; // 減衰間近は点滅
         g.globalAlpha = dying ? 0.35 : alive ? 0.9 : 0.25;
         const c1 = ph === 1 ? '#fbcfe8' : '#f472b6';
         const c2 = '#be185d';
         // heart (7x6)
         g.fillStyle = c1;
-        g.fillRect(x - 3, yy - 3, 2, 1);
-        g.fillRect(x + 1, yy - 3, 2, 1);
-        g.fillRect(x - 4, yy - 2, 8, 2);
-        g.fillRect(x - 3, yy, 6, 1);
-        g.fillRect(x - 2, yy + 1, 4, 1);
-        g.fillRect(x - 1, yy + 2, 2, 1);
+        g.fillRect(x - 5, yy - 5, 4, 2);
+        g.fillRect(x + 1, yy - 5, 4, 2);
+        g.fillRect(x - 7, yy - 3, 14, 3);
+        g.fillRect(x - 5, yy, 10, 2);
+        g.fillRect(x - 3, yy + 2, 6, 2);
+        g.fillRect(x - 1, yy + 4, 2, 1);
         g.fillStyle = c2;
-        g.fillRect(x, yy + 3, 1, 1);
+        g.fillRect(x - 1, yy + 5, 2, 1);
         g.fillStyle = '#ffffff';
-        g.fillRect(x - 3, yy - 2, 1, 1);
+        g.fillRect(x - 6, yy - 3, 2, 2);
         // 「？」（観測前）
         g.fillStyle = alive ? '#ffffff' : '#f9a8d4';
-        g.fillRect(x - 1, yy - 10, 3, 1);
-        g.fillRect(x + 2, yy - 9, 1, 2);
-        g.fillRect(x + 1, yy - 7, 1, 1);
-        g.fillRect(x, yy - 6, 1, 1);
-        g.fillRect(x, yy - 4, 1, 1);
+        g.fillRect(x - 2, yy - 17, 5, 2);
+        g.fillRect(x + 3, yy - 15, 2, 3);
+        g.fillRect(x + 2, yy - 12, 2, 2);
+        g.fillRect(x, yy - 10, 2, 2);
+        g.fillRect(x, yy - 7, 2, 2);
         g.globalAlpha = 1;
         // 判定の気配（薄い枠）
         if (ph === 2) {
           g.fillStyle = 'rgba(249,168,212,0.25)';
-          g.fillRect(x - 7, yy - 12, 14, 1);
-          g.fillRect(x - 7, yy + 5, 14, 1);
+          g.fillRect(x - 12, yy - 20, 24, 2);
+          g.fillRect(x - 12, yy + 8, 24, 2);
         }
         break;
       }
@@ -371,33 +376,33 @@ export class Renderer {
         const bl = 220 - warn * 140; // 赤が濃くなる
         // 紙面（うっすらしたベージュ→発災前に警告の赤み）
         g.fillStyle = `rgba(${bl},${Math.round(215 - warn * 120)},${Math.round(192 - warn * 140)},${0.3 + warn * 0.25})`;
-        g.fillRect(px - p.w / 2, py - 3, p.w, 7);
+        g.fillRect(px - p.w / 2, py - 5, p.w, 12);
         g.fillStyle = 'rgba(180,170,130,0.55)';
-        g.fillRect(px - p.w / 2, py - 3, p.w, 1);
-        g.fillRect(px - p.w / 2, py + 3, p.w, 1);
+        g.fillRect(px - p.w / 2, py - 5, p.w, 2);
+        g.fillRect(px - p.w / 2, py + 6, p.w, 2);
         // 等高線（楕円の輪郭）＊縮小して地面に描く。発災が近いと震える
         const shk = warn > 0.5 && d ? 1 : 0;
         for (let i = 0; i < 3; i++) {
-          pixEllipseOutline(g, px - 8 + i * 8 + shk, py + 1, 5 + i * 2, 2, `rgba(${Math.round(120 + warn * 100)},${Math.round(150 - warn * 90)},${Math.round(90 - warn * 40)},${0.6 + warn * 0.3})`);
+          pixEllipseOutline(g, px - 14 + i * 14 + shk, py + 2, 9 + i * 3, 3, `rgba(${Math.round(120 + warn * 100)},${Math.round(150 - warn * 90)},${Math.round(90 - warn * 40)},${0.6 + warn * 0.3})`);
         }
         // 川・集落の記号
         g.fillStyle = 'rgba(90,130,180,0.55)';
-        g.fillRect(px + 10, py, 8, 1);
+        g.fillRect(px + 17, py, 14, 2);
         g.fillStyle = 'rgba(150,110,70,0.5)';
-        g.fillRect(px - 14, py + 1, 2, 1);
-        g.fillRect(px - 11, py - 1, 2, 1);
+        g.fillRect(px - 24, py + 2, 3, 2);
+        g.fillRect(px - 19, py - 2, 3, 2);
         // 発災ゲージのバー
         g.fillStyle = 'rgba(20,16,8,0.6)';
-        g.fillRect(px - 6, GROUND - 12, 12, 2);
+        g.fillRect(px - 10, GROUND - 20, 20, 3);
         g.fillStyle = charge >= 1 ? '#ff4d3d' : d ? '#fbbf24' : '#e9a23b';
-        g.fillRect(px - 5 + (charge >= 1 ? (d ? 1 : 0) : 0), GROUND - 12, Math.round(10 * charge), 2);
+        g.fillRect(px - 9 + (charge >= 1 ? (d ? 1 : 0) : 0), GROUND - 20, Math.round(18 * charge), 3);
         // 中央の測量点（発災が近いと点滅して赤くなる）
         if (warn < 0.8 || d) {
           g.fillStyle = warn > 0.5 ? '#ff4d3d' : d ? '#c0392b' : '#e74c3c';
-          g.fillRect(px - 1, py - 1, 2, 2);
+          g.fillRect(px - 1, py - 1, 3, 3);
         } else {
           g.fillStyle = '#ffb199';
-          g.fillRect(px - 2, py - 2, 4, 4);
+          g.fillRect(px - 3, py - 3, 7, 7);
         }
         break;
       }
@@ -407,21 +412,21 @@ export class Renderer {
         const front = d === 1 ? x : x + 1;
         // 進行方向の盛り上がり
         g.fillStyle = '#e7dcc7';
-        g.fillRect(front - (d === 1 ? 4 : 0), y - 4, 1, 3);
-        g.fillRect(front - (d === 1 ? 2 : -1), y - 2, 1, 2);
+        g.fillRect(front - (d === 1 ? 7 : 0), y - 7, 2, 5);
+        g.fillRect(front - (d === 1 ? 3 : -2), y - 3, 2, 3);
         // 地を割る亀裂（一定間隔で後ろへ）
         for (let i = 0; i < 5; i++) {
-          const bx = x - d * (2 + i * 3 + Math.floor(t / 6) % 2);
-          const len = 2 + (i % 3);
+          const bx = x - d * (3 + i * 5 + Math.floor(t / 6) % 2);
+          const len = 3 + (i % 3);
           g.fillStyle = i % 2 ? '#b9a57e' : '#8f7c5c';
-          g.fillRect(Math.round(bx) - 1, y - 1, len, 1);
+          g.fillRect(Math.round(bx) - 2, y - 2, len, 2);
         }
         // 飛び散る破片
         const bob = Math.floor(t / 4) % 3;
         g.fillStyle = '#cbb690';
-        g.fillRect(x - d * 3, y - 3 - bob, 1, 1);
+        g.fillRect(x - d * 5, y - 5 - bob, 2, 2);
         g.fillStyle = '#e7dcc7';
-        g.fillRect(x + d * 2, y - 2 - (bob === 2 ? 2 : 0), 1, 1);
+        g.fillRect(x + d * 3, y - 3 - (bob === 2 ? 3 : 0), 2, 2);
         break;
       }
       case 'formula':
@@ -450,8 +455,8 @@ export class Renderer {
         const reach = Math.round(e.size * e.t / e.life);
         for (let i = -1; i <= 1; i++) {
           g.fillStyle = i === 0 ? '#ffffff' : e.color;
-          g.fillRect(x + d * reach, y + i * (4 + Math.floor(reach / 2)), 2, 2);
-          g.fillRect(x + d * (reach + 3), y + i * (5 + Math.floor(reach / 2)), 3, 1);
+          g.fillRect(x + d * reach, y + i * (7 + Math.floor(reach / 2)), 3, 3);
+          g.fillRect(x + d * (reach + 5), y + i * (9 + Math.floor(reach / 2)), 5, 2);
         }
         g.globalAlpha = 1;
         break;
@@ -498,9 +503,9 @@ export class Renderer {
       case 'guard':
         g.globalAlpha = k;
         g.fillStyle = e.color;
-        g.fillRect(x - 1, y - 9, 2, 18);
-        g.fillRect(x - 3, y - 7, 2, 2);
-        g.fillRect(x - 3, y + 5, 2, 2);
+        g.fillRect(x - 2, y - 15, 4, 30);
+        g.fillRect(x - 5, y - 12, 3, 3);
+        g.fillRect(x - 5, y + 9, 3, 3);
         g.globalAlpha = 1;
         break;
       case 'afterimage':
@@ -517,7 +522,7 @@ export class Renderer {
         // 地面から噴き上がる土の柱：伸びたあと細くなって消える
         const prog = e.t / e.life;
         const h = Math.round(e.size * Math.min(1, prog * 2.2));
-        const w = Math.max(1, Math.round(5 * (1 - prog)));
+        const w = Math.max(1, Math.round(8 * (1 - prog)));
         g.globalAlpha = Math.max(0, k * 1.4);
         g.fillStyle = '#8a6c46';
         g.fillRect(x - w, GROUND - h, w * 2 + 1, h + 1);
@@ -526,7 +531,7 @@ export class Renderer {
         // 先端の飛沫
         if (e.t % 3 < 2) {
           g.fillStyle = '#a3b18a';
-          g.fillRect(x + (e.t % 5 === 0 ? 3 : -3), GROUND - h - 2, 1, 2);
+          g.fillRect(x + (e.t % 5 === 0 ? 5 : -5), GROUND - h - 3, 2, 3);
         }
         g.globalAlpha = 1;
         break;
@@ -559,11 +564,11 @@ export class Renderer {
     d.fillRect(0, 0, W, H);
     d.globalCompositeOperation = 'destination-out';
     for (const f of b.f) {
-      const grd = d.createRadialGradient(f.x, f.y - 22, 6, f.x, f.y - 22, 42);
+      const grd = d.createRadialGradient(f.x, f.y - 37, 10, f.x, f.y - 37, 71);
       grd.addColorStop(0, 'rgba(0,0,0,1)');
       grd.addColorStop(1, 'rgba(0,0,0,0)');
       d.fillStyle = grd;
-      d.fillRect(f.x - 42, f.y - 64, 84, 84);
+      d.fillRect(f.x - 71, f.y - 109, 142, 142);
     }
     for (const p of b.projectiles) {
       if (p.kind === 'kusa') continue;
@@ -1031,33 +1036,33 @@ export class Renderer {
 
     // projectile texts
     for (const p of b.projectiles) {
-      if (p.kind === 'formula') this.txt(p.text ?? '∑', p.x, p.y, 8 + Math.sin(p.t / 4) * 1, '#ffffff', 'center', '#1e3a8a');
-      else if (p.kind === 'qed') this.txt('Q.E.D.', p.x, p.y, 10, '#fde68a', 'center', '#7c2d12');
-      else if (p.kind === 'kusa') this.txt('草', p.x, p.y, 8, '#4ade80', 'center', '#052e16');
+      if (p.kind === 'formula') this.txt(p.text ?? '∑', p.x, p.y, 13 + Math.sin(p.t / 4) * 2, '#ffffff', 'center', '#1e3a8a');
+      else if (p.kind === 'qed') this.txt('Q.E.D.', p.x, p.y, 14, '#fde68a', 'center', '#7c2d12');
+      else if (p.kind === 'kusa') this.txt('草', p.x, p.y, 11, '#4ade80', 'center', '#052e16');
     }
 
     // fighter status labels
     for (const f of b.f) {
-      if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - 52, 5, '#e2e8f0');
+      if (f.silence > 0 && f.state !== 'down') this.txt(`沈黙 ${Math.ceil(f.silence / 60)}`, f.x, f.y - 88, 5, '#e2e8f0');
       if (f.hp > 0 && b.phase === 'fight' && f.def.airControl) {
         const ay = Math.min(GROUND + 7, f.y + 7);
-        const width = 20;
+        const width = 34;
         c.fillStyle = '#172033';
         c.fillRect(f.x - width / 2 - 1, ay - 2, width + 2, 4);
         c.fillStyle = f.airLift > 0 ? '#7dd3fc' : '#64748b';
         c.fillRect(f.x - width / 2, ay - 1, width * f.airLift / f.def.airControl.liftFrames, 2);
         this.txt(`AIR  ${f.airUsed & 1 ? '－' : '弱'} ${f.airUsed & 2 ? '－' : '強'}`, f.x, ay + 6, 3.8, '#e0f2fe');
       }
-      if (f.rallyT > 0 && f.hp > 0) this.txt(`声援↑ ${Math.ceil(f.rallyT / 60)}`, f.x, f.y - 49, 4.5, '#bae6fd');
+      if (f.rallyT > 0 && f.hp > 0) this.txt(`声援↑ ${Math.ceil(f.rallyT / 60)}`, f.x, f.y - 83, 4.5, '#bae6fd');
       if (f.id === 'sakura' && f.hp > 0 && b.phase === 'fight') {
         // 研究データ n（超必殺の威力に反映）／理論のない状態の恋の残り時間
-        if (f.loveT > 0) this.txt(`恋 ${Math.ceil(f.loveT / 60)}`, f.x, f.y - 50, 5, '#f9a8d4');
-        else if (f.research > 0) this.txt(`n=${f.research}`, f.x, f.y - 50, 4.5, f.research >= 15 ? '#f0abfc' : '#e9d5ff');
+        if (f.loveT > 0) this.txt(`恋 ${Math.ceil(f.loveT / 60)}`, f.x, f.y - 85, 5, '#f9a8d4');
+        else if (f.research > 0) this.txt(`n=${f.research}`, f.x, f.y - 85, 4.5, f.research >= 15 ? '#f0abfc' : '#e9d5ff');
       }
       if (b.phase === 'intro' || (b.phase === 'fight' && b.phaseT < 150)) {
         const tag = f.tag ?? (f.ai ? 'CPU' : f.side === 0 ? '1P' : '2P');
         const bob = Math.sin(b.t / 6) * 1.5;
-        this.txt(`${tag}▼`, f.x, f.y - 56 + bob, 5.5, f.you || tag === 'あなた' ? '#fde68a' : f.def.color);
+        this.txt(`${tag}▼`, f.x, f.y - 95 + bob, 5.5, f.you || tag === 'あなた' ? '#fde68a' : f.def.color);
       }
       // チームカラーの足元マーカー（チーム戦のみ）
       if (!b.isDuel && f.hp > 0 && b.phase !== 'matchEnd') {
@@ -1088,7 +1093,7 @@ export class Renderer {
       const h = 11 * grow;
       let x = f.x;
       x = Math.max(w / 2 + 2, Math.min(W - w / 2 - 2, x));
-      const y = f.y - 60 - (f.state === 'crouch' ? -6 : 0);
+      const y = f.y - 102 - (f.state === 'crouch' ? -10 : 0);
       c.fillStyle = '#ffffff';
       c.fillRect(x - w / 2, y - h / 2, w, h);
       c.strokeStyle = '#1f2937';
@@ -1230,7 +1235,7 @@ export class Renderer {
     // コンボ表示（チーム戦は発生位置の近くに）
     for (const f of b.f) {
       if (f.combo >= 2 && f.comboTimer > 0) {
-        this.txt(`${f.combo}HIT`, Math.max(20, Math.min(W - 20, f.x)), f.y - 68, 7, f.def.color);
+        this.txt(`${f.combo}HIT`, Math.max(20, Math.min(W - 20, f.x)), f.y - 116, 7, f.def.color);
       }
     }
   }
