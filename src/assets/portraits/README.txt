@@ -6,8 +6,8 @@
 
   yxWjo.jpg    … 三重県臣
   2f4yf.jpg    … 両馬二郎
-  t1s3p.jpg    … 内藤蘭
-  BnEZx.jpg    … 三峰瑠衣
+  t1s3p.jpg    … 三峰瑠衣
+  BnEZx.jpg    … 内藤蘭
   mitsumine_taiiku.jpg … 三峰瑠衣(応援)：白い鉢巻・半袖体育着・紺の短パン（隠しキャラ③・ヘイカツの次）
   b1eQ6.jpg    … 寺地星
   OCvNF.jpg    … 数理零

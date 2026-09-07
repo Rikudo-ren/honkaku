@@ -10,8 +10,8 @@ import type { CharId } from '@/game/types';
 const PORTRAIT_FILES: Record<CharId, string> = {
   mie: 'yxWjo.jpg',
   ryoma: '2f4yf.jpg',
-  naito: 't1s3p.jpg',
-  mitsumine: 'BnEZx.jpg',
+  naito: 'BnEZx.jpg',
+  mitsumine: 't1s3p.jpg',
   mitsumine_cheer: 'mitsumine_taiiku.jpg',
   terachi: 'b1eQ6.jpg',
   rei: 'OCvNF.jpg',

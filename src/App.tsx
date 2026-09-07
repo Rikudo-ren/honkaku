@@ -13,7 +13,7 @@ import type { HiddenUnlocks } from '@/game/characters';
 import { audio } from '@/game/audio';
 import { net, type StartData } from '@/game/net';
 import { makeOnlineSetup } from '@/game/onlineSetup';
-import { EXTREME_UNLOCK_KEY, isExtremeUnlockMatch, loadHiddenUnlocks, loadUnlocked, saveUnlocked } from '@/game/unlock';
+import { EXTREME_UNLOCK_KEY, createDebugConsole, isExtremeUnlockMatch, loadHiddenUnlocks, loadUnlocked, saveUnlocked } from '@/game/unlock';
 import type { CharId, Difficulty, FighterSetup, Mode, Setup, Side, StageId } from '@/game/types';
 
 type Screen = 'loading' | 'title' | 'select' | 'teamsetup' | 'online' | 'versus' | 'battle' | 'result';
@@ -42,6 +42,22 @@ export default function App() {
   useEffect(() => {
     setExtremeUnlocked(loadUnlocked(EXTREME_UNLOCK_KEY));
     setHiddenUnlocked(loadHiddenUnlocks());
+  }, []);
+
+  // デバッグコンソール：ブラウザの開発者ツールから `__honkaku` で解禁操作ができる。
+  // 例: __honkaku.unlockAll() / __honkaku.unlock('sakura') / __honkaku.help()
+  useEffect(() => {
+    const refresh = () => {
+      setExtremeUnlocked(loadUnlocked(EXTREME_UNLOCK_KEY));
+      setHiddenUnlocked(loadHiddenUnlocks());
+    };
+    const api = createDebugConsole(refresh);
+    const w = window as unknown as { __honkaku?: unknown };
+    w.__honkaku = api;
+    console.log('[honkaku] debug console ready. __honkaku.help() でコマンド一覧');
+    return () => {
+      if (w.__honkaku === api) delete w.__honkaku;
+    };
   }, []);
 
   useEffect(() => {
