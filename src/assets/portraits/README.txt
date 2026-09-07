@@ -5,12 +5,12 @@
 ゲーム側（VS画面・超必殺カットイン・キャラ選択・リザルト）に自動で反映されます。
 
   yxWjo.jpg    … 三重県臣
-  2f4yf.jpg    … 数理零
-  t1s3p.jpg    … 三峰瑠衣
-  BnEZx.jpg    … 内藤蘭
+  2f4yf.jpg    … 両馬二郎
+  t1s3p.jpg    … 内藤蘭
+  BnEZx.jpg    … 三峰瑠衣
   mitsumine_taiiku.jpg … 三峰瑠衣(応援)：白い鉢巻・半袖体育着・紺の短パン（隠しキャラ③・ヘイカツの次）
-  b1eQ6.jpg    … 両馬二郎
-  OCvNF.jpg    … 寺地星
+  b1eQ6.jpg    … 寺地星
+  OCvNF.jpg    … 数理零
   sakura_yu.jpg  … 櫻優（隠しキャラ。現在は仮の立ち絵。差し替える場合は同名で上書き）
   kakusei_mie.jpg … 覚醒三重（隠しキャラ④。仮の立ち絵。差し替える場合は同名で上書き）
 

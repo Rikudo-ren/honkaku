@@ -9,12 +9,12 @@ import type { CharId } from '@/game/types';
  */
 const PORTRAIT_FILES: Record<CharId, string> = {
   mie: 'yxWjo.jpg',
-  ryoma: 'b1eQ6.jpg',
-  naito: 'BnEZx.jpg',
-  mitsumine: 't1s3p.jpg',
+  ryoma: '2f4yf.jpg',
+  naito: 't1s3p.jpg',
+  mitsumine: 'BnEZx.jpg',
   mitsumine_cheer: 'mitsumine_taiiku.jpg',
-  terachi: 'OCvNF.jpg',
-  rei: '2f4yf.jpg',
+  terachi: 'b1eQ6.jpg',
+  rei: 'OCvNF.jpg',
   sakura: 'sakura_yu.jpg',
   heikatsu: 'heikatsu.jpg',
   kakusei: 'kakusei_mie.jpg',
