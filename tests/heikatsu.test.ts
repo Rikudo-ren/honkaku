@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ALL_CHARS, CHARS, CHAR_ORDER, HIDDEN_CHARS, HIDDEN_META, INTRO_PAIRS, MIRROR_INTROS, pairKey, rosterFor, NO_HIDDEN } from '../src/game/characters';
-import { Battle } from '../src/game/engine';
+import { Battle, GROUND } from '../src/game/engine';
 import { EMPTY_INPUT } from '../src/game/types';
 import type { CharId, InputState, Setup, Side } from '../src/game/types';
 import { hiddenCharsSatisfied } from '../src/game/characters';
@@ -197,7 +197,7 @@ test('塀勝也の超必殺：地面の相手だけ吹き飛ばし、空中の�
   for (let i = 0; i < 200 && b.phase !== 'fight'; i++) b.step([EMPTY_INPUT, EMPTY_INPUT, EMPTY_INPUT]);
   assert.equal(b.phase, 'fight');
   // 相手1体目（mie）は地面に、2体目（ryoma）は空中に置く
-  b.f[1].y = 186;
+  b.f[1].y = GROUND;
   b.f[1].state = 'idle';
   b.f[1].hp = 100;
   b.f[2].y = 100;

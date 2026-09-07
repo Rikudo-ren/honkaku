@@ -22,18 +22,18 @@ const until = (b: Battle, predicate: () => boolean, max = 240, a: Partial<InputS
 const battle = (opts: Partial<Opts> = {}) => {
   const b = new Battle({ p1: 'mitsumine_cheer', p2: 'ryoma', ai: [false, false], difficulty: 'extreme', stage: 'classroom', seed: 83, ...opts });
   until(b, () => b.phase === 'fight');
-  b.f[0].x = 70;
-  b.f[1].x = 320;
+  b.f[0].x = 280;
+  b.f[1].x = 1280;
   return b;
 };
-const airborne = (f: Fighter, y = 115) => {
+const airborne = (f: Fighter, y = GROUND - 284) => {
   f.state = 'jump';
   f.y = y;
   f.vx = 0;
   f.vy = 0;
 };
 const projectile = (b: Battle, overrides: Partial<Projectile>) => {
-  const p: Projectile = { kind: 'cheerWave', owner: 0, x: 70, y: GROUND - 30, vx: 0, vy: 0, w: 2, h: 2, dmg: 6, hitstun: 25, kbx: 0.8, kby: 0, life: CHEER.waveLife, pierce: true, hitMask: 0, t: 0, seed: 0, ...overrides };
+  const p: Projectile = { kind: 'cheerWave', owner: 0, x: 280, y: GROUND - 120, vx: 0, vy: 0, w: 8, h: 8, dmg: 6, hitstun: 25, kbx: 3.2, kby: 0, life: CHEER.waveLife, pierce: true, hitMask: 0, t: 0, seed: 0, ...overrides };
   b.projectiles.push(p);
   return p;
 };
@@ -187,7 +187,7 @@ test('被弾・吹き飛び・硬直・掴まれ・ヒットストップ中は�
   airborne(b.f[0]);
   b.f[0].hitstop = 4;
   step(b, 3, { up: true, right: true });
-  assert.equal(b.f[0].y, 115);
+  assert.equal(b.f[0].y, GROUND - 284);
   assert.equal(b.f[0].vx, 0);
   assert.equal(b.f[0].airLift, cheer.airControl!.liftFrames);
 });
@@ -237,15 +237,15 @@ test('空中必殺・空中超必殺は不可、沈黙中も地上必殺・超�
 test('空中強は直撃だけ上へリバウンドし、AIRも空中強の回数も戻らない', () => {
   const b = battle();
   const f = b.f[0];
-  airborne(f, 145);
-  f.x = 130;
+  airborne(f, GROUND - 164);
+  f.x = 520;
   f.airLift = 12;
-  b.f[1].x = 148;
+  b.f[1].x = 592;
   const hp = b.f[1].hp;
   step(b, 1, { heavy: true });
   until(b, () => b.f[1].hp < hp, 30);
   assert.equal(b.f[1].hp, hp - cheer.airMoves!.heavy.dmg);
-  assert.ok(f.vy < -4 && f.y < GROUND);
+  assert.ok(f.vy < -16 && f.y < GROUND);
   assert.equal(f.airUsed, 2);
   assert.equal(f.airLift, 12);
   assert.equal(f.movePhase, 2);
@@ -260,11 +260,11 @@ for (const guarded of [false, true]) {
   test(`空中強の${guarded ? 'ガード' : '空振り'}着地は18フレーム硬直。着地で資源だけ回復`, () => {
     const b = battle();
     const f = b.f[0];
-    airborne(f, 145);
-    f.x = 130;
+    airborne(f, GROUND - 164);
+    f.x = 520;
     f.meter = 100;
     f.airLift = 3;
-    b.f[1].x = guarded ? 150 : 340;
+    b.f[1].x = guarded ? 600 : 1360;
     const hp = b.f[1].hp;
     step(b, 1, { heavy: true }, { down: guarded });
     until(b, () => f.y === GROUND, 50, {}, { down: guarded });
@@ -326,7 +326,7 @@ test('折り返しは先に退き、接触判定なしで横切り、振り返�
 
 test('エコーは往復各1ヒット。復路は低く、1つが残る間は追加で出せない', () => {
   const b = battle();
-  b.f[1].x = 120;
+  b.f[1].x = 480;
   const hp = b.f[1].hp;
   step(b, 1, { special: true });
   until(b, () => b.projectiles.some((p) => p.kind === 'cheerEcho'), 20);
@@ -349,14 +349,14 @@ test('エコーは往復各1ヒット。復路は低く、1つが残る間は追
 
 test('壁際のエコーは予定時刻を待たず反転する。反射されたエコーは再度折り返さない', () => {
   const b = battle({ p2: 'mie' });
-  const wall = projectile(b, { kind: 'cheerEcho', x: 373, vx: 3.4, y: 150, w: 16, h: 15, life: 68 });
+  const wall = projectile(b, { kind: 'cheerEcho', x: 1492, vx: 13.6, y: 600, w: 64, h: 60, life: 68 });
   step(b);
   assert.equal(wall.echoReturned, true);
   assert.equal(wall.vx, -CHEER.echoReturnSpeed);
   b.projectiles = [];
   step(b, 1, {}, { special: true });
   until(b, () => b.f[1].countering, 20);
-  const p = projectile(b, { kind: 'cheerEcho', x: b.f[1].x - 6, vx: 3.4, y: GROUND - 28, w: 16, h: 15, life: 68 });
+  const p = projectile(b, { kind: 'cheerEcho', x: b.f[1].x - 24, vx: 13.6, y: GROUND - 112, w: 64, h: 60, life: 68 });
   step(b);
   assert.equal(p.owner, 1);
   assert.equal(p.echoReturned, true);
@@ -448,11 +448,11 @@ test('音の輪が通る場所の敵弾だけを消す。味方弾・回復ア�
     { char: 'ryoma', team: 1, ai: false },
     { char: 'mie', team: 0, ai: false },
   ] });
-  b.f[2].x = 30;
-  const wave = projectile(b, { x: 70, y: 120 });
-  const enemy = projectile(b, { kind: 'cross', owner: 1, x: 100, y: 120, w: 4, h: 4, life: 100 });
-  const ally = projectile(b, { kind: 'star', owner: 2, x: 100, y: 120, w: 4, h: 4, life: 100 });
-  const heal = projectile(b, { kind: 'orange', owner: -1, x: 100, y: 120, w: 4, h: 4, life: 100, item: 'heal' });
+  b.f[2].x = 120;
+  const wave = projectile(b, { x: 280, y: 480 });
+  const enemy = projectile(b, { kind: 'cross', owner: 1, x: 400, y: 480, w: 16, h: 16, life: 100 });
+  const ally = projectile(b, { kind: 'star', owner: 2, x: 400, y: 480, w: 16, h: 16, life: 100 });
+  const heal = projectile(b, { kind: 'orange', owner: -1, x: 400, y: 480, w: 16, h: 16, life: 100, item: 'heal' });
   step(b, 2);
   assert.ok(b.projectiles.includes(enemy));
   step(b, 3);
@@ -486,7 +486,7 @@ test('味方三重への声援、3秒の速度アップ、ラウンド跨ぎの�
     { char: 'ryoma', team: 1, ai: false },
     { char: 'mie', team: 0, ai: false },
   ] });
-  b.f[2].x = 25;
+  b.f[2].x = 100;
   b.f[0].meter = 100;
   step(b, 1, { super: true });
   until(b, () => b.f[2].rallyT > 0, 220);
@@ -573,7 +573,7 @@ test('体育着の全専用ポーズは半袖・短パン・白い靴下靴・�
   }
   const idle = raster('idle');
   assert.ok(idle.some((r) => r.color === '#f7f7fc' && r.y < -39 && r.w >= 12), '白鉢巻の帯がない');
-  assert.ok(idle.filter((r) => r.color === '#29334e' && r.w === 1 && r.h === 1).length > 25, '肩柄と縦の校名がない');
+  assert.ok(idle.filter((r) => r.color === '#29334e' && r.w === 4 && r.h === 4).length > 25, '肩柄と縦の校名がない');
   assert.ok(idle.some((r) => r.x < -10 && r.color === '#f7f7fc'), '鉢巻の長い端がない');
   assert.notDeepEqual(raster('airClap'), raster('airDive'));
   assert.notDeepEqual(raster('cheerClap', 0), raster('cheerClap', 1));
