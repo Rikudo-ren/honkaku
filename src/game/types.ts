@@ -72,7 +72,7 @@ export type PoseId =
   | 'airDive'
   | 'airStep';
 
-export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult' | 'fluffy' | 'straight';
+export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'center' | 'adult' | 'fluffy' | 'straight';
 
 /** 目の描き分け（立ち絵の目の印象を1〜2pxに落とし込む） */
 export type EyeStyle = 'round' | 'sharp' | 'calm' | 'sleepy' | 'bright' | 'tsun';

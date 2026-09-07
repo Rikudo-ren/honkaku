@@ -313,7 +313,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       R(-96, -32, 3, 40, hd);
     }
     if (look.hair === 'fluffy') R(-92, -48, 8, 12, hc);
-    if (look.hair === 'bob' || look.hair === 'straight' || look.hair === 'messyAhoge') R(-88, -8, 16, 6, hc);
+    if (look.hair === 'bob' || look.hair === 'straight' || look.hair === 'center') R(-88, -8, 16, 6, hc);
     R(-60, -28, 8, 4, eye); // 閉じた目
     R(-56, -12, 8, 4, '#8a4a4a');
     if (look.blush) R(-68, -20, 8, 4, '#e89b9f');
@@ -1016,7 +1016,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(-4 + ln, -91 + dy, 8, 3, '#7a5a3a');
         break;
       case 'bookSide':
-        // 難しそうな紺の本（金帯つき）
+        // 数理零の量子力学（紺表紙＋金帯）
         R(8 + ln, -108 + dy, 24, 36, '#1c2340');
         R(8 + ln, -108 + dy, 4, 36, '#0e1230');
         R(28 + ln, -108 + dy, 4, 36, '#e9dfcc');
@@ -1194,7 +1194,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
           R(13 + hx, -136 + hy, 3, 3, mc);
           break;
         case 'grin':
-          // 寺地の歯見せ笑い
+          // 歯見せ笑い（現在は未使用）
           R(4 + hx, -138 + hy, 12, 6, deep);
           R(4 + hx, -138 + hy, 12, 3, teeth);
           R(9 + hx, -138 + hy, 2, 3, '#c9c9d4');
@@ -1340,7 +1340,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(-16 + hx, -172 + hy, 20, 4, hl); // 分け目の照り
         break;
       case 'spiky':
-        // 逆立てた赤茶ツンツン（寺地）。前に流れる。
+        // 逆立てた赤茶ツンツン（両馬）。前に流れる。
         R(-24 + hx, -188 + hy, 12, 8, hc);
         R(-8 + hx, -192 + hy, 12, 12, hc);
         R(8 + hx, -188 + hy, 12, 8, hc);
@@ -1376,6 +1376,11 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(-31 + hx, -152 + hy, 3, 56, hl); // 艶
         R(-36 + sway + hx, -80 + hy, 12, 20, hc); // 揺れる毛先
         R(-32 + sway + hx, -64 + hy, 4, 4, hc);
+        R(-4 + hx, -155 + hy, 3, 3, '#2e2226'); // 目尻の跳ね上げ
+        R(18 + hx, -155 + hy, 3, 3, '#2e2226');
+        R(22 + hx, -150 + hy, 3, 28, hl); // 前髪の艶
+        R(-30 + hx, -150 + hy, 3, 24, hl);
+        R(-32 + hx, -132 + hy, 8, 3, hd); // 姫カットの切り口
         break;
       case 'bob':
         // 顎までの丸いボブ＋流し前髪（三峰）。分け目から前に流れる。
@@ -1395,9 +1400,15 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(-32 + hx, -160 + hy, 4, 36, hd);
         R(-18 + hx, -174 + hy, 16, 5, hl); // ボブの照り
         R(20 + hx, -136 + hy, 4, 8, hd); // 内巻きの影
+        R(-10 + hx, -159 + hy, 14, 3, hl); // 前髪の艶バンド
+        R(-6 + hx, -159 + hy, 2, 5, hd); // 束の分かれ目
+        R(2 + hx, -159 + hy, 2, 6, hd);
+        R(6 + hx, -143 + hy, 2, 3, '#2e2226'); // 下まつげ
+        R(18 + hx, -143 + hy, 2, 3, '#2e2226');
+        R(-30 + hx, -150 + hy, 3, 20, hl); // サイドの艶
         break;
       case 'straight':
-        // 額にかかる短めストレート＋少し長いサイド（両馬）。切れ長の目が見える。
+        // 額にかかる短めストレート＋少し長いサイド（数理零）。切れ長の目が見える。
         R(-32 + hx, -176 + hy, 8, 8, hc);
         R(24 + hx, -176 + hy, 8, 4, hc);
         R(-20 + hx, -160 + hy, 40, 5, hc); // 短い前髪
@@ -1423,27 +1434,27 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
         R(16 + hx, -160 + hy, 8, 4, hc);
         R(-12 + hx, -176 + hy, 12, 4, hl);
         break;
-      case 'messyAhoge':
-        // 重い前髪＋平らな頭頂（数理零）。頭頂の跳ねとアホ毛はなし。
-        R(-32 + hx, -176 + hy, 8, 12, hc);
-        R(-16 + hx, -180 + hy, 8, 4, hd); // 頭頂の質感
+      case 'center':
+        // センター分け＋耳覆いサイド（寺地）。額の中央を開けて明るく。
+        R(-32 + hx, -176 + hy, 8, 12, hc); // 丸いシルエット
+        R(24 + hx, -176 + hy, 8, 12, hc);
+        R(-16 + hx, -180 + hy, 8, 4, hd); // 頭頂の流れ
         R(4 + hx, -180 + hy, 8, 4, hd);
-        R(-24 + hx, -174 + hy, 4, 4, hd);
-        R(16 + hx, -174 + hy, 4, 4, hd);
-        R(-12 + hx, -178 + hy, 20, 3, hl); // 平らな照り
-        R(-28 + hx, -160 + hy, 8, 20, hc); // 耳を覆うサイド
-        R(20 + hx, -160 + hy, 8, 16, hc);
-        R(-28 + hx, -144 + hy, 4, 8, hd);
-        // 重い前髪：額を覆い、束が目にかかる。
-        R(-20 + hx, -160 + hy, 40, 6, hc);
-        R(-16 + hx, -154 + hy, 4, 5, hc);
-        R(-8 + hx, -154 + hy, 4, 6, hc);
-        R(0 + hx, -154 + hy, 4, 5, hc); // 目にかかる束
-        R(8 + hx, -154 + hy, 4, 8, hc); // 目にかかる束
-        R(12 + hx, -154 + hy, 4, 6, hc);
+        R(-8 + hx, -182 + hy, 12, 3, hl); // 頭頂の照り
+        R(20 + hx, -178 + hy, 4, 4, hl);
+        // 分け目：中央を開け、左右に流す。
+        R(-20 + hx, -160 + hy, 16, 4, hc); // 左前髪
+        R(8 + hx, -160 + hy, 16, 4, hc); // 右前髪
+        R(-16 + hx, -156 + hy, 4, 5, hc); // 左の流れ
+        R(-8 + hx, -156 + hy, 4, 6, hc); // 左の流れ先
+        R(12 + hx, -156 + hy, 4, 5, hc); // 右の流れ
         R(18 + hx, -156 + hy, 4, 4, hc);
-        R(-14 + hx, -160 + hy, 5, 3, hl);
-        R(2 + hx, -160 + hy, 5, 3, hl);
+        R(-16 + hx, -160 + hy, 6, 2, hl); // 流れの照り
+        R(12 + hx, -160 + hy, 6, 2, hl);
+        R(-28 + hx, -160 + hy, 8, 24, hc); // 耳を覆うサイド
+        R(20 + hx, -160 + hy, 8, 20, hc);
+        R(-28 + hx, -144 + hy, 4, 10, hd); // 毛束の影
+        R(24 + hx, -148 + hy, 4, 8, hd);
         break;
       case 'adult':
         // 分け目のあるミディアム＋ゆるいウェーブ（塀）。耳を覆う。
@@ -1481,7 +1492,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, x: number, y: number,
       }
     }
     if (look.accessory === 'headphones') {
-      // 首にかけたヘッドホン（数理零）。後ろのバンド＋両耳の下のカップ。
+      // 首にかけたヘッドホン（寺地）。後ろのバンド＋両耳の下のカップ。
       R(-28 + hx, -128 + hy, 56, 8, '#2b2b32');
       R(-20 + hx, -128 + hy, 40, 3, '#3a3a44');
       R(-36 + hx, -140 + hy, 12, 24, '#1c1c22');
