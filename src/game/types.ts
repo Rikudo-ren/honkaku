@@ -72,7 +72,16 @@ export type PoseId =
   | 'airDive'
   | 'airStep';
 
-export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult' | 'fluffy';
+export type HairStyle = 'short' | 'spiky' | 'long' | 'bob' | 'messy' | 'messyAhoge' | 'adult' | 'fluffy' | 'straight';
+
+/** 目の描き分け（立ち絵の目の印象を1〜2pxに落とし込む） */
+export type EyeStyle = 'round' | 'sharp' | 'calm' | 'sleepy' | 'bright' | 'tsun';
+/** 眉の描き分け（未指定＝描かない／前髪に隠れる） */
+export type BrowStyle = 'angry' | 'worried' | 'soft' | 'thick' | 'flat';
+/** 通常時の口（叫び・笑い等の表情時はそちらが優先される） */
+export type MouthIdle = 'flat' | 'smile' | 'grin' | 'frown' | 'open' | 'gritted';
+/** 待機中の腕（立ち絵のポーズ再現用）。未指定時は服装・小物から自動判定。 */
+export type IdleArm = 'down' | 'pocket' | 'behind' | 'hold' | 'fist';
 
 export interface Look {
   hair: HairStyle;
@@ -82,6 +91,18 @@ export interface Look {
   skinDark?: string;
   eyeColor: string;
   glasses?: boolean;
+  /** 眼鏡フレームの色（未指定なら濃いグレー）。レンズは塗らない（透明） */
+  glassesColor?: string;
+  /** 目の描き分け（未指定は 'round'） */
+  eyeStyle?: EyeStyle;
+  /** 眉（未指定は描かない） */
+  brows?: BrowStyle;
+  /** 通常時の口（未指定は 'flat'） */
+  mouthIdle?: MouthIdle;
+  /** 頬の赤み */
+  blush?: boolean;
+  /** 顎の無精ひげドット（大人向け） */
+  stubble?: boolean;
   gender: 'm' | 'f';
   outfit: 'blazer' | 'vest' | 'suit' | 'kensetsu' | 'gym';
   accessory?: 'headphones' | 'bookFront' | 'bookSide' | 'notebook' | 'map' | 'loveNote';
@@ -91,6 +112,16 @@ export interface Look {
   tieColor?: string;
   /** ネクタイに斜めストライプ風の明るいドットを入れる */
   tieStripe?: boolean;
+  /** 緩めた長いネクタイ＋開けた襟（寺地）。未指定はきっちり締める */
+  tieLoose?: boolean;
+  /** ブレザーの色替え（未指定は理数科紺）。内藤は少し黒っぽい */
+  blazer?: string;
+  blazerDark?: string;
+  /** 靴の色（未指定は服装・性別から自動：両馬と女子は茶、体育着は白など） */
+  shoeColor?: string;
+  /** 待機中の前手・後手（立ち絵のポーズ再現用） */
+  idleArmF?: IdleArm;
+  idleArmB?: IdleArm;
   /** こめかみに汗マークを描く（緊張しがちな人） */
   sweat?: boolean;
 }
