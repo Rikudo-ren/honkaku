@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { InputRelay } from '../server/src/rooms/InputRelay';
-import { Battle } from '../src/game/engine';
+import { Battle, GROUND } from '../src/game/engine';
 import { InputBuffer, OnlineClock } from '../src/game/lockstep';
 import { unmask } from '../src/game/net';
 import { makeOnlineSetup } from '../src/game/onlineSetup';
@@ -84,7 +84,7 @@ function simulate(options: Options = {}) {
         for (const f of c.battle.f) {
           if (f.id !== 'mitsumine_cheer') continue;
           if (f.move) c.seen.add(f.move.pose);
-          if (f.airLift < 28 && f.y < 186) c.seen.add('lift');
+          if (f.airLift < 28 && f.y < GROUND) c.seen.add('lift');
           if (f.rallyT > 0) c.seen.add('rally');
         }
         for (const p of c.battle.projectiles) if (p.kind.startsWith('cheer')) c.seen.add(p.kind);

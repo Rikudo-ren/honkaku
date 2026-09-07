@@ -87,6 +87,8 @@ export interface Look {
   hair: HairStyle;
   hairColor: string;
   hairDark?: string;
+  /** 髪の照り（ハイライト）。未指定ならhairColor */
+  hairLight?: string;
   skin?: string;
   skinDark?: string;
   eyeColor: string;
