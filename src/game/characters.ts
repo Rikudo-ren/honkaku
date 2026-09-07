@@ -763,7 +763,7 @@ export const CHARS: Record<CharId, CharDef> = {
     jump: 24.8,
     dmgMul: 1,
     look: {
-      hair: 'fluffy',
+      hair: 'straight',
       hairColor: '#6b4a2e',
       hairDark: '#4a3120',
       hairLight: '#a07a4e',
